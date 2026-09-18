@@ -1,5 +1,6 @@
 import Foundation
 import Models
+import Synchronization
 import Testing
 
 @testable import NetworkingKit
@@ -9,6 +10,18 @@ struct APIClientTests {
     private func makeClient() -> APIClient {
         let config = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
         return APIClient(session: MockURLProtocol.makeSession(), serverConfig: config)
+    }
+
+    /// Installs a handler that records every request it receives and answers
+    /// with `status`/`body`. Assert on the returned recorder *after* the call:
+    /// checks made only inside the handler never run if the client sends nothing.
+    private func stub(status: Int, body: String = "") -> RequestRecorder {
+        let recorder = RequestRecorder()
+        MockURLProtocol.handler = { request in
+            try recorder.record(request)
+            return (status, Data(body.utf8))
+        }
+        return recorder
     }
 
     @Test("GET decodes a successful JSON response")
@@ -42,21 +55,90 @@ struct APIClientTests {
         #expect(response.models.isEmpty)
     }
 
-    @Test("POST with no expected response body just checks status")
+    @Test("POST with no expected response body sends the request and just checks status")
     func postWithoutDecoding() async throws {
-        MockURLProtocol.handler = { _ in (200, Data("{}".utf8)) }
+        let recorder = stub(status: 200, body: "{}")
         let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
         try await makeClient().post("/api/settings", body: patch)
+
+        let requests = recorder.requests
+        #expect(requests.count == 1)
+        let request = try #require(requests.first)
+        #expect(request.method == "POST")
+        #expect(request.path == "/api/settings")
+        let body = try JSONSerialization.jsonObject(with: request.body) as? [String: Any]
+        #expect(body?["id"] as? String == "global")
     }
 
-    @Test("DELETE succeeds on 2xx")
-    func deleteSucceeds() async throws {
-        MockURLProtocol.handler = { request in
-            #expect(request.httpMethod == "DELETE")
-            #expect(request.url?.path == "/api/chat/c1")
-            return (200, Data("{\"success\":true}".utf8))
+    @Test("POST with no expected response body accepts a 2xx with an empty body")
+    func postWithoutDecodingAcceptsEmptyBody() async throws {
+        let recorder = stub(status: 204)
+        let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
+        try await makeClient().post("/api/settings", body: patch)
+        #expect(recorder.requests.count == 1)
+    }
+
+    @Test("POST with no expected response body accepts a 2xx with a non-JSON body")
+    func postWithoutDecodingAcceptsNonJSONBody() async throws {
+        let recorder = stub(status: 200, body: "OK")
+        let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
+        try await makeClient().post("/api/settings", body: patch)
+        #expect(recorder.requests.count == 1)
+    }
+
+    @Test("POST with no expected response body throws HTTPError on a non-2xx status")
+    func postWithoutDecodingThrowsHTTPErrorOnFailure() async throws {
+        let recorder = stub(
+            status: 500,
+            body: #"{"type":"error","error":{"code":"INTERNAL_ERROR","message":"Could not save settings"}}"#)
+        let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
+        await #expect(
+            throws: HTTPError(statusCode: 500, code: "INTERNAL_ERROR", message: "Could not save settings")
+        ) {
+            try await makeClient().post("/api/settings", body: patch)
+            return
         }
+        #expect(recorder.requests.count == 1)
+    }
+
+    @Test("DELETE sends the request and succeeds on 2xx")
+    func deleteSucceeds() async throws {
+        let recorder = stub(status: 200, body: #"{"success":true}"#)
         try await makeClient().delete("/api/chat/c1")
+
+        let requests = recorder.requests
+        #expect(requests.count == 1)
+        let request = try #require(requests.first)
+        #expect(request.method == "DELETE")
+        #expect(request.path == "/api/chat/c1")
+        #expect(request.body.isEmpty)
+    }
+
+    @Test("DELETE accepts a 2xx with an empty body")
+    func deleteAcceptsEmptyBody() async throws {
+        let recorder = stub(status: 204)
+        try await makeClient().delete("/api/chat/c1")
+        #expect(recorder.requests.count == 1)
+    }
+
+    @Test("DELETE accepts a 2xx with a non-JSON body")
+    func deleteAcceptsNonJSONBody() async throws {
+        let recorder = stub(status: 200, body: "deleted")
+        try await makeClient().delete("/api/chat/c1")
+        #expect(recorder.requests.count == 1)
+    }
+
+    @Test("DELETE throws HTTPError on a non-2xx status")
+    func deleteThrowsHTTPErrorOnFailure() async throws {
+        let recorder = stub(
+            status: 404,
+            body: #"{"type":"error","error":{"code":"NOT_FOUND","message":"Chat not found"}}"#)
+        await #expect(
+            throws: HTTPError(statusCode: 404, code: "NOT_FOUND", message: "Chat not found")
+        ) {
+            try await makeClient().delete("/api/chat/c1")
+        }
+        #expect(recorder.requests.count == 1)
     }
 
     @Test("a non-2xx Anthropic-style error body throws HTTPError with the server's message")
@@ -77,6 +159,28 @@ struct APIClientTests {
             #expect(error.message == "API key is required")
         }
     }
+}
+
+/// Log of the requests that reached `MockURLProtocol`. The handler runs on
+/// URLProtocol's loading thread while the test reads the log from its own task,
+/// so the storage sits behind a `Mutex`; a bare captured `var` would be a data
+/// race and a Swift 6 error.
+private final class RequestRecorder: Sendable {
+    struct RecordedRequest: Sendable {
+        let method: String?
+        let path: String?
+        let body: Data
+    }
+
+    private let storage = Mutex<[RecordedRequest]>([])
+
+    func record(_ request: URLRequest) throws {
+        let body = try request.httpBodyStreamData()
+        let entry = RecordedRequest(method: request.httpMethod, path: request.url?.path, body: body)
+        storage.withLock { $0.append(entry) }
+    }
+
+    var requests: [RecordedRequest] { storage.withLock { $0 } }
 }
 
 extension URLRequest {
