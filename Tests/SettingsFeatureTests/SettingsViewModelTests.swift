@@ -17,15 +17,20 @@ private final class SettingsMockURLProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
-        do {
-            let (statusCode, data) = try handler(request)
-            let response = HTTPURLResponse(
-                url: request.url!, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
-        } catch {
-            client?.urlProtocol(self, didFailWithError: error)
+        // URLProtocol loads in one session share a thread, so a handler that blocks (a test holding a
+        // request in flight) would stall every other request. Give each handler its own worker thread.
+        let request = self.request
+        DispatchQueue.global().async { [self] in
+            do {
+                let (statusCode, data) = try handler(request)
+                let response = HTTPURLResponse(
+                    url: request.url!, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
+                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                client?.urlProtocol(self, didLoad: data)
+                client?.urlProtocolDidFinishLoading(self)
+            } catch {
+                client?.urlProtocol(self, didFailWithError: error)
+            }
         }
     }
 
@@ -66,15 +71,19 @@ private final class BodyRecorder: Sendable {
 /// `release()`. Every wait is bounded, so a failing test cannot hang.
 private final class RequestGate: Sendable {
     private let started = Mutex(false)
+    private let timedOut = Mutex(false)
     private let gate = DispatchSemaphore(value: 0)
 
     /// Called from the mock handler (URLProtocol thread): announce the request, then block until released.
     func arriveAndWait() {
         started.withLock { $0 = true }
-        _ = gate.wait(timeout: .now() + 10)
+        if gate.wait(timeout: .now() + 10) == .timedOut { timedOut.withLock { $0 = true } }
     }
 
     func release() { gate.signal() }
+
+    /// True if the handler gave up waiting because nobody released the gate within 10 seconds.
+    var didTimeOut: Bool { timedOut.withLock { $0 } }
 
     /// Suspends the test until the handler holds the request; fails (never hangs) after 10 seconds.
     func waitUntilStarted() async throws {
@@ -164,6 +173,54 @@ struct SettingsViewModelTests {
         duringRequest(vm)
         gate.release()
         await fetch.value
+        return (vm, recorder)
+    }
+
+    /// Two servers with recognizably different settings: A is the address the user leaves, B the one moved to.
+    private static let serverAJSON = #"{"id":"global","providerConfig":{"provider":"Anthropic Claude","model":"a-model"},"providers":{"anthropicApiKey":"sk-a"}}"#
+    private static let serverBJSON = #"{"id":"global","providerConfig":{"provider":"OpenAI GPT","model":"b-model"},"providers":{"openaiApiKey":"sk-b"}}"#
+
+    /// The user starts loading server A (a.local), whose response is slow, moves to server B (b.local),
+    /// and B's load completes first. Only then is A's response released, so it arrives late, for an
+    /// address that is no longer stored. Returns the view model, now on B, and every body it POSTed.
+    private func loadServerBWhileServerAIsStillAnswering(
+        aStatus: Int,
+        aBody: String
+    ) async throws -> (vm: SettingsViewModel, recorder: BodyRecorder) {
+        let recorder = BodyRecorder()
+        let gateA = RequestGate()
+        let bBody = Self.serverBJSON
+        SettingsMockURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if request.httpMethod == "POST", path == "/api/settings" {
+                recorder.record(try request.httpBodyStreamData(), for: path)
+                return (200, Data("{}".utf8))
+            }
+            switch request.url?.host {
+            case "a.local":
+                gateA.arriveAndWait()
+                return (aStatus, Data(aBody.utf8))
+            case "b.local":
+                return (200, Data(bBody.utf8))
+            default:
+                return (404, Data(#"{"type":"error","error":{"code":"NOT_FOUND","message":"no route"}}"#.utf8))
+            }
+        }
+        let (vm, config) = makeViewModel()
+        config.baseURLString = "http://a.local:60223"
+        let loadA = Task { await vm.loadSettings() }
+        defer { gateA.release() }  // also on the failure path, so the handler thread is never left blocked
+        try await gateA.waitUntilStarted()
+
+        vm.serverURLText = "http://b.local:60223"
+        #expect(vm.saveServerURL())
+        await vm.loadSettings()
+        // B must have finished while A's response was still held; otherwise the ordering this test needs never happened.
+        #expect(gateA.didTimeOut == false, "B's load must complete while A's response is still held")
+        #expect(vm.modelText == "b-model")
+
+        gateA.release()
+        await loadA.value
         return (vm, recorder)
     }
 
@@ -555,6 +612,39 @@ struct SettingsViewModelTests {
         #expect(vm.errorMessage == nil)  // the Anthropic key's error must not be shown under OpenAI
         #expect(vm.availableModels.isEmpty)
         #expect(vm.isLoadingModels == false)
+    }
+
+    // MARK: A settings load is applied only if its address is still the stored one (ruling 8)
+
+    @Test("a slow settings load for an address the user has left cannot overwrite the new server's settings", .timeLimit(.minutes(1)))
+    func aStaleSettingsLoadIsIgnored() async throws {
+        let (vm, recorder) = try await loadServerBWhileServerAIsStillAnswering(aStatus: 200, aBody: Self.serverAJSON)
+        // The form still shows server B, and is marked loaded for B.
+        #expect(vm.selectedProvider == .openAiGpt)
+        #expect(vm.modelText == "b-model")
+        #expect(vm.apiKeyText == "sk-b")
+        #expect(vm.hasLoadedSettings)
+        #expect(vm.errorMessage == nil)
+        #expect(vm.isLoading == false)
+
+        // What ruling 8 exists for: saving now writes B's settings to B, never A's.
+        #expect(await vm.save())
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let providerConfig = try #require(body["providerConfig"] as? [String: Any])
+        #expect(providerConfig["provider"] as? String == "OpenAI GPT")
+        #expect(providerConfig["model"] as? String == "b-model")
+        let providers = try #require(body["providers"] as? [String: Any])
+        #expect(providers["openaiApiKey"] as? String == "sk-b")
+        #expect(providers.keys.contains("anthropicApiKey") == false)
+    }
+
+    @Test("a slow settings load that fails after the user left its address shows no error", .timeLimit(.minutes(1)))
+    func aStaleSettingsLoadFailureIsNotShown() async throws {
+        let (vm, _) = try await loadServerBWhileServerAIsStillAnswering(aStatus: 500, aBody: Self.serverUnavailableJSON)
+        #expect(vm.errorMessage == nil)  // server A's failure must not be shown for server B
+        #expect(vm.hasLoadedSettings)
+        #expect(vm.selectedProvider == .openAiGpt)
+        #expect(vm.modelText == "b-model")
     }
 
     // MARK: Keys typed per provider survive provider switches (ruling 1)

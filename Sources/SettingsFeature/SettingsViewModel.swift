@@ -82,8 +82,13 @@ public final class SettingsViewModel {
         errorMessage = nil
         hasLoadedSettings = false  // stays false if this load fails, and while it is in flight
         defer { isLoading = false }
+        // A load belongs to the address it was started for. If the user moved to another server while it
+        // was in flight, its outcome (settings or error) is stale: applying it would show, and mark as
+        // loaded, the old server's settings under the new address, and a Save would write them there.
+        let requestedAddress = serverConfig.baseURLString
         do {
             let snapshot: SettingsSnapshot = try await apiClient.get("/api/settings")
+            guard isCurrent(address: requestedAddress) else { return }
             workingProviders = snapshot.providers ?? ProvidersConfig()
             loadedProviderConfig = snapshot.providerConfig
             loadedLastBackupAt = snapshot.lastBackupAt
@@ -97,8 +102,14 @@ public final class SettingsViewModel {
             apiKeyText = workingProviders.apiKey(for: selectedProvider) ?? ""
             hasLoadedSettings = true
         } catch {
+            guard isCurrent(address: requestedAddress) else { return }
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Whether `address` is still the stored server address, i.e. the user has not moved to another server.
+    private func isCurrent(address: String) -> Bool {
+        serverConfig.baseURLString == address
     }
 
     public func fetchModels() async {
