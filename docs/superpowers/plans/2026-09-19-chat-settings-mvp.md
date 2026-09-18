@@ -17,6 +17,7 @@
 - Swift language mode: **6.0** for every target, set once at the project level in `Project.swift` (`settings: .settings(base: ["SWIFT_VERSION": "6.0"])`) by Task 2 Step 1. Task 1's scaffold ships Tuist's default `SWIFT_VERSION = 5`, so until Task 2 flips it the build does not enforce the strict-concurrency rules this plan's `actor` / `Sendable` / `nonisolated(unsafe)` design is written against — this makes the build enforce them instead of relying on the plan's pre-flight `-strict-concurrency=complete` check alone.
 - Bundle id root: `app.yancey.exodus.exodus-ios` (carried over from the existing project). Each module target's bundle id is `app.yancey.exodus.exodus-ios.<TargetName>`.
 - `DEVELOPMENT_TEAM = YLF27G9ZMT` on the App target (carried over from the existing project, needed for on-device signing later; irrelevant for Simulator runs).
+- Running unit tests: Tuist 4.208.0 does **not** generate a scheme for a `.unitTests` target — there is no `-scheme ModelsTests` (`xcodebuild -list` shows only `App`, `Models`, `NetworkingKit`, `ChatFeature`, `SettingsFeature`, `PhilharmonicFeature`, `ExodusIos-Workspace`). A unit-test target is a testable of the scheme of the module it tests, so run `xcodebuild test -workspace ExodusIos.xcworkspace -scheme <Module> -destination "platform=iOS Simulator,name=iPhone 17"` (`<Module>` = `Models`, `NetworkingKit`, `ChatFeature`, or `SettingsFeature`), and scope to one suite with `-only-testing:<Module>Tests/<Suite>`. If a module's scheme turns out not to include its test target, fall back to `-scheme ExodusIos-Workspace -only-testing:<Module>Tests`. Every `xcodebuild test` command in this plan is written this way.
 - Testing framework is **Swift Testing**, not XCTest: `import Testing`, `@Test func …() async throws`, `#expect(...)`, `#require(...)`. Every unit test target hosts it the same way an XCTest target would (`product: .unitTests`).
 - No third-party dependencies anywhere — no `Tuist/Package.swift`, no `tuist install` needed. `tuist generate --no-open` is the only generation command required.
 - JSON field names are camelCase and match `universal-client`'s TypeScript types **exactly** (`providerConfig`, `modelSnapshot`, `openaiApiKey`, `toolCallId`, …) — Swift property names mirror them 1:1 so default `Codable` synthesis needs no `CodingKeys` remapping anywhere in this plan.
@@ -452,7 +453,7 @@ struct ChatSseEventTests {
 
 - [ ] **Step 3: Run the tests and confirm they fail (types don't exist yet)**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ModelsTests -destination "platform=iOS Simulator,name=iPhone 17"`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme Models -destination "platform=iOS Simulator,name=iPhone 17"`
 Expected: build failure — `Cannot find type 'ChatMessage' in scope` (and similar for `ChatSseEvent`).
 
 - [ ] **Step 4: Implement `JSONValue.swift`**
@@ -678,7 +679,7 @@ extension ChatSseEvent: Decodable {
 ```bash
 rm Sources/Models/Placeholder.swift
 tuist generate --no-open
-xcodebuild test -workspace ExodusIos.xcworkspace -scheme ModelsTests -destination "platform=iOS Simulator,name=iPhone 17"
+xcodebuild test -workspace ExodusIos.xcworkspace -scheme Models -destination "platform=iOS Simulator,name=iPhone 17"
 ```
 
 Expected: `** TEST SUCCEEDED **`, all 8 tests pass.
@@ -871,7 +872,7 @@ struct ChatSummaryTests {
 
 - [ ] **Step 2: Run the tests and confirm they fail**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ModelsTests -destination "platform=iOS Simulator,name=iPhone 17" -only-testing ModelsTests/SettingsTests -only-testing ModelsTests/HTTPErrorTests -only-testing ModelsTests/ChatSummaryTests`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme Models -destination "platform=iOS Simulator,name=iPhone 17" -only-testing ModelsTests/SettingsTests -only-testing ModelsTests/HTTPErrorTests -only-testing ModelsTests/ChatSummaryTests`
 Expected: build failure — the new types don't exist yet.
 
 - [ ] **Step 3: Implement `AiProviders.swift`**
@@ -1101,7 +1102,7 @@ public struct ChatSummary: Codable, Equatable, Sendable, Identifiable {
 
 - [ ] **Step 7: Run the tests and confirm they pass**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ModelsTests -destination "platform=iOS Simulator,name=iPhone 17"`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme Models -destination "platform=iOS Simulator,name=iPhone 17"`
 Expected: `** TEST SUCCEEDED **`, all tests pass (Task 2's tests plus this task's).
 
 - [ ] **Step 8: Commit**
@@ -1308,7 +1309,7 @@ extension URLRequest {
 
 - [ ] **Step 4: Run the tests and confirm they fail**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKitTests -destination "platform=iOS Simulator,name=iPhone 17"`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKit -destination "platform=iOS Simulator,name=iPhone 17"`
 Expected: build failure — `ServerConfigStore`/`APIClient` don't exist yet.
 
 - [ ] **Step 5: Implement `ServerConfigStore.swift`**
@@ -1413,7 +1414,7 @@ Note: `EmptyResponse() as! T` is safe only because the two call sites that pass 
 ```bash
 rm Sources/NetworkingKit/Placeholder.swift
 tuist generate --no-open
-xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKitTests -destination "platform=iOS Simulator,name=iPhone 17"
+xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKit -destination "platform=iOS Simulator,name=iPhone 17"
 ```
 
 Expected: `** TEST SUCCEEDED **`.
@@ -1492,7 +1493,7 @@ struct SSEFrameParsingTests {
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKitTests -destination "platform=iOS Simulator,name=iPhone 17" -only-testing NetworkingKitTests/SSEFrameParsingTests`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKit -destination "platform=iOS Simulator,name=iPhone 17" -only-testing NetworkingKitTests/SSEFrameParsingTests`
 Expected: build failure — `SSEFrameParsing` doesn't exist yet.
 
 - [ ] **Step 3: Implement `SSEFrameParsing.swift`**
@@ -1513,7 +1514,7 @@ public enum SSEFrameParsing {
 
 - [ ] **Step 4: Run the test and confirm it passes**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKitTests -destination "platform=iOS Simulator,name=iPhone 17" -only-testing NetworkingKitTests/SSEFrameParsingTests`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKit -destination "platform=iOS Simulator,name=iPhone 17" -only-testing NetworkingKitTests/SSEFrameParsingTests`
 Expected: `** TEST SUCCEEDED **`.
 
 - [ ] **Step 5: Implement `SSEClient.swift`**
@@ -1706,7 +1707,7 @@ struct ChatStreamManagerTests {
 
 - [ ] **Step 2: Run the tests and confirm they fail**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKitTests -destination "platform=iOS Simulator,name=iPhone 17" -only-testing NetworkingKitTests/ChatStreamManagerTests`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKit -destination "platform=iOS Simulator,name=iPhone 17" -only-testing NetworkingKitTests/ChatStreamManagerTests`
 Expected: build failure — `ChatStreamManager` doesn't exist yet.
 
 - [ ] **Step 3: Implement `ChatStreamManager.swift`**
@@ -1853,7 +1854,7 @@ public actor ChatStreamManager {
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKitTests -destination "platform=iOS Simulator,name=iPhone 17"`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKit -destination "platform=iOS Simulator,name=iPhone 17"`
 Expected: `** TEST SUCCEEDED **`, every NetworkingKit test (Tasks 4-6) passes.
 
 - [ ] **Step 5: Commit**
@@ -2049,7 +2050,7 @@ extension URLRequest {
 
 - [ ] **Step 3: Run the tests and confirm they fail**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme SettingsFeatureTests -destination "platform=iOS Simulator,name=iPhone 17"`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme SettingsFeature -destination "platform=iOS Simulator,name=iPhone 17"`
 Expected: build failure — `SettingsViewModel` doesn't exist yet.
 
 - [ ] **Step 4: Implement `SettingsViewModel.swift`**
@@ -2147,7 +2148,7 @@ public final class SettingsViewModel {
 
 - [ ] **Step 5: Run the tests and confirm they pass**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme SettingsFeatureTests -destination "platform=iOS Simulator,name=iPhone 17"`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme SettingsFeature -destination "platform=iOS Simulator,name=iPhone 17"`
 Expected: `** TEST SUCCEEDED **`.
 
 - [ ] **Step 6: Implement `SettingsView.swift`**
@@ -2433,7 +2434,7 @@ struct ChatListViewModelTests {
 
 - [ ] **Step 3: Run the tests and confirm they fail**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeatureTests -destination "platform=iOS Simulator,name=iPhone 17"`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17"`
 Expected: build failure — `ChatListViewModel` doesn't exist yet.
 
 - [ ] **Step 4: Implement `ChatListViewModel.swift`**
@@ -2481,7 +2482,7 @@ public final class ChatListViewModel {
 
 - [ ] **Step 5: Run the tests and confirm they pass**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeatureTests -destination "platform=iOS Simulator,name=iPhone 17"`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17"`
 Expected: `** TEST SUCCEEDED **`.
 
 - [ ] **Step 6: Implement `ChatListView.swift`**
@@ -2699,7 +2700,7 @@ struct ChatDetailViewModelTests {
 
 - [ ] **Step 2: Run the tests and confirm they fail**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeatureTests -destination "platform=iOS Simulator,name=iPhone 17" -only-testing ChatFeatureTests/ChatDetailViewModelTests`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17" -only-testing ChatFeatureTests/ChatDetailViewModelTests`
 Expected: build failure — `ChatDetailViewModel` doesn't exist yet.
 
 - [ ] **Step 3: Implement `ChatDetailViewModel.swift`**
@@ -2784,7 +2785,7 @@ public final class ChatDetailViewModel {
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeatureTests -destination "platform=iOS Simulator,name=iPhone 17"`
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17"`
 Expected: `** TEST SUCCEEDED **`, every ChatFeature test (Task 8 + this task) passes.
 
 - [ ] **Step 5: Implement `MessageRow.swift`**
@@ -3119,10 +3120,10 @@ In `../universal-client`: `pnpm dev`. Confirm it logs the Hono server listening 
 - [ ] **Step 2: Run the full test suite one more time**
 
 ```bash
-xcodebuild test -workspace ExodusIos.xcworkspace -scheme ModelsTests -destination "platform=iOS Simulator,name=iPhone 17"
-xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKitTests -destination "platform=iOS Simulator,name=iPhone 17"
-xcodebuild test -workspace ExodusIos.xcworkspace -scheme SettingsFeatureTests -destination "platform=iOS Simulator,name=iPhone 17"
-xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeatureTests -destination "platform=iOS Simulator,name=iPhone 17"
+xcodebuild test -workspace ExodusIos.xcworkspace -scheme Models -destination "platform=iOS Simulator,name=iPhone 17"
+xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKit -destination "platform=iOS Simulator,name=iPhone 17"
+xcodebuild test -workspace ExodusIos.xcworkspace -scheme SettingsFeature -destination "platform=iOS Simulator,name=iPhone 17"
+xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17"
 ```
 
 Expected: `** TEST SUCCEEDED **` on all four.
