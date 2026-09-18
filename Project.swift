@@ -21,6 +21,7 @@ private func moduleTarget(
 
 let project = Project(
     name: "ExodusIos",
+    settings: .settings(base: ["SWIFT_VERSION": "6.0"]),
     targets: [
         .target(
             name: "App",
@@ -54,6 +55,15 @@ let project = Project(
             )
         ),
         moduleTarget(name: "Models"),
+        .target(
+            name: "ModelsTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "\(bundleIdRoot).ModelsTests",
+            deploymentTargets: deploymentTargets,
+            buildableFolders: ["Tests/ModelsTests"],
+            dependencies: [.target(name: "Models")]
+        ),
         moduleTarget(name: "NetworkingKit", dependencies: [.target(name: "Models")]),
         moduleTarget(
             name: "ChatFeature",
