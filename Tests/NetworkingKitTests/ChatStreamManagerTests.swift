@@ -19,12 +19,19 @@ private final class StreamingMockURLProtocol: URLProtocol, @unchecked Sendable {
     /// The `timeoutInterval` of the last request the mock saw — lets a test pin
     /// the request configuration `ChatStreamManager` builds.
     nonisolated(unsafe) static var lastTimeout: TimeInterval?
+    /// When set, the mock answers with a transport failure (`didFailWithError`) instead of a
+    /// response — e.g. `.cannotConnectToHost` when the server is not running.
+    nonisolated(unsafe) static var failure: URLError?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
         Self.lastTimeout = request.timeoutInterval
+        if let failure = Self.failure {
+            client?.urlProtocol(self, didFailWithError: failure)
+            return
+        }
         // Snapshot the shared statics up front: a test may reconfigure them for
         // its next request while this connection is still open, and this
         // request must not pick up that later configuration.
@@ -50,6 +57,7 @@ private final class StreamingMockURLProtocol: URLProtocol, @unchecked Sendable {
         chunks = []
         finishesLoading = true
         statusCode = 200
+        failure = nil
     }
 
     static func makeSession() -> URLSession {
@@ -121,6 +129,37 @@ struct ChatStreamManagerTests {
         }
 
         #expect(failure == "Please configure a provider in Settings")
+        #expect(seenStatuses.last == .error)
+        #expect(!sawFinished)
+        #expect(await manager.isStreaming("c1") == false)
+    }
+
+    @Test("a transport failure (server not running) surfaces a readable message, not the developer dump of the error")
+    func transportFailureSurfacesReadableMessage() async throws {
+        StreamingMockURLProtocol.failure = URLError(.cannotConnectToHost)
+        defer { StreamingMockURLProtocol.reset() }
+
+        let manager = ChatStreamManager(sseClient: SSEClient(session: StreamingMockURLProtocol.makeSession()))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        var seenStatuses: [ChatStatus] = []
+        var failures: [String] = []
+        var sawFinished = false
+        for await update in await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig) {
+            switch update {
+            case .status(let s): seenStatuses.append(s)
+            case .failed(let message): failures.append(message)
+            case .finished: sawFinished = true
+            default: break
+            }
+        }
+
+        // `String(describing:)` of the error is the developer dump
+        // ("URLError(_nsError: Error Domain=NSURLErrorDomain Code=-1004 …)"); the user gets the
+        // localized text.
+        #expect(failures == [URLError(.cannotConnectToHost).localizedDescription])
+        #expect(failures.first?.contains("Domain=") == false)
         #expect(seenStatuses.last == .error)
         #expect(!sawFinished)
         #expect(await manager.isStreaming("c1") == false)

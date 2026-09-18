@@ -86,7 +86,7 @@ public actor ChatStreamManager {
             } catch {
                 await self?.fail(
                     chatId: chatId, generation: generation,
-                    message: (error as? LocalizedError)?.errorDescription ?? String(describing: error))
+                    message: error.localizedDescription)
             }
         }
         streams[chatId]?.task = task
