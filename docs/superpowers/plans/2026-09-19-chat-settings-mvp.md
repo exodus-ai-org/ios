@@ -4269,7 +4269,12 @@ Each item is something the automated tests could not reach because it depends on
 - [ ] Swipe-to-delete: the row springs back, then disappears once the server confirms; the chat is really gone on the desktop.
 - [ ] Rows read "N minutes/hours/days ago" (created time — the server has no updated time). Project chats appear in the list too.
 
+*Navigation (measured in a scratch app on the iOS 27 Simulator: pushing a chat cancels the list's `.task`, popping back RE-FIRES it)*
+- [ ] Create a chat, send the first message, tap Back: the chat appears in the list without a pull-to-refresh, and an existing chat's regenerated title updates. (The list reloads on every return; a populated list must not flash a spinner.)
+
 *Chat detail*
+- [ ] Right after tapping send, before the first token arrives, a pending "…" bubble is visible (not just a greyed send button).
+- [ ] While a reply is streaming the composer's button is a **Stop** button; tapping it ends the turn, the partial reply stays on screen, no error appears, and you can send again. (This is the escape from a stalled stream — with the Mac asleep or Wi-Fi dropped mid-reply the composer would otherwise stay locked for up to an hour.)
 - [ ] Ask for a multi-paragraph reply with **bold** and a bullet list: paragraphs and line breaks are preserved (list markers show as "- item").
 - [ ] With a reasoning model, the chain-of-thought text is NOT shown in the bubble, only the answer.
 - [ ] Between sending and the first token, note what the screen shows. (Known gap: nothing appears until the first assistant frame — only the disabled send button. File a follow-up if it feels dead.)
@@ -4281,7 +4286,8 @@ Each item is something the automated tests could not reach because it depends on
 - [ ] Start a reply, leave the chat, come back while it streams: the partial reply is there and it keeps streaming (Step 3.5). Then do the same and let the reply FAIL while you are away (for example stop the server): on return there is no error — known limitation, note whether it bothers you.
 
 *On a real iPhone (same Wi-Fi as the Mac)*
-- [ ] Set the address to the Mac's LAN IP or `<name>.local` with the port. iOS shows the "find and connect to devices on your local network" prompt with the Chinese explanation from `NSLocalNetworkUsageDescription`; after Allow, the chat list loads. (An `http://` address that is a public hostname is refused by App Transport Security — expected.)
+- [ ] Confirm the iPhone runs iOS 27 or later — the app's deployment target is 27.0 (raised from the spec's "iOS 17+" by ruling), so it will not install on anything older.
+- [ ] Set the address to the Mac's LAN IP (`http://192.168.x.x:60223`) and, separately, to `<name>.local`. iOS shows the "find and connect to devices on your local network" prompt with the Chinese explanation from `NSLocalNetworkUsageDescription`; after Allow, the chat list loads. (Measured in the Simulator with NO ATS keys in the Info.plist: plain `http://` to a literal LAN IP, `127.0.0.1` and a `.local` name all succeed, so ATS is not the risk for those forms; a qualified public hostname over `http://` is refused by App Transport Security — expected.) Tapping Deny on the prompt makes every request fail with a connection error and no in-app explanation — note whether that is acceptable.
 
 - [ ] **Step 4: Note any findings**
 
