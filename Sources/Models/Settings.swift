@@ -124,17 +124,24 @@ public struct SettingsSnapshot: Decodable, Sendable {
     public var id: String
     public var providerConfig: ProviderConfig?
     public var providers: ProvidersConfig?
+    /// ISO-8601 string (or nil = never backed up). Carried only so `SettingsPatch` can echo it.
+    public var lastBackupAt: String?
 }
 
 public struct SettingsPatch: Encodable, Sendable {
     public var id: String
     public var providerConfig: ProviderConfig?
     public var providers: ProvidersConfig?
+    /// The server writes `lastBackupAt` unconditionally on every `POST /api/settings`
+    /// (`lastBackupAt ? new Date(lastBackupAt) : null`), so the value read from the
+    /// `SettingsSnapshot` must be sent back or the desktop's "last backup" is nulled.
+    public var lastBackupAt: String?
 
-    public init(id: String, providerConfig: ProviderConfig?, providers: ProvidersConfig?) {
+    public init(id: String, providerConfig: ProviderConfig?, providers: ProvidersConfig?, lastBackupAt: String? = nil) {
         self.id = id
         self.providerConfig = providerConfig
         self.providers = providers
+        self.lastBackupAt = lastBackupAt
     }
 }
 

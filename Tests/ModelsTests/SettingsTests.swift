@@ -22,6 +22,7 @@ struct SettingsTests {
               "id": "global",
               "providerConfig": {"provider": "Anthropic Claude", "model": "claude-sonnet-5"},
               "providers": {"anthropicApiKey": "sk-ant-xyz"},
+              "lastBackupAt": "2026-09-18T12:00:00.000Z",
               "personality": {"baseStyle": "default"},
               "memory": {"autoCapture": true}
             }
@@ -30,9 +31,17 @@ struct SettingsTests {
         #expect(snapshot.id == "global")
         #expect(snapshot.providerConfig?.provider == "Anthropic Claude")
         #expect(snapshot.providers?.anthropicApiKey == "sk-ant-xyz")
+        #expect(snapshot.lastBackupAt == "2026-09-18T12:00:00.000Z")
     }
 
-    @Test("SettingsPatch encodes only id/providerConfig/providers")
+    @Test("a null lastBackupAt (never backed up) decodes to nil")
+    func decodesNullLastBackupAt() throws {
+        let json = #"{"id":"global","lastBackupAt":null}"#.data(using: .utf8)!
+        let snapshot = try JSONDecoder().decode(SettingsSnapshot.self, from: json)
+        #expect(snapshot.lastBackupAt == nil)
+    }
+
+    @Test("SettingsPatch encodes id/providerConfig/providers, and lastBackupAt only when set")
     func encodesSettingsPatch() throws {
         let patch = SettingsPatch(
             id: "global",
@@ -46,6 +55,16 @@ struct SettingsTests {
         #expect(providerConfig?["provider"] as? String == "Anthropic Claude")
         let providers = obj?["providers"] as? [String: Any]
         #expect(providers?["anthropicApiKey"] as? String == "sk-ant-xyz")
+        #expect(obj?.keys.contains("lastBackupAt") == false)
+    }
+
+    @Test("SettingsPatch echoes lastBackupAt so the server's unconditional write doesn't null it")
+    func settingsPatchEchoesLastBackupAt() throws {
+        let patch = SettingsPatch(
+            id: "global", providerConfig: nil, providers: nil, lastBackupAt: "2026-09-18T12:00:00.000Z")
+        let data = try JSONEncoder().encode(patch)
+        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        #expect(obj?["lastBackupAt"] as? String == "2026-09-18T12:00:00.000Z")
     }
 
     @Test("ProvidersConfig.apiKey(for:) and settingApiKey(_:for:) round-trip every provider")
