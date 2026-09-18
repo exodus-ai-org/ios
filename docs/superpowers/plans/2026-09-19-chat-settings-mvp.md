@@ -723,8 +723,8 @@ EOF
   - `struct ProviderConfig: Codable, Equatable, Sendable { var provider: String?; var model: String?; var modelSnapshot: ModelSnapshot? }`
   - `struct ProvidersConfig: Codable, Equatable, Sendable` with the 12 optional `String?` fields matching `ProvidersSchema` exactly (`openaiApiKey`, `openaiBaseUrl`, `azureOpenaiApiKey`, `azureOpenAiEndpoint`, `azureOpenAiApiVersion`, `anthropicApiKey`, `anthropicBaseUrl`, `googleGeminiApiKey`, `googleGeminiBaseUrl`, `xAiApiKey`, `xAiBaseUrl`, `ollamaBaseUrl`), plus `func apiKey(for provider: AiProviders) -> String?` and `func settingApiKey(_ key: String?, for provider: AiProviders) -> ProvidersConfig`.
   - `struct CachedModelEntry: Codable, Equatable, Sendable, Identifiable { var id: String; var displayName: String; var snapshot: ModelSnapshot }`
-  - `struct SettingsSnapshot: Decodable, Sendable { var id: String; var providerConfig: ProviderConfig?; var providers: ProvidersConfig? }` — decodes `GET /api/settings`, ignoring every other field.
-  - `struct SettingsPatch: Encodable, Sendable { var id: String; var providerConfig: ProviderConfig?; var providers: ProvidersConfig? }` — the outgoing `POST /api/settings` body.
+  - `struct SettingsSnapshot: Decodable, Sendable { var id: String; var providerConfig: ProviderConfig?; var providers: ProvidersConfig?; var lastBackupAt: String? }` — decodes `GET /api/settings`, ignoring every other field. (`lastBackupAt` is carried only so it can be echoed back — see `SettingsPatch`.)
+  - `struct SettingsPatch: Encodable, Sendable { var id: String; var providerConfig: ProviderConfig?; var providers: ProvidersConfig?; var lastBackupAt: String? }` — the outgoing `POST /api/settings` body. `lastBackupAt` must be echoed back from the loaded `SettingsSnapshot`: the server's `updateSettings()` (`src/main/lib/db/queries.ts`) writes `lastBackupAt` unconditionally (`lastBackupAt ? new Date(lastBackupAt) : null`), so a body without it would null the desktop's "last backup" timestamp on every save. Every other top-level key absent from the body is untouched.
   - `struct ListModelsRequest: Encodable, Sendable { var provider: String; var apiKey: String?; var baseUrl: String?; var apiVersion: String? }`
   - `struct ListModelsResponse: Decodable, Sendable { var models: [CachedModelEntry] }`
   - `struct HTTPError: Error, Equatable, Sendable, LocalizedError { var statusCode: Int; var code: String; var message: String }` with `var errorDescription: String? { message }`.
@@ -760,6 +760,7 @@ struct SettingsTests {
               "id": "global",
               "providerConfig": {"provider": "Anthropic Claude", "model": "claude-sonnet-5"},
               "providers": {"anthropicApiKey": "sk-ant-xyz"},
+              "lastBackupAt": "2026-09-18T12:00:00.000Z",
               "personality": {"baseStyle": "default"},
               "memory": {"autoCapture": true}
             }
@@ -768,9 +769,17 @@ struct SettingsTests {
         #expect(snapshot.id == "global")
         #expect(snapshot.providerConfig?.provider == "Anthropic Claude")
         #expect(snapshot.providers?.anthropicApiKey == "sk-ant-xyz")
+        #expect(snapshot.lastBackupAt == "2026-09-18T12:00:00.000Z")
     }
 
-    @Test("SettingsPatch encodes only id/providerConfig/providers")
+    @Test("a null lastBackupAt (never backed up) decodes to nil")
+    func decodesNullLastBackupAt() throws {
+        let json = #"{"id":"global","lastBackupAt":null}"#.data(using: .utf8)!
+        let snapshot = try JSONDecoder().decode(SettingsSnapshot.self, from: json)
+        #expect(snapshot.lastBackupAt == nil)
+    }
+
+    @Test("SettingsPatch encodes id/providerConfig/providers, and lastBackupAt only when set")
     func encodesSettingsPatch() throws {
         let patch = SettingsPatch(
             id: "global",
@@ -784,6 +793,16 @@ struct SettingsTests {
         #expect(providerConfig?["provider"] as? String == "Anthropic Claude")
         let providers = obj?["providers"] as? [String: Any]
         #expect(providers?["anthropicApiKey"] as? String == "sk-ant-xyz")
+        #expect(obj?.keys.contains("lastBackupAt") == false)
+    }
+
+    @Test("SettingsPatch echoes lastBackupAt so the server's unconditional write doesn't null it")
+    func settingsPatchEchoesLastBackupAt() throws {
+        let patch = SettingsPatch(
+            id: "global", providerConfig: nil, providers: nil, lastBackupAt: "2026-09-18T12:00:00.000Z")
+        let data = try JSONEncoder().encode(patch)
+        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        #expect(obj?["lastBackupAt"] as? String == "2026-09-18T12:00:00.000Z")
     }
 
     @Test("ProvidersConfig.apiKey(for:) and settingApiKey(_:for:) round-trip every provider")
@@ -1019,17 +1038,24 @@ public struct SettingsSnapshot: Decodable, Sendable {
     public var id: String
     public var providerConfig: ProviderConfig?
     public var providers: ProvidersConfig?
+    /// ISO-8601 string (or nil = never backed up). Carried only so `SettingsPatch` can echo it.
+    public var lastBackupAt: String?
 }
 
 public struct SettingsPatch: Encodable, Sendable {
     public var id: String
     public var providerConfig: ProviderConfig?
     public var providers: ProvidersConfig?
+    /// The server writes `lastBackupAt` unconditionally on every `POST /api/settings`
+    /// (`lastBackupAt ? new Date(lastBackupAt) : null`), so the value read from the
+    /// `SettingsSnapshot` must be sent back or the desktop's "last backup" is nulled.
+    public var lastBackupAt: String?
 
-    public init(id: String, providerConfig: ProviderConfig?, providers: ProvidersConfig?) {
+    public init(id: String, providerConfig: ProviderConfig?, providers: ProvidersConfig?, lastBackupAt: String? = nil) {
         self.id = id
         self.providerConfig = providerConfig
         self.providers = providers
+        self.lastBackupAt = lastBackupAt
     }
 }
 
@@ -1055,6 +1081,8 @@ public struct ListModelsResponse: Decodable, Sendable {
 - [ ] **Step 5: Implement `HTTPError.swift`**
 
 ```swift
+import Foundation
+
 public struct HTTPError: Error, Equatable, Sendable, LocalizedError {
     public var statusCode: Int
     public var code: String
