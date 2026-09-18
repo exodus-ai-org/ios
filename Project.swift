@@ -82,6 +82,17 @@ let project = Project(
             name: "SettingsFeature",
             dependencies: [.target(name: "NetworkingKit"), .target(name: "Models")]
         ),
+        .target(
+            name: "SettingsFeatureTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "\(bundleIdRoot).SettingsFeatureTests",
+            deploymentTargets: deploymentTargets,
+            buildableFolders: ["Tests/SettingsFeatureTests"],
+            dependencies: [
+                .target(name: "SettingsFeature"), .target(name: "NetworkingKit"), .target(name: "Models")
+            ]
+        ),
         moduleTarget(name: "PhilharmonicFeature", dependencies: [.target(name: "Models")])
     ]
 )
