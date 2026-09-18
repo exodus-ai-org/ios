@@ -25,19 +25,32 @@ private final class StreamingMockURLProtocol: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         Self.lastTimeout = request.timeoutInterval
+        // Snapshot the shared statics up front: a test may reconfigure them for
+        // its next request while this connection is still open, and this
+        // request must not pick up that later configuration.
+        let statusCode = Self.statusCode
+        let chunks = Self.chunks
+        let finishesLoading = Self.finishesLoading
         let response = HTTPURLResponse(
-            url: request.url!, statusCode: Self.statusCode, httpVersion: "HTTP/1.1",
+            url: request.url!, statusCode: statusCode, httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": "text/event-stream"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        for chunk in Self.chunks {
+        for chunk in chunks {
             client?.urlProtocol(self, didLoad: chunk)
         }
-        if Self.finishesLoading {
+        if finishesLoading {
             client?.urlProtocolDidFinishLoading(self)
         }
     }
 
     override func stopLoading() {}
+
+    /// Restores the defaults so one test's configuration can't leak into the next.
+    static func reset() {
+        chunks = []
+        finishesLoading = true
+        statusCode = 200
+    }
 
     static func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
@@ -164,5 +177,133 @@ struct ChatStreamManagerTests {
             return
         }
         #expect(replayedStatus == .streaming)
+    }
+
+    @Test("a server-sent error frame is terminal: .status(.error) then .failed, no .idle or .finished, entry removed")
+    func serverErrorFrameIsTerminal() async throws {
+        // The server sends the error frame and closes the connection right after,
+        // so this run ends by itself (no time limit needed): the assertions below
+        // fail rather than hang if the frame is not treated as terminal.
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.finishesLoading = true
+        let sse = """
+            data: {"type":"error","error":"boom"}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(sse.utf8)]
+        defer { StreamingMockURLProtocol.reset() }
+
+        let manager = ChatStreamManager(sseClient: SSEClient(session: StreamingMockURLProtocol.makeSession()))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        var seenStatuses: [ChatStatus] = []
+        var failures: [String] = []
+        var sawFinished = false
+        for await update in await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig) {
+            switch update {
+            case .status(let s): seenStatuses.append(s)
+            case .failed(let message): failures.append(message)
+            case .finished: sawFinished = true
+            default: break
+            }
+        }
+
+        #expect(failures == ["boom"])
+        #expect(seenStatuses.last == .error)
+        #expect(!seenStatuses.contains(.idle))
+        #expect(!sawFinished)
+        #expect(await manager.isStreaming("c1") == false)
+    }
+
+    // Time limit: without the fix the first stream's consumer is stranded (its
+    // `next()` suspends forever), so a regression must fail, not hang the run.
+    @Test(
+        "re-sending while a turn is in flight starts a clean new turn and ends the first turn's stream",
+        .timeLimit(.minutes(1)))
+    func resendWhileStreamingKeepsNewTurnAlive() async throws {
+        // First turn: one partial chunk on a connection that never finishes, so
+        // it is genuinely still in flight when the second send arrives.
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.finishesLoading = false
+        let partial = """
+            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"partial"}}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(partial.utf8)]
+        defer { StreamingMockURLProtocol.reset() }
+
+        let session = StreamingMockURLProtocol.makeSession()
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        let first = await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig)
+        var firstIterator = first.makeAsyncIterator()
+        _ = await firstIterator.next()  // .status(.submitted)
+        _ = await firstIterator.next()  // .messages([...]): the first turn is now mid-stream
+
+        // Second turn: a complete response, then the connection closes.
+        StreamingMockURLProtocol.finishesLoading = true
+        let fresh = """
+            data: {"type":"message_update","message":{"id":"a2","role":"assistant","content":"fresh"}}\n\n\
+            data: {"type":"done","messages":[{"id":"u1","role":"user","content":"hi"},{"id":"a2","role":"assistant","content":"fresh"}]}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(fresh.utf8)]
+
+        var seenStatuses: [ChatStatus] = []
+        var finalMessages: [ChatMessage] = []
+        var failure: String?
+        for await update in await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig) {
+            switch update {
+            case .status(let s): seenStatuses.append(s)
+            case .finished(let messages): finalMessages = messages
+            case .failed(let message): failure = message
+            default: break
+            }
+        }
+
+        // The cancelled first turn must not have torn down the second one.
+        #expect(failure == nil)
+        #expect(seenStatuses.last == .idle)
+        #expect(finalMessages.count == 2)
+        #expect(finalMessages.last?.displayText == "fresh")
+        #expect(await manager.isStreaming("c1") == false)
+
+        // The first turn's stream was finished, not stranded: its consumer's
+        // `next()` returns nil instead of suspending forever.
+        let end = await firstIterator.next()
+        #expect(end == nil)
+    }
+
+    // Time limit: without the fix `attach` drops the previous observer's
+    // continuation unfinished, so its `next()` suspends forever.
+    @Test(
+        "attach finishes the previous observer's stream instead of leaving it suspended",
+        .timeLimit(.minutes(1)))
+    func attachEndsPreviousObserversStream() async throws {
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.finishesLoading = false
+        let partial = """
+            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"partial"}}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(partial.utf8)]
+        defer { StreamingMockURLProtocol.reset() }
+
+        let session = StreamingMockURLProtocol.makeSession()
+        // End the open connection when the test is done so nothing is left running.
+        defer { session.invalidateAndCancel() }
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        let original = await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig)
+        var originalIterator = original.makeAsyncIterator()
+        _ = await originalIterator.next()  // .status(.submitted)
+        _ = await originalIterator.next()  // .messages([...]): the turn is now mid-stream
+
+        // Latest observer wins: attaching replaces the original observer, whose
+        // stream (nothing left buffered) must now end rather than stay suspended.
+        _ = try #require(await manager.attach("c1"))
+        let end = await originalIterator.next()
+        #expect(end == nil)
     }
 }

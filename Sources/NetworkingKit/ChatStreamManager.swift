@@ -15,6 +15,10 @@ public enum ChatStreamUpdate: Sendable {
 
 public actor ChatStreamManager {
     private struct ActiveStream {
+        /// Identifies one `send`. The stream's task carries it back into
+        /// `apply`/`finish`/`fail`, which no-op when the entry under `chatId` now
+        /// belongs to a newer `send` (the old, cancelled task must not touch it).
+        var generation: UUID
         var task: Task<Void, Never>?
         var messages: [ChatMessage]
         var status: ChatStatus
@@ -37,6 +41,9 @@ public actor ChatStreamManager {
     /// Returns `nil` if nothing is in flight for this chat.
     public func attach(_ chatId: String) -> AsyncStream<ChatStreamUpdate>? {
         guard var stream = streams[chatId] else { return nil }
+        // Single observer, latest wins: end the previous observer's stream so its
+        // consumer's `for await` finishes instead of suspending forever.
+        stream.continuation?.finish()
         let (output, continuation) = AsyncStream<ChatStreamUpdate>.makeStream()
         continuation.yield(.messages(stream.messages))
         continuation.yield(.status(stream.status))
@@ -50,10 +57,17 @@ public actor ChatStreamManager {
         messages: [ChatMessage],
         serverConfig: ServerConfigStore
     ) -> AsyncStream<ChatStreamUpdate> {
-        streams[chatId]?.task?.cancel()
+        // Retire the previous turn for this chat: stop its task and end its
+        // observer's stream so that consumer doesn't stay suspended forever.
+        if let previous = streams[chatId] {
+            previous.task?.cancel()
+            previous.continuation?.finish()
+        }
 
+        let generation = UUID()
         let (output, continuation) = AsyncStream<ChatStreamUpdate>.makeStream()
-        streams[chatId] = ActiveStream(task: nil, messages: messages, status: .submitted, continuation: continuation)
+        streams[chatId] = ActiveStream(
+            generation: generation, task: nil, messages: messages, status: .submitted, continuation: continuation)
         continuation.yield(.status(.submitted))
 
         let request = Self.makeRequest(chatId: chatId, messages: messages, serverConfig: serverConfig)
@@ -61,24 +75,26 @@ public actor ChatStreamManager {
 
         let task = Task { [weak self] in
             guard let request else {
-                await self?.fail(chatId: chatId, message: "Invalid server URL")
+                await self?.fail(chatId: chatId, generation: generation, message: "Invalid server URL")
                 return
             }
             do {
                 for try await event in sseClient.events(for: request) {
-                    await self?.apply(chatId: chatId, event: event)
+                    await self?.apply(chatId: chatId, generation: generation, event: event)
                 }
-                await self?.finish(chatId: chatId)
+                await self?.finish(chatId: chatId, generation: generation)
             } catch {
-                await self?.fail(chatId: chatId, message: (error as? LocalizedError)?.errorDescription ?? String(describing: error))
+                await self?.fail(
+                    chatId: chatId, generation: generation,
+                    message: (error as? LocalizedError)?.errorDescription ?? String(describing: error))
             }
         }
         streams[chatId]?.task = task
         return output
     }
 
-    private func apply(chatId: String, event: ChatSseEvent) {
-        guard var stream = streams[chatId] else { return }
+    private func apply(chatId: String, generation: UUID, event: ChatSseEvent) {
+        guard var stream = streams[chatId], stream.generation == generation else { return }
         switch event {
         case .messageUpdate(let message):
             if let index = stream.messages.firstIndex(where: { $0.id == message.id }) {
@@ -94,23 +110,29 @@ public actor ChatStreamManager {
         case .title(let title):
             stream.continuation?.yield(.title(title))
         case .error(let message):
-            stream.continuation?.yield(.failed(message))
+            // A server-sent `error` frame is terminal, like a transport error (the
+            // desktop's `consumeStream` throws on it): fail the turn and stop
+            // reading. Return before the write-back below so the entry `fail`
+            // removes isn't resurrected.
+            stream.task?.cancel()
+            fail(chatId: chatId, generation: generation, message: message)
+            return
         case .toolCallStart, .toolCallEnd, .notice, .unknown:
             break
         }
         streams[chatId] = stream
     }
 
-    private func finish(chatId: String) {
-        guard let stream = streams[chatId] else { return }
+    private func finish(chatId: String, generation: UUID) {
+        guard let stream = streams[chatId], stream.generation == generation else { return }
         stream.continuation?.yield(.status(.idle))
         stream.continuation?.yield(.finished(stream.messages))
         stream.continuation?.finish()
         streams[chatId] = nil
     }
 
-    private func fail(chatId: String, message: String) {
-        guard let stream = streams[chatId] else { return }
+    private func fail(chatId: String, generation: UUID, message: String) {
+        guard let stream = streams[chatId], stream.generation == generation else { return }
         stream.continuation?.yield(.status(.error))
         stream.continuation?.yield(.failed(message))
         stream.continuation?.finish()
