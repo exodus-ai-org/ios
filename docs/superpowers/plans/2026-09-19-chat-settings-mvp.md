@@ -14,6 +14,7 @@
 
 - iOS deployment target: **27.0** for every target (matches this machine's Xcode 27 / the SDK actually installed — resolved from the spec's open "iOS 17+" assumption; this is a personal-use app with no App Store back-compat need, so targeting current-only avoids `@available` hedging everywhere).
 - Destinations: `.iOS` for every target (App included — no reason to block iPad, nothing here is iPhone-specific layout).
+- Swift language mode: **6.0** for every target, set once at the project level in `Project.swift` (`settings: .settings(base: ["SWIFT_VERSION": "6.0"])`) by Task 2 Step 1. Task 1's scaffold ships Tuist's default `SWIFT_VERSION = 5`, so until Task 2 flips it the build does not enforce the strict-concurrency rules this plan's `actor` / `Sendable` / `nonisolated(unsafe)` design is written against — this makes the build enforce them instead of relying on the plan's pre-flight `-strict-concurrency=complete` check alone.
 - Bundle id root: `app.yancey.exodus.exodus-ios` (carried over from the existing project). Each module target's bundle id is `app.yancey.exodus.exodus-ios.<TargetName>`.
 - `DEVELOPMENT_TEAM = YLF27G9ZMT` on the App target (carried over from the existing project, needed for on-device signing later; irrelevant for Simulator runs).
 - Testing framework is **Swift Testing**, not XCTest: `import Testing`, `@Test func …() async throws`, `#expect(...)`, `#require(...)`. Every unit test target hosts it the same way an XCTest target would (`product: .unitTests`).
@@ -291,7 +292,7 @@ EOF
 - Create: `Tests/ModelsTests/ChatMessageTests.swift`
 - Create: `Tests/ModelsTests/ChatSseEventTests.swift`
 - Delete: `Sources/Models/Placeholder.swift`
-- Modify: `Project.swift` — add `ModelsTests` target
+- Modify: `Project.swift` — set project-level Swift 6 language mode, and add `ModelsTests` target
 
 **Interfaces:**
 - Consumes: nothing new.
@@ -300,9 +301,17 @@ EOF
   - `struct ChatMessage: Codable, Equatable, Sendable, Identifiable` with `var id: String`, `var role: String`, `var raw: [String: JSONValue]`, `init(id:role:raw:)`, computed `var content: JSONValue`, `var displayText: String`, `var isError: Bool`, `var toolName: String?`, and `static func userMessage(id: String, text: String, timestampMs: Double) -> ChatMessage`.
   - `enum ChatSseEvent: Decodable, Sendable` with cases `.messageUpdate(ChatMessage) .toolCallStart(toolCallId: String, toolName: String) .toolCallEnd(toolCallId: String, toolName: String, isError: Bool) .done(messages: [ChatMessage]) .title(String) .error(String) .notice(level: String, message: String) .unknown(type: String)`.
 
-- [ ] **Step 1: Add the `ModelsTests` target to `Project.swift`**
+- [ ] **Step 1: Opt the project into Swift 6 language mode, and add the `ModelsTests` target to `Project.swift`**
 
-Add this element to the `targets:` array, right after the `moduleTarget(name: "Models")` line:
+First, the Swift 6 setting (see Global Constraints). Add one line to the `Project(...)` initializer, between `name: "ExodusIos",` and `targets: [`:
+
+```swift
+    settings: .settings(base: ["SWIFT_VERSION": "6.0"]),
+```
+
+It is project-level, so every target — including every test target later tasks append — inherits it; no later task touches it again. (Checked against Tuist 4.208.0: after `tuist generate --no-open`, `xcodebuild -showBuildSettings -project ExodusIos.xcodeproj -target Models` resolves `SWIFT_VERSION = 6.0`, and the Task 1 scaffold still builds clean under it. If any of this task's own code raises a Swift 6 diagnostic the plan's snippet missed, fix the code — do not lower the setting.)
+
+Then add this element to the `targets:` array, right after the `moduleTarget(name: "Models")` line:
 
 ```swift
         .target(
@@ -778,10 +787,20 @@ struct SettingsTests {
 
     @Test("ProvidersConfig.apiKey(for:) and settingApiKey(_:for:) round-trip every provider")
     func providersConfigAccessors() {
-        for provider in AiProviders.allCases {
+        // Every provider except Ollama has a settable API key field (Ollama has
+        // no `ollamaApiKey` in ProvidersSchema — it runs unauthenticated
+        // locally, only `ollamaBaseUrl` exists).
+        for provider in AiProviders.allCases where provider != .ollama {
             let updated = ProvidersConfig().settingApiKey("k-\(provider.rawValue)", for: provider)
             #expect(updated.apiKey(for: provider) == "k-\(provider.rawValue)")
         }
+    }
+
+    @Test("Ollama has no API key field by design — set/get are both no-ops")
+    func ollamaHasNoApiKey() {
+        let updated = ProvidersConfig().settingApiKey("k-Ollama", for: .ollama)
+        #expect(updated.apiKey(for: .ollama) == nil)
+        #expect(updated == ProvidersConfig())
     }
 
     @Test("decodes a live model catalog response")
@@ -1591,6 +1610,13 @@ import Testing
 
 private final class StreamingMockURLProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var chunks: [Data] = []
+    /// When `false`, delivers `chunks` but never calls `didFinishLoading` —
+    /// simulates a still-open SSE connection instead of a completed HTTP
+    /// response. `ChatStreamManager.finish(chatId:)` only runs once the
+    /// underlying byte stream actually ends, so a mock that finishes
+    /// instantly (the default) cannot be used to test "the turn is still
+    /// in flight" — it stops being in flight essentially immediately.
+    nonisolated(unsafe) static var finishesLoading: Bool = true
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -1603,7 +1629,9 @@ private final class StreamingMockURLProtocol: URLProtocol, @unchecked Sendable {
         for chunk in Self.chunks {
             client?.urlProtocol(self, didLoad: chunk)
         }
-        client?.urlProtocolDidFinishLoading(self)
+        if Self.finishesLoading {
+            client?.urlProtocolDidFinishLoading(self)
+        }
     }
 
     override func stopLoading() {}
@@ -1624,6 +1652,7 @@ struct ChatStreamManagerTests {
             data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"Hello"}}\n\n\
             data: {"type":"done","messages":[{"id":"u1","role":"user","content":"hi"},{"id":"a1","role":"assistant","content":"Hello"}]}\n\n
             """
+        StreamingMockURLProtocol.finishesLoading = true
         StreamingMockURLProtocol.chunks = [Data(sse.utf8)]
 
         let manager = ChatStreamManager(sseClient: SSEClient(session: StreamingMockURLProtocol.makeSession()))
@@ -1648,8 +1677,12 @@ struct ChatStreamManagerTests {
 
     @Test("an in-flight stream can be attached to from a second observer and replays current state")
     func attachReplaysSnapshot() async throws {
-        // A stream that never sends `done` — simulates "still in flight when the
-        // view re-attaches" without needing real concurrency timing games.
+        // finishesLoading = false: the mock delivers one chunk and never
+        // signals completion, so the underlying byte stream stays open —
+        // genuinely "still in flight," not a race against a mock that would
+        // otherwise finish (and call ChatStreamManager.finish(chatId:)) in
+        // well under a millisecond.
+        StreamingMockURLProtocol.finishesLoading = false
         let sse = """
             data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"partial"}}\n\n
             """
@@ -1661,12 +1694,12 @@ struct ChatStreamManagerTests {
         let updates = await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig)
         var iterator = updates.makeAsyncIterator()
         _ = await iterator.next()  // .status(.submitted)
-
-        // Give the background Task time to process the one chunk.
-        try await Task.sleep(nanoseconds: 200_000_000)
+        _ = await iterator.next()  // .messages([...]) once the one chunk is parsed — awaiting
+        // this deterministically waits for that point without any sleep.
 
         let attached = await manager.attach("c1")
         #expect(attached != nil)
+        #expect(await manager.isStreaming("c1"))
     }
 }
 ```
