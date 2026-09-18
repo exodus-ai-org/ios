@@ -1,0 +1,10 @@
+.superpowers/
+.DS_Store
+xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+
+# Tuist-generated — regenerate with `tuist generate`
+*.xcodeproj/
+*.xcworkspace/
+.build/
