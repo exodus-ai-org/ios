@@ -126,7 +126,8 @@ struct ChatStreamManagerTests {
             data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"partial"}}\n\n
             """
         StreamingMockURLProtocol.chunks = [Data(sse.utf8)]
-        let manager = ChatStreamManager(sseClient: SSEClient(session: StreamingMockURLProtocol.makeSession()))
+        let session = StreamingMockURLProtocol.makeSession()
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
         let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
         let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
 
@@ -136,8 +137,32 @@ struct ChatStreamManagerTests {
         _ = await iterator.next()  // .messages([...]) once the one chunk is parsed — awaiting
         // this deterministically waits for that point without any sleep.
 
-        let attached = await manager.attach("c1")
-        #expect(attached != nil)
+        let attached = try #require(await manager.attach("c1"))
         #expect(await manager.isStreaming("c1"))
+
+        // End the still-open connection. `attach` has already returned, so its
+        // replay is buffered ahead of anything the shutdown produces; cancelling
+        // only guarantees the stream terminates, so a broken replay makes the
+        // reads below fail instead of hanging on a stream that never yields.
+        // It comes after the `isStreaming` check because it ends the turn.
+        session.invalidateAndCancel()
+
+        // `attach` must replay the current snapshot: the messages so far (the user
+        // message plus the streamed assistant one), then the current status.
+        var replay = attached.makeAsyncIterator()
+        let first = await replay.next()
+        guard case .messages(let replayedMessages)? = first else {
+            Issue.record("expected the first replayed update to be .messages, got \(String(describing: first))")
+            return
+        }
+        #expect(replayedMessages.count == 2)
+        #expect(replayedMessages.last?.displayText == "partial")
+
+        let second = await replay.next()
+        guard case .status(let replayedStatus)? = second else {
+            Issue.record("expected the second replayed update to be .status, got \(String(describing: second))")
+            return
+        }
+        #expect(replayedStatus == .streaming)
     }
 }
