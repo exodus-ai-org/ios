@@ -3164,55 +3164,264 @@ EOF
 ## Task 9: ChatFeature — chat detail, composer, streaming
 
 **Files:**
+- Modify: `Sources/NetworkingKit/ChatStreamManager.swift` — one line: a human-readable text for a transport failure (see ruling 9)
+- Modify: `Tests/NetworkingKitTests/ChatStreamManagerTests.swift` — pin it
+- Create: `Sources/ChatFeature/ChatHistoryRows.swift`
 - Create: `Sources/ChatFeature/ChatDetailViewModel.swift`
 - Create: `Sources/ChatFeature/ChatDetailView.swift`
 - Create: `Sources/ChatFeature/MessageRow.swift`
+- Create: `Tests/ChatFeatureTests/ChatHistoryRowsTests.swift`
 - Create: `Tests/ChatFeatureTests/ChatDetailViewModelTests.swift`
 
 **Interfaces:**
 - Consumes: `APIClient`, `ChatStreamManager`, `ServerConfigStore`, `ChatStatus`, `ChatStreamUpdate` (NetworkingKit); `ChatMessage` (Models).
-- Produces: `public struct ChatDetailView: View { public init(chatId: String, apiClient: APIClient, streamManager: ChatStreamManager, serverConfig: ServerConfigStore) }`.
+- Produces: `public struct ChatDetailView: View { public init(chatId: String, apiClient: APIClient, streamManager: ChatStreamManager, serverConfig: ServerConfigStore) }` — unchanged from the original plan; Task 10 instantiates it.
 
-- [ ] **Step 1: Write the failing tests**
+**Controller rulings baked into this task** (found by checking the plan's original detail screen against the desktop server, the desktop renderer, and a real user flow; each has a test below unless it is pure UI):
 
-`Tests/ChatFeatureTests/ChatDetailViewModelTests.swift` (same per-target `MockURLProtocol` pattern; also exercises `ChatStreamManager` directly since it's a real, cheap-to-construct actor, not something worth re-mocking):
+1. **`GET /api/chat/:id` returns database rows, not `ChatMessage`s.** The route is `select … from message where chatId = ? order by createdAt` (`getMessagesByChatId`, `src/main/lib/db/queries.ts:115`): rows have `createdAt`, `chatId`, `searchText`, per-column `toolName`/`toolCallId`/`isError`/`details`, `usage`, `api`, `provider`, `model`, `stopReason`, … and no `timestamp`. The desktop never uses them raw: `convertToUIMessages` (`src/renderer/lib/utils.ts:26`) turns every row into a role-specific `ChatMessage` before showing it or sending it back as the prior turns of the next `POST /api/chat`. The original plan decoded the rows as-is and echoed them back. `ChatHistoryRows.uiMessages(from:)` is the same conversion (user → `id/role/content/timestamp`; assistant → plus `usage/api/provider/model/stopReason/durationMs/errorMessage` with the desktop's defaults, null `errorMessage`/`durationMs` omitted; anything else → `toolResult` with `toolCallId/toolName/details/isError`). It was compiled and run against a sample of each row shape under Swift 6 before being written down.
+2. **No sending before the history is known.** The desktop's `ChatDetail` renders nothing until `messagesFromDb` has arrived (`src/renderer/containers/chat-detail.tsx`). The server saves only the LAST message of a POST (`saveMessages({ messages: [toDbRow(userMessage, id)] })`, `routes/chat.ts`), so a truncated transcript cannot overwrite the stored history — but with the server's LCM feature off it uses the client-sent prior messages as the LLM context (`allMessages.slice(0, -1)`), so a send before/after a failed history load would degrade the answer. `hasLoadedHistory` (true after a successful load, or after re-attaching to an in-flight turn) gates `canSend`; `sendMessage()` is a no-op unless `canSend`, and it sets `status = .submitted` immediately so a second send cannot slip in before the first stream update. A failed load keeps the user's draft, and the transcript is pull-to-refresh-able to retry.
+3. **Cancellation is not an error** (`loadHistory`), exactly as in Task 8: SwiftUI cancels `.task` when the view goes away. User-facing errors are `error.localizedDescription`.
+4. **Markdown is parsed with `.inlineOnlyPreservingWhitespace`.** Measured on this toolchain: the default `AttributedString(markdown:)` (full syntax) turns "First paragraph.\n\nSecond **bold** paragraph.\nLine break inside.\n\n- item one\n- item two" into the run-on string "First paragraph.Second bold paragraph. Line break inside.item oneitem two" (`Text` ignores block structure), while `.inlineOnlyPreservingWhitespace` keeps every newline, renders the inline markup (bold, italic, code, links) and shows list markers literally. The spec asks for bold/italic/inline code/lists with no block rendering, and LLM replies are multi-paragraph, so the default would mangle nearly every assistant reply.
+5. **An empty assistant bubble is the "waiting for the first token" indicator only for the LAST message while a turn is in flight.** Any other assistant message with no text (a turn that was only tool calls) renders nothing instead of a stranded "…".
+6. **Title:** `chatTitle` comes from the stream's `title` event; otherwise "New Chat" for an empty transcript and "Chat" for a non-empty one. The detail screen is handed only an id (Task 8's callback passes only the id), so it cannot show the list's title; the original plan showed "New Chat" for every existing chat.
+7. **Auto-scroll follows streaming growth:** the transcript scrolls to the bottom when the message count changes AND when the last message's text changes (the original only did the former, so a reply longer than the screen was not followed).
+8. **Test hygiene** (same as Tasks 7/8): `@MainActor` suite; requests recorded behind a `Mutex` and asserted afterwards, never `#expect` inside a handler; the POST body is asserted (spec §3: the FULL transcript including the new user message, `advancedTools: []`, nothing else). `-only-testing:` takes the Swift TYPE name (`ChatFeatureTests/ChatDetailViewModelTests`); a wrong name matches nothing yet reports success with 0 tests, so check that a green run reports N > 0.
+9. **A refused connection must not reach the user as `URLError(_nsError: …)`.** `ChatStreamManager` builds its `.failed` text as `(error as? LocalizedError)?.errorDescription ?? String(describing: error)`; the `String(describing:)` fallback is developer text, and sending while the server is not running is the first thing a new user will do. This task changes that fallback to `error.localizedDescription` (identical for `HTTPError`, which is `LocalizedError`) and pins it in the existing `ChatStreamManagerTests`. It is the only change to a finished task's files and is committed separately.
+
+Swift 6 notes: the view model is `@MainActor`, so the suites that touch it are `@MainActor`; the mock handler runs on a URLProtocol thread. Tasks 7 and 8 compiled this same shape cleanly, but the code below was written after the controller's last compile check (only `ChatHistoryRows` was compiled and run), so expect the odd diagnostic: fix it minimally, keep each test's intent and assertions, record every deviation in the report, never lower `SWIFT_VERSION`, never weaken an assertion.
+
+- [ ] **Step 1: Human-readable transport errors in `ChatStreamManager` (its own commit)**
+
+In `Sources/NetworkingKit/ChatStreamManager.swift`, in `send(chatId:messages:serverConfig:)`'s `catch`, replace `(error as? LocalizedError)?.errorDescription ?? String(describing: error)` with `error.localizedDescription`. Nothing else in that file changes.
+
+In `Tests/NetworkingKitTests/ChatStreamManagerTests.swift` add a test, written first and seen failing: a transport failure (the streaming mock's URLProtocol answers `didFailWithError(URLError(.cannotConnectToHost))` instead of a response) makes the manager yield `.status(.error)` then `.failed(message)` with `message == URLError(.cannotConnectToHost).localizedDescription` and `message.contains("Domain=") == false` (a bare in-process `URLError` describes itself as "(NSURLErrorDomain error -1004.)"; the `String(describing:)` dump form contains `Domain=`), and no `.finished`. Add whatever small static the mock needs (for example a `failure: URLError?` set by the test and reset in the existing `reset()`), keeping every existing test unchanged.
+
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme NetworkingKit -destination "platform=iOS Simulator,name=iPhone 17" -only-testing:NetworkingKitTests/ChatStreamManagerTests` (type name; confirm N > 0), then the full `NetworkingKit` suite. Commit: `Show a readable message when the chat request cannot connect`.
+
+- [ ] **Step 2: Write `ChatHistoryRows` tests and see them fail**
+
+`Tests/ChatFeatureTests/ChatHistoryRowsTests.swift`:
+
+```swift
+import Foundation
+import Models
+import Testing
+
+@testable import ChatFeature
+
+@Suite("ChatHistoryRows")
+struct ChatHistoryRowsTests {
+    private func rows(_ json: String) throws -> [ChatMessage] {
+        try JSONDecoder().decode([ChatMessage].self, from: Data(json.utf8))
+    }
+
+    @Test("a user row becomes the plain UI shape: id, role, content, timestamp — no row bookkeeping")
+    func userRow() throws {
+        let converted = ChatHistoryRows.uiMessages(
+            from: try rows(
+                #"""
+                [{"id":"u1","chatId":"c1","role":"user","content":"hi","searchText":"hi","createdAt":"2026-09-18T12:00:00.000Z","usage":null,"toolCallId":null,"details":null}]
+                """#))
+        let message = try #require(converted.first)
+        #expect(Set(message.raw.keys) == ["id", "role", "content", "timestamp"])
+        #expect(message.role == "user")
+        #expect(message.displayText == "hi")
+        #expect(message.timestampMs == 1_789_732_800_000)
+    }
+
+    @Test("an assistant row keeps usage/api/provider/model/stopReason/durationMs and drops the row bookkeeping")
+    func assistantRow() throws {
+        let converted = ChatHistoryRows.uiMessages(
+            from: try rows(
+                #"""
+                [{"id":"a1","chatId":"c1","role":"assistant","content":[{"type":"text","text":"hello"}],"usage":{"input":3},"api":"anthropic-messages","provider":"anthropic","model":"claude-x","stopReason":"stop","errorMessage":null,"durationMs":1200,"createdAt":"2026-09-18T12:00:05Z","searchText":"hello"}]
+                """#))
+        let message = try #require(converted.first)
+        #expect(
+            Set(message.raw.keys)
+                == ["id", "role", "content", "timestamp", "usage", "api", "provider", "model", "stopReason", "durationMs"])
+        #expect(message.displayText == "hello")
+        #expect(message.raw["usage"] == .object(["input": .number(3)]))
+        #expect(message.raw["provider"] == .string("anthropic"))
+        #expect(message.raw["durationMs"] == .number(1200))
+        #expect(message.timestampMs == 1_789_732_805_000)  // no fractional seconds in the source
+    }
+
+    @Test("null assistant columns get the desktop's defaults, and a set errorMessage is kept")
+    func assistantRowDefaults() throws {
+        let converted = ChatHistoryRows.uiMessages(
+            from: try rows(
+                #"""
+                [{"id":"a2","chatId":"c1","role":"assistant","content":[],"usage":null,"api":null,"provider":null,"model":null,"stopReason":null,"errorMessage":"boom","durationMs":null,"createdAt":"2026-09-18T12:00:05.000Z"}]
+                """#))
+        let message = try #require(converted.first)
+        #expect(message.raw["usage"] == .null)
+        #expect(message.raw["api"] == .string(""))
+        #expect(message.raw["provider"] == .string(""))
+        #expect(message.raw["model"] == .string(""))
+        #expect(message.raw["stopReason"] == .string("stop"))
+        #expect(message.raw["errorMessage"] == .string("boom"))
+        #expect(message.raw.keys.contains("durationMs") == false)
+    }
+
+    @Test("a toolResult row keeps toolCallId/toolName/details/isError; any non-user, non-assistant role is a toolResult")
+    func toolResultRow() throws {
+        let converted = ChatHistoryRows.uiMessages(
+            from: try rows(
+                #"""
+                [{"id":"t1","chatId":"c1","role":"toolResult","content":[{"type":"text","text":"ok"}],"toolCallId":"call_1","toolName":"web_search","details":{"k":1},"isError":false,"createdAt":"2026-09-18T12:00:06.500Z"},
+                 {"id":"t2","chatId":"c1","role":"tool","content":[],"toolCallId":null,"toolName":null,"details":null,"isError":null,"createdAt":"2026-09-18T12:00:07.000Z"}]
+                """#))
+        let first = try #require(converted.first)
+        #expect(Set(first.raw.keys) == ["id", "role", "content", "timestamp", "toolCallId", "toolName", "details", "isError"])
+        #expect(first.raw["toolCallId"] == .string("call_1"))
+        #expect(first.toolName == "web_search")
+        #expect(first.raw["details"] == .object(["k": .number(1)]))
+        #expect(first.isError == false)
+        #expect(first.timestampMs == 1_789_732_806_500)
+
+        let second = try #require(converted.last)
+        #expect(second.role == "toolResult")
+        #expect(second.raw["toolCallId"] == .string(""))
+        #expect(second.raw["toolName"] == .string(""))
+        #expect(second.raw["details"] == .null)
+        #expect(second.raw["isError"] == .bool(false))
+    }
+
+    @Test("an unparseable createdAt keeps an existing timestamp, and otherwise leaves the timestamp out")
+    func timestampFallbacks() throws {
+        let converted = ChatHistoryRows.uiMessages(
+            from: try rows(
+                #"""
+                [{"id":"u1","role":"user","content":"a","createdAt":"not a date","timestamp":42},
+                 {"id":"u2","role":"user","content":"b","createdAt":"not a date"}]
+                """#))
+        #expect(converted[0].timestampMs == 42)
+        #expect(converted[1].raw.keys.contains("timestamp") == false)
+    }
+
+    @Test("converted messages encode without any of the database bookkeeping columns")
+    func encodedShapeHasNoRowBookkeeping() throws {
+        let converted = ChatHistoryRows.uiMessages(
+            from: try rows(
+                #"""
+                [{"id":"u1","chatId":"c1","role":"user","content":"hi","searchText":"hi","createdAt":"2026-09-18T12:00:00.000Z"}]
+                """#))
+        let data = try JSONEncoder().encode(converted)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        let keys = Set(try #require(object.first).keys)
+        #expect(keys.isDisjoint(with: ["chatId", "searchText", "createdAt"]))
+    }
+}
+```
+
+Run (type name, confirm the build fails on the missing `ChatHistoryRows`): `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17" -only-testing:ChatFeatureTests/ChatHistoryRowsTests`
+
+- [ ] **Step 3: Implement `ChatHistoryRows.swift`**
+
+```swift
+import Foundation
+import Models
+
+/// Rows from `GET /api/chat/:id` are database rows (`createdAt`, `chatId`, `searchText`,
+/// per-column `toolName` / `isError` / `details`, …), not the `ChatMessage` shape the SSE
+/// stream sends (`timestamp`, no row bookkeeping). The desktop converts them with
+/// `convertToUIMessages` (`src/renderer/lib/utils.ts`) before showing them or sending them
+/// back as the prior turns of the next `POST /api/chat`; this is the same conversion.
+enum ChatHistoryRows {
+    static func uiMessages(from rows: [ChatMessage]) -> [ChatMessage] {
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return rows.map { uiMessage(from: $0) { withFraction.date(from: $0) ?? plain.date(from: $0) } }
+    }
+
+    static func uiMessage(from row: ChatMessage, parseDate: (String) -> Date?) -> ChatMessage {
+        var out: [String: JSONValue] = [
+            "id": .string(row.id),
+            "content": row.raw["content"] ?? .null,
+        ]
+        if let created = row.raw["createdAt"]?.stringValue, let date = parseDate(created) {
+            out["timestamp"] = .number(date.timeIntervalSince1970 * 1000)
+        } else if let timestamp = row.raw["timestamp"] {
+            out["timestamp"] = timestamp
+        }
+
+        let role: String
+        switch row.role {
+        case "user":
+            role = "user"
+        case "assistant":
+            role = "assistant"
+            out["usage"] = row.raw["usage"] ?? .null
+            out["api"] = present(row.raw["api"]) ?? .string("")
+            out["provider"] = present(row.raw["provider"]) ?? .string("")
+            out["model"] = present(row.raw["model"]) ?? .string("")
+            out["stopReason"] = present(row.raw["stopReason"]) ?? .string("stop")
+            out["errorMessage"] = present(row.raw["errorMessage"])
+            out["durationMs"] = present(row.raw["durationMs"])
+        default:
+            role = "toolResult"
+            out["toolCallId"] = present(row.raw["toolCallId"]) ?? .string("")
+            out["toolName"] = present(row.raw["toolName"]) ?? .string("")
+            out["details"] = row.raw["details"] ?? .null
+            out["isError"] = .bool(row.raw["isError"]?.boolValue ?? false)
+        }
+        out["role"] = .string(role)
+        return ChatMessage(id: row.id, role: role, raw: out)
+    }
+
+    /// A database NULL (and a missing column) is "absent", like `?? undefined` on the desktop.
+    private static func present(_ value: JSONValue?) -> JSONValue? {
+        if case .null? = value { return nil }
+        return value
+    }
+}
+```
+
+Run the same command as Step 2; expected: `ChatHistoryRowsTests` all pass (6 tests).
+
+- [ ] **Step 4: Write the `ChatDetailViewModel` tests and see them fail**
+
+`Tests/ChatFeatureTests/ChatDetailViewModelTests.swift`. The mock answers by method + path from one handler; a `POST /api/chat` answer is delivered as an event stream (all bytes at once), and can be held open (bytes delivered, connection never finished) to simulate a turn still in flight:
 
 ```swift
 import Foundation
 import Models
 import NetworkingKit
+import Synchronization
 import Testing
 
 @testable import ChatFeature
 
 private final class ChatDetailMockURLProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) throws -> (Int, Data))?
-    nonisolated(unsafe) static var streamChunks: [Data]?
+    /// When true, a `POST /api/chat` answer is delivered but the connection is never finished,
+    /// i.e. a turn that is still streaming.
+    nonisolated(unsafe) static var holdsChatPostOpen = false
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        if let chunks = Self.streamChunks {
-            let response = HTTPURLResponse(
-                url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
-                headerFields: ["Content-Type": "text/event-stream"])!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            for chunk in chunks { client?.urlProtocol(self, didLoad: chunk) }
-            client?.urlProtocolDidFinishLoading(self)
-            return
-        }
+        let holdsOpen = Self.holdsChatPostOpen
         guard let handler = Self.handler else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
+        let isChatPost = request.httpMethod == "POST" && request.url?.path == "/api/chat"
         do {
             let (statusCode, data) = try handler(request)
             let response = HTTPURLResponse(
-                url: request.url!, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
+                url: request.url!, statusCode: statusCode, httpVersion: "HTTP/1.1",
+                headerFields: isChatPost ? ["Content-Type": "text/event-stream"] : nil)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
+            if !(isChatPost && holdsOpen) {
+                client?.urlProtocolDidFinishLoading(self)
+            }
         } catch {
             client?.urlProtocol(self, didFailWithError: error)
         }
@@ -3227,60 +3436,301 @@ private final class ChatDetailMockURLProtocol: URLProtocol, @unchecked Sendable 
     }
 }
 
+private struct RecordedRequest: Sendable {
+    let line: String  // "METHOD path"
+    let body: Data
+}
+
+/// The handler runs on a URLProtocol thread, so requests are recorded behind a lock and asserted afterwards.
+private final class RequestRecorder: Sendable {
+    private let storage = Mutex<[RecordedRequest]>([])
+    func record(_ request: RecordedRequest) { storage.withLock { $0.append(request) } }
+    var lines: [String] { storage.withLock { $0.map(\.line) } }
+
+    /// The JSON object of the one and only body sent to `POST path`.
+    func onlyJSONBody(forPOST path: String) throws -> [String: Any] {
+        let bodies = storage.withLock { $0.filter { $0.line == "POST \(path)" }.map(\.body) }
+        try #require(bodies.count == 1)
+        let object = try JSONSerialization.jsonObject(with: bodies[0])
+        return try #require(object as? [String: Any])
+    }
+}
+
+private let historyRowsJSON = #"""
+    [{"id":"u1","chatId":"c1","role":"user","content":"hi","searchText":"hi","createdAt":"2026-09-18T12:00:00.000Z"},
+     {"id":"a1","chatId":"c1","role":"assistant","content":[{"type":"text","text":"hello"}],"usage":{"input":3},"api":"anthropic-messages","provider":"anthropic","model":"claude-x","stopReason":"stop","createdAt":"2026-09-18T12:00:05.000Z"}]
+    """#
+
+private let helloReply = """
+    data: {"type":"message_update","message":{"id":"a2","role":"assistant","content":"Hel"}}\n\n\
+    data: {"type":"message_update","message":{"id":"a2","role":"assistant","content":"Hello!"}}\n\n\
+    data: {"type":"title","title":"Greeting"}\n\n\
+    data: {"type":"done","messages":[{"id":"u2","role":"user","content":"hey"},{"id":"a2","role":"assistant","content":"Hello!"}]}\n\n
+    """
+
+private let partialReply = """
+    data: {"type":"message_update","message":{"id":"a2","role":"assistant","content":"Hel"}}\n\n
+    """
+
+private let envelope404 = #"{"type":"error","error":{"code":"CHAT_NOT_FOUND","message":"Chat not found"}}"#
+
+/// Answers `GET /api/chat/<id>` with `history` and `POST /api/chat` with `reply`, recording every request.
+private func serve(
+    history: String = "[]",
+    historyStatus: Int = 200,
+    reply: String = "",
+    replyStatus: Int = 200,
+    holdReplyOpen: Bool = false,
+    recorder: RequestRecorder
+) {
+    ChatDetailMockURLProtocol.holdsChatPostOpen = holdReplyOpen
+    ChatDetailMockURLProtocol.handler = { request in
+        let method = request.httpMethod ?? "GET"
+        let path = request.url?.path ?? ""
+        let body = method == "POST" ? try request.httpBodyStreamData() : Data()
+        recorder.record(RecordedRequest(line: "\(method) \(path)", body: body))
+        if method == "GET", path.hasPrefix("/api/chat/") { return (historyStatus, Data(history.utf8)) }
+        if method == "POST", path == "/api/chat" { return (replyStatus, Data(reply.utf8)) }
+        return (404, Data(envelope404.utf8))
+    }
+}
+
+extension URLRequest {
+    fileprivate func httpBodyStreamData() throws -> Data {
+        guard let stream = httpBodyStream else { return httpBody ?? Data() }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        let bufferSize = 4096
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: bufferSize)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data
+    }
+}
+
+/// Polls (bounded) until `condition` holds — no timing assumption, just a deadline so a broken build fails instead of hanging.
+@MainActor
+private func waitUntil(
+    _ what: String, timeout: Duration = .seconds(10), _ condition: @MainActor () async -> Bool
+) async throws {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while !(await condition()) {
+        try #require(ContinuousClock.now < deadline, "timed out waiting for \(what)")
+        try await Task.sleep(for: .milliseconds(2))
+    }
+}
+
+/// One session, one API client and ONE stream manager, so two view models can share the manager like the app does.
+@MainActor
+private struct Harness {
+    let session: URLSession
+    let apiClient: APIClient
+    let manager: ChatStreamManager
+    let config: ServerConfigStore
+
+    init(_ suite: String = #function) {
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        config = ServerConfigStore(userDefaults: defaults)
+        session = ChatDetailMockURLProtocol.makeSession()
+        apiClient = APIClient(session: session, serverConfig: config)
+        manager = ChatStreamManager(sseClient: SSEClient(session: session))
+    }
+
+    func makeViewModel(chatId: String = "c1") -> ChatDetailViewModel {
+        ChatDetailViewModel(chatId: chatId, apiClient: apiClient, streamManager: manager, serverConfig: config)
+    }
+}
+
+@MainActor
 @Suite("ChatDetailViewModel", .serialized)
 struct ChatDetailViewModelTests {
-    private func makeViewModel(chatId: String = "c1") -> ChatDetailViewModel {
-        let config = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
-        let session = ChatDetailMockURLProtocol.makeSession()
-        let apiClient = APIClient(session: session, serverConfig: config)
-        let streamManager = ChatStreamManager(sseClient: SSEClient(session: session))
-        return ChatDetailViewModel(chatId: chatId, apiClient: apiClient, streamManager: streamManager, serverConfig: config)
-    }
-
-    @Test("loadHistory populates messages from GET /api/chat/:id")
-    func loadHistoryPopulatesMessages() async throws {
-        ChatDetailMockURLProtocol.streamChunks = nil
-        ChatDetailMockURLProtocol.handler = { request in
-            #expect(request.url?.path == "/api/chat/c1")
-            let json = """
-                [{"id":"u1","role":"user","content":"hi"},{"id":"a1","role":"assistant","content":"hello"}]
-                """.data(using: .utf8)!
-            return (200, json)
-        }
-        let vm = makeViewModel()
+    @Test("loadHistory shows the desktop-shaped messages converted from the database rows")
+    func loadHistoryConvertsDatabaseRows() async throws {
+        let recorder = RequestRecorder()
+        serve(history: historyRowsJSON, recorder: recorder)
+        let vm = Harness().makeViewModel()
         await vm.loadHistory()
-        #expect(vm.messages.count == 2)
-        #expect(vm.messages.last?.displayText == "hello")
+        #expect(recorder.lines == ["GET /api/chat/c1"])
+        #expect(vm.messages.map(\.displayText) == ["hi", "hello"])
+        #expect(vm.messages.allSatisfy { $0.raw.keys.contains("chatId") == false && $0.timestampMs != nil })
+        #expect(vm.hasLoadedHistory)
+        #expect(vm.errorMessage == nil)
     }
 
-    @Test("sendMessage appends the user message immediately, then streams the assistant reply to completion")
-    func sendMessageStreamsToCompletion() async throws {
-        ChatDetailMockURLProtocol.handler = nil
-        let sse = """
-            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"Hel"}}\n\n\
-            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"Hello!"}}\n\n\
-            data: {"type":"done","messages":[{"id":"u1","role":"user","content":"hi"},{"id":"a1","role":"assistant","content":"Hello!"}]}\n\n
-            """
-        ChatDetailMockURLProtocol.streamChunks = [Data(sse.utf8)]
+    @Test("a chat with no server record yet loads as an empty transcript, not an error")
+    func aNewChatLoadsAsEmpty() async throws {
+        serve(history: "[]", recorder: RequestRecorder())
+        let vm = Harness().makeViewModel(chatId: "brand-new")
+        await vm.loadHistory()
+        #expect(vm.messages.isEmpty)
+        #expect(vm.hasLoadedHistory)
+        #expect(vm.errorMessage == nil)
+    }
 
-        let vm = makeViewModel()
-        vm.composerText = "hi"
+    @Test("a failed history load blocks sending, keeps the draft, and posts nothing")
+    func aFailedHistoryLoadBlocksSending() async throws {
+        let recorder = RequestRecorder()
+        serve(history: envelope404, historyStatus: 500, recorder: recorder)
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        #expect(vm.hasLoadedHistory == false)
+        #expect(vm.errorMessage == "Chat not found")
+
+        vm.composerText = "hello"
+        #expect(vm.canSend == false)
+        await vm.sendMessage()
+        #expect(recorder.lines == ["GET /api/chat/c1"])
+        #expect(vm.composerText == "hello")
+        #expect(vm.messages.isEmpty)
+    }
+
+    @Test("a cancelled history load is not shown as an error")
+    func aCancelledHistoryLoadIsNotAnError() async throws {
+        ChatDetailMockURLProtocol.handler = { _ in throw URLError(.cancelled) }
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        #expect(vm.errorMessage == nil)
+        #expect(vm.hasLoadedHistory == false)
+    }
+
+    @Test("sendMessage posts the full transcript — converted prior turns plus the new user message — and nothing else")
+    func sendMessageSendsTheFullTranscript() async throws {
+        let recorder = RequestRecorder()
+        serve(history: historyRowsJSON, reply: helloReply, recorder: recorder)
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
         await vm.sendMessage()
 
-        #expect(vm.messages.count == 2)
-        #expect(vm.messages.last?.displayText == "Hello!")
+        let body = try recorder.onlyJSONBody(forPOST: "/api/chat")
+        #expect(Set(body.keys) == ["id", "messages", "advancedTools"])
+        #expect(body["id"] as? String == "c1")
+        #expect((body["advancedTools"] as? [Any])?.isEmpty == true)
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        #expect(messages.count == 3)
+        #expect(messages.map { $0["role"] as? String } == ["user", "assistant", "user"])
+        // Prior turns are the desktop-shaped conversion, not the raw rows.
+        #expect(messages[0].keys.contains("chatId") == false)
+        #expect(messages[0]["timestamp"] is NSNumber)
+        #expect(messages[1]["stopReason"] as? String == "stop")
+        // The new message is the last one, with a lowercase UUID id and a numeric timestamp.
+        let last = messages[2]
+        #expect(last["content"] as? String == "hey")
+        let id = try #require(last["id"] as? String)
+        #expect(id == id.lowercased() && UUID(uuidString: id) != nil)
+        #expect(last["timestamp"] is NSNumber)
+    }
+
+    @Test("sendMessage streams the reply to completion: final messages from `done`, title event applied, composer cleared")
+    func sendMessageStreamsToCompletion() async throws {
+        serve(history: "[]", reply: helloReply, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        #expect(vm.messages.map(\.displayText) == ["hey", "Hello!"])
         #expect(vm.status == .idle)
         #expect(vm.composerText.isEmpty)
+        #expect(vm.chatTitle == "Greeting")
+        #expect(vm.errorMessage == nil)
+    }
+
+    @Test("empty or whitespace-only drafts are not sent")
+    func emptyDraftsAreNotSent() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", reply: helloReply, recorder: recorder)
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        for draft in ["", "   ", "\n \n"] {
+            vm.composerText = draft
+            #expect(vm.canSend == false)
+            await vm.sendMessage()
+        }
+        #expect(recorder.lines == ["GET /api/chat/c1"])
+        #expect(vm.messages.isEmpty)
+    }
+
+    @Test("a server error frame ends the turn in the error state with the message shown, and the composer usable again")
+    func aServerErrorFrameEndsTheTurnInAnErrorState() async throws {
+        serve(history: "[]", reply: #"data: {"type":"error","error":"Invalid API key"}\#n\#n"#, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        #expect(vm.errorMessage == "Invalid API key")
+        #expect(vm.status == .error)  // not overwritten by a trailing idle
+        vm.composerText = "again"
+        #expect(vm.canSend)
+    }
+
+    @Test("a second send while a turn is in flight is ignored", .timeLimit(.minutes(1)))
+    func aSecondSendWhileInFlightIsIgnored() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", reply: partialReply, holdReplyOpen: true, recorder: recorder)
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "first"
+        let firstSend = Task { await vm.sendMessage() }
+        try await waitUntil("the partial reply to arrive") { vm.messages.last?.displayText == "Hel" }
+
+        vm.composerText = "second"
+        #expect(vm.canSend == false)
+        await vm.sendMessage()
+        #expect(recorder.lines.filter { $0 == "POST /api/chat" }.count == 1)
+        #expect(vm.composerText == "second")
+
+        harness.session.invalidateAndCancel()  // end the held-open connection so the first send returns
+        await firstSend.value
+    }
+
+    @Test("returning to a chat whose reply is still streaming re-attaches to it instead of reloading history", .timeLimit(.minutes(1)))
+    func onAppearReattachesToAnInFlightTurn() async throws {
+        let recorder = RequestRecorder()
+        serve(history: historyRowsJSON, reply: partialReply, holdReplyOpen: true, recorder: recorder)
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        let first = harness.makeViewModel()
+        await first.loadHistory()
+        first.composerText = "hey"
+        let firstSend = Task { await first.sendMessage() }
+        try await waitUntil("the partial reply to arrive") { await harness.manager.isStreaming("c1") && first.messages.last?.displayText == "Hel" }
+
+        // A new view model for the same chat (what leaving and returning creates) shares the manager.
+        let second = harness.makeViewModel()
+        let appear = Task { await second.onAppear() }
+        try await waitUntil("the re-attached view model to show the partial reply") {
+            second.messages.last?.displayText == "Hel"
+        }
+        #expect(second.hasLoadedHistory)
+        #expect(second.status == .streaming)
+        #expect(recorder.lines.filter { $0 == "GET /api/chat/c1" }.count == 1)  // only the first view model's load
+
+        harness.session.invalidateAndCancel()
+        await firstSend.value
+        await appear.value
+    }
+
+    @Test("the navigation title comes from the title event, else New Chat for an empty transcript and Chat once there are messages")
+    func displayTitle() async throws {
+        serve(history: historyRowsJSON, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        #expect(vm.displayTitle == "New Chat")
+        await vm.loadHistory()
+        #expect(vm.displayTitle == "Chat")
     }
 }
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail**
+Run (type name; confirm the build fails on the missing `ChatDetailViewModel`): `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17" -only-testing:ChatFeatureTests/ChatDetailViewModelTests`
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17" -only-testing ChatFeatureTests/ChatDetailViewModelTests`
-Expected: build failure — `ChatDetailViewModel` doesn't exist yet.
-
-- [ ] **Step 3: Implement `ChatDetailViewModel.swift`**
+- [ ] **Step 5: Implement `ChatDetailViewModel.swift`**
 
 ```swift
 import Foundation
@@ -3292,11 +3742,15 @@ import Observation
 @Observable
 public final class ChatDetailViewModel {
     public let chatId: String
-    public var messages: [ChatMessage] = []
-    public var status: ChatStatus = .idle
+    public private(set) var messages: [ChatMessage] = []
+    public private(set) var status: ChatStatus = .idle
     public var composerText: String = ""
-    public var chatTitle: String?
+    public private(set) var chatTitle: String?
     public var errorMessage: String?
+    /// True once the transcript is known: history loaded, or re-attached to an in-flight turn.
+    /// Nothing is sent before that — the prior turns of a POST are the LLM context when the
+    /// server's LCM feature is off, and the desktop does not render a chat before its history.
+    public private(set) var hasLoadedHistory = false
 
     private let apiClient: APIClient
     private let streamManager: ChatStreamManager
@@ -3309,8 +3763,18 @@ public final class ChatDetailViewModel {
         self.serverConfig = serverConfig
     }
 
+    public var isTurnInFlight: Bool { status == .submitted || status == .streaming }
+
+    public var canSend: Bool {
+        hasLoadedHistory && !isTurnInFlight
+            && !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    public var displayTitle: String { chatTitle ?? (messages.isEmpty ? "New Chat" : "Chat") }
+
     public func onAppear() async {
         if await streamManager.isStreaming(chatId), let updates = await streamManager.attach(chatId) {
+            hasLoadedHistory = true
             status = .streaming
             await consume(updates)
         } else {
@@ -3319,21 +3783,27 @@ public final class ChatDetailViewModel {
     }
 
     public func loadHistory() async {
+        guard !isTurnInFlight else { return }  // a reload would replace the reply that is being streamed
         do {
-            messages = try await apiClient.get("/api/chat/\(chatId)")
+            let rows: [ChatMessage] = try await apiClient.get("/api/chat/\(chatId)")
+            messages = ChatHistoryRows.uiMessages(from: rows)
+            hasLoadedHistory = true
         } catch {
-            errorMessage = (error as? HTTPError)?.message ?? String(describing: error)
+            // SwiftUI cancels a view's `.task` when the view goes away; that is not a failure.
+            guard !Self.isCancellation(error) else { return }
+            errorMessage = error.localizedDescription
         }
     }
 
     public func sendMessage() async {
+        guard canSend else { return }
         let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
         composerText = ""
 
         let userMessage = ChatMessage.userMessage(
             id: UUID().uuidString.lowercased(), text: text, timestampMs: Date().timeIntervalSince1970 * 1000)
         messages.append(userMessage)
+        status = .submitted  // disable the composer now, before the first stream update arrives
 
         let updates = await streamManager.send(chatId: chatId, messages: messages, serverConfig: serverConfig)
         await consume(updates)
@@ -3357,15 +3827,18 @@ public final class ChatDetailViewModel {
             }
         }
     }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled
+    }
 }
 ```
 
-- [ ] **Step 4: Run the tests and confirm they pass**
+- [ ] **Step 6: Run the tests and confirm they pass**
 
-Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17"`
-Expected: `** TEST SUCCEEDED **`, every ChatFeature test (Task 8 + this task) passes.
+Run: `xcodebuild test -workspace ExodusIos.xcworkspace -scheme ChatFeature -destination "platform=iOS Simulator,name=iPhone 17"` — the whole `ChatFeature` suite (Task 8's tests + `ChatHistoryRowsTests` + `ChatDetailViewModelTests`). Confirm N > 0 and that the count is what you expect.
 
-- [ ] **Step 5: Implement `MessageRow.swift`**
+- [ ] **Step 7: Implement `MessageRow.swift`**
 
 ```swift
 import Models
@@ -3373,13 +3846,19 @@ import SwiftUI
 
 struct MessageRow: View {
     let message: ChatMessage
+    /// True for the LAST message while a turn is in flight. An empty assistant bubble is then the
+    /// "waiting for the first token" indicator; an assistant message that is empty for any other
+    /// reason (a turn that was only tool calls) renders nothing.
+    var showsTypingIndicator = false
 
-    /// Basic Markdown only (bold/italic/inline code/lists) via Foundation's
-    /// built-in parser — no syntax highlighting, no Mermaid, no math, per the
-    /// spec's explicit MVP scope. Falls back to the raw string if parsing
-    /// fails rather than dropping the message.
+    /// Inline Markdown only (bold, italic, code, links) with every newline kept. Measured: the
+    /// default full-syntax parse collapses paragraphs and list items into one run-on line because
+    /// `Text` ignores block structure. No syntax highlighting, Mermaid or math, per the spec.
+    private static let markdownOptions = AttributedString.MarkdownParsingOptions(
+        interpretedSyntax: .inlineOnlyPreservingWhitespace)
+
     private static func renderedText(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+        (try? AttributedString(markdown: text, options: markdownOptions)) ?? AttributedString(text)
     }
 
     var body: some View {
@@ -3393,12 +3872,10 @@ struct MessageRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         case "assistant":
-            HStack {
-                Text(message.displayText.isEmpty ? AttributedString("…") : Self.renderedText(message.displayText))
-                    .padding(10)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                Spacer(minLength: 40)
+            if !message.displayText.isEmpty {
+                assistantBubble(Self.renderedText(message.displayText))
+            } else if showsTypingIndicator {
+                assistantBubble(AttributedString("…"))
             }
         case "toolResult":
             HStack(spacing: 6) {
@@ -3413,10 +3890,20 @@ struct MessageRow: View {
             EmptyView()
         }
     }
+
+    private func assistantBubble(_ text: AttributedString) -> some View {
+        HStack {
+            Text(text)
+                .padding(10)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            Spacer(minLength: 40)
+        }
+    }
 }
 ```
 
-- [ ] **Step 6: Implement `ChatDetailView.swift`**
+- [ ] **Step 8: Implement `ChatDetailView.swift`**
 
 ```swift
 import Models
@@ -3438,16 +3925,25 @@ public struct ChatDetailView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(viewModel.messages) { message in
-                            MessageRow(message: message).id(message.id)
+                            MessageRow(
+                                message: message,
+                                showsTypingIndicator: viewModel.isTurnInFlight && message.id == viewModel.messages.last?.id
+                            )
+                            .id(message.id)
                         }
                     }
                     .padding(.horizontal)
                     .padding(.top, 8)
                 }
+                // Pull down to retry a history load that failed (the composer stays disabled until it succeeds).
+                .scrollBounceBehavior(.always)
+                .refreshable { await viewModel.loadHistory() }
                 .onChange(of: viewModel.messages.count) {
-                    if let lastId = viewModel.messages.last?.id {
-                        withAnimation { proxy.scrollTo(lastId, anchor: .bottom) }
-                    }
+                    scrollToBottom(proxy, animated: true)
+                }
+                // Follow a reply as it streams in: the count is constant while the last message grows.
+                .onChange(of: viewModel.messages.last?.displayText) {
+                    scrollToBottom(proxy, animated: false)
                 }
             }
 
@@ -3461,13 +3957,11 @@ public struct ChatDetailView: View {
                 } label: {
                     Image(systemName: "arrow.up.circle.fill").font(.title2)
                 }
-                .disabled(
-                    viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || viewModel.status == .submitted || viewModel.status == .streaming)
+                .disabled(!viewModel.canSend)
             }
             .padding()
         }
-        .navigationTitle(viewModel.chatTitle ?? "New Chat")
+        .navigationTitle(viewModel.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.onAppear() }
         .alert(
@@ -3482,30 +3976,43 @@ public struct ChatDetailView: View {
             Text(viewModel.errorMessage ?? "")
         }
     }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
+        guard let lastId = viewModel.messages.last?.id else { return }
+        if animated {
+            withAnimation { proxy.scrollTo(lastId, anchor: .bottom) }
+        } else {
+            proxy.scrollTo(lastId, anchor: .bottom)
+        }
+    }
 }
 ```
 
-- [ ] **Step 7: Build the whole workspace**
+- [ ] **Step 9: Build the whole workspace**
 
 ```bash
 tuist generate --no-open
 xcodebuild build -workspace ExodusIos.xcworkspace -scheme App -destination "generic/platform=iOS Simulator"
 ```
 
-Expected: `** BUILD SUCCEEDED **`. `ChatDetailView` isn't reachable from `RootView` yet — that's Task 10.
+Expected: `** BUILD SUCCEEDED **`. `ChatDetailView` isn't reachable from `RootView` yet — that's Task 10, so the view code (title, tap/scroll behaviour, the typing indicator, pull-to-refresh) is verified by the build only until then; say so in the report.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
+
+Step 1 is its own commit (message above). Everything else in one commit:
 
 ```bash
 git add -A
 git commit -m "$(cat <<'EOF'
 Add ChatFeature chat detail: history load, streaming send, composer
 
-ChatDetailViewModel re-attaches to an in-flight ChatStreamManager
-stream on appear instead of always re-fetching, so leaving and
-returning to a chat mid-response doesn't lose progress. MessageRow
-renders user/assistant bubbles and a generic "Used: toolName" row for
-tool results, per the MVP scope (no per-tool rich cards).
+ChatDetailViewModel converts the history rows to the desktop's message
+shape (as convertToUIMessages does), refuses to send before the history
+is known, ignores a second send while a turn is in flight, and
+re-attaches to an in-flight ChatStreamManager stream on appear instead
+of re-fetching. MessageRow renders inline Markdown with newlines kept, a
+typing indicator for the last message only, and a generic "Used: tool"
+row for tool results.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
