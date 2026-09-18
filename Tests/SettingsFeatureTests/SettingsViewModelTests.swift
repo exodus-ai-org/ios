@@ -218,6 +218,26 @@ struct SettingsViewModelTests {
         #expect(providerConfig.keys.contains("modelSnapshot") == false)
     }
 
+    @Test("save() attaches no snapshot when the provider changed, even if the new provider uses the same model name")
+    func saveDropsSnapshotWhenOnlyTheProviderChanged() async throws {
+        // OpenAI and Azure OpenAI share model names, so a matching model id alone must not carry
+        // the snapshot the desktop saved for OpenAI over to Azure.
+        let recorder = BodyRecorder()
+        serve(
+            settings: #"{"id":"global","providerConfig":{"provider":"OpenAI GPT","model":"gpt-4o","modelSnapshot":{"contextWindow":128000,"maxOutputTokens":16384,"reasoningLevels":[]}},"providers":{"openaiApiKey":"sk-oai-2"}}"#,
+            recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        vm.select(provider: .azureOpenAi)
+        vm.modelText = "gpt-4o"  // the very model name the desktop saved for OpenAI
+        #expect(await vm.save())
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let providerConfig = try #require(body["providerConfig"] as? [String: Any])
+        #expect(providerConfig["provider"] as? String == "Azure OpenAI")
+        #expect(providerConfig["model"] as? String == "gpt-4o")
+        #expect(providerConfig.keys.contains("modelSnapshot") == false)
+    }
+
     @Test("switching provider swaps the key and model, clears the catalog, and switching back restores them")
     func switchingProviderSwapsKeyAndResetsModel() async throws {
         serve(
