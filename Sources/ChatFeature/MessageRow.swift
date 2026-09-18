@@ -5,7 +5,8 @@ struct MessageRow: View {
     let message: ChatMessage
     /// True for the LAST message while a turn is in flight. An empty assistant bubble is then the
     /// "waiting for the first token" indicator; an assistant message that is empty for any other
-    /// reason (a turn that was only tool calls) renders nothing.
+    /// reason (a turn that was only tool calls) renders nothing. "Empty" means no answer text:
+    /// a message with only `thinking` blocks is empty too (`answerText` leaves them out).
     var showsTypingIndicator = false
 
     /// Inline Markdown only (bold, italic, code, links) with every newline kept. Measured: the
@@ -23,14 +24,14 @@ struct MessageRow: View {
         case "user":
             HStack {
                 Spacer(minLength: 40)
-                Text(Self.renderedText(message.displayText))
+                Text(Self.renderedText(message.answerText))
                     .padding(10)
                     .background(Color.accentColor.opacity(0.15))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         case "assistant":
-            if !message.displayText.isEmpty {
-                assistantBubble(Self.renderedText(message.displayText))
+            if !message.answerText.isEmpty {
+                assistantBubble(Self.renderedText(message.answerText))
             } else if showsTypingIndicator {
                 assistantBubble(AttributedString("…"))
             }

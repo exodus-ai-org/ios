@@ -34,7 +34,7 @@ public struct ChatDetailView: View {
                     scrollToBottom(proxy, animated: true)
                 }
                 // Follow a reply as it streams in: the count is constant while the last message grows.
-                .onChange(of: viewModel.messages.last?.displayText) {
+                .onChange(of: viewModel.messages.last?.answerText) {
                     scrollToBottom(proxy, animated: false)
                 }
             }

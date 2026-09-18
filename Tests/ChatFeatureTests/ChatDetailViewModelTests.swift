@@ -236,6 +236,22 @@ struct ChatDetailViewModelTests {
         #expect(last["timestamp"] is NSNumber)
     }
 
+    @Test("the sent text is trimmed of surrounding whitespace and newlines, and the composer is cleared")
+    func theSentTextIsTrimmed() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", reply: helloReply, recorder: recorder)
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "  hi there \n"
+        await vm.sendMessage()
+
+        let body = try recorder.onlyJSONBody(forPOST: "/api/chat")
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        try #require(messages.count == 1)  // an empty history, so the new message is the whole transcript
+        #expect(messages[0]["content"] as? String == "hi there")  // inner space kept, both ends trimmed
+        #expect(vm.composerText.isEmpty)
+    }
+
     @Test("sendMessage streams the reply to completion: final messages from `done`, title event applied, composer cleared")
     func sendMessageStreamsToCompletion() async throws {
         serve(history: "[]", reply: helloReply, recorder: RequestRecorder())
@@ -298,6 +314,33 @@ struct ChatDetailViewModelTests {
 
         harness.session.invalidateAndCancel()  // end the held-open connection so the first send returns
         await firstSend.value
+    }
+
+    @Test("loadHistory during a turn (pull-to-refresh) does not replace the streaming reply with database rows", .timeLimit(.minutes(1)))
+    func loadHistoryDoesNotReplaceAStreamingReply() async throws {
+        let recorder = RequestRecorder()
+        serve(history: historyRowsJSON, reply: partialReply, holdReplyOpen: true, recorder: recorder)
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        let send = Task { await vm.sendMessage() }
+        try await waitUntil("the partial reply to arrive") { vm.messages.last?.displayText == "Hel" }
+        let messagesBefore = vm.messages
+        let statusBefore = vm.status
+
+        await vm.loadHistory()  // what a pull-to-refresh does while the turn is still streaming
+
+        #expect(recorder.lines.filter { $0 == "GET /api/chat/c1" }.count == 1)  // only the setup load, no second fetch
+        #expect(vm.messages == messagesBefore)
+        #expect(vm.messages.last?.displayText == "Hel")
+        #expect(vm.status == statusBefore)
+        #expect(vm.errorMessage == nil)
+        #expect(vm.hasLoadedHistory)
+
+        harness.session.invalidateAndCancel()  // end the held-open connection so the send returns
+        await send.value
     }
 
     @Test("returning to a chat whose reply is still streaming re-attaches to it instead of reloading history", .timeLimit(.minutes(1)))
