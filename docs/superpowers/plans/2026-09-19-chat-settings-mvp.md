@@ -1967,6 +1967,18 @@ EOF
 - Consumes: `APIClient`, `ServerConfigStore` (NetworkingKit); `AiProviders`, `ProviderConfig`, `ProvidersConfig`, `SettingsSnapshot`, `SettingsPatch`, `ListModelsRequest`, `ListModelsResponse`, `CachedModelEntry` (Models).
 - Produces: `public struct SettingsView: View { public init(apiClient: APIClient, serverConfig: ServerConfigStore) }` — the type `RootView`/App composition (Task 10) instantiates directly.
 
+**Controller rulings baked into this task** (each found by checking the plan's original view model against the desktop server and a real user flow; every one has a test below):
+
+1. **Switching the provider must swap the API key.** The original view model kept one `apiKeyText` for whichever provider was selected and never refreshed it on a switch, so `save()` wrote the *previous* provider's key into the *new* provider's slot. `select(provider:)` parks the key typed for the provider being left, loads the new provider's key, clears the (per-provider) model catalog and restores the loaded model only if the loaded provider is the one selected again. `selectedProvider` is therefore `private(set)`.
+2. **`modelSnapshot` is never blindly `nil`.** `POST /api/settings` replaces `providerConfig` wholesale and the desktop feeds `providerConfig.modelSnapshot` (context window, max output tokens, reasoning levels, cost) to its model resolver (`src/main/lib/ai/providers/index.ts`). Save sends the picked catalog entry's snapshot; else the loaded snapshot if provider *and* model are unchanged; else none (a snapshot for a different model would be wrong data).
+3. **`lastBackupAt` is echoed** from the loaded snapshot into the patch (Task 3), because the server writes it unconditionally and would otherwise null the desktop's "last backup" timestamp.
+4. **Ollama has no API key** (`ProvidersSchema` only has `ollamaBaseUrl`). The form shows no key field for it and "Refresh model list" is enabled without one; the desktop server queries its own Ollama.
+5. **The server address is normalized before it is stored.** The field is meant to take a bare `192.168.1.10:60223` once the app runs on a real device (spec §4.4/§6); `URL(string:)` accepts that as a relative reference and every request then fails with an unhelpful error. `saveServerURL()` trims, defaults a missing scheme to `http://`, drops trailing slashes, and refuses anything that is not an http(s) URL with a host — without touching the stored value.
+6. **Errors are shown as `error.localizedDescription`** (for `HTTPError` that is the server's message; for a refused connection it is "Could not connect to the server." instead of a `URLError(_nsError: …)` dump).
+7. **Step 8 (manual verification) is not for the implementer** — it needs `pnpm dev` running in `../universal-client` and a real API key. The human/controller covers it in Task 11's end-to-end pass. Skip it and say so in the report.
+
+Swift 6 notes for the tests below: the view model is `@MainActor`, so the suite is `@MainActor`; the mock handler runs on a URLProtocol thread, so request bodies are recorded behind a `Mutex` and asserted afterwards, never with a captured `var` and never with `#expect` inside the handler. If you still hit a Swift 6 diagnostic, fix it minimally and record it in the report; never lower `SWIFT_VERSION`.
+
 - [ ] **Step 1: Add the `SettingsFeatureTests` target to `Project.swift`**
 
 Add after `moduleTarget(name: "SettingsFeature", ...)`:
@@ -1995,6 +2007,7 @@ Run: `tuist generate --no-open`
 import Foundation
 import Models
 import NetworkingKit
+import Synchronization
 import Testing
 
 @testable import SettingsFeature
@@ -2031,75 +2044,304 @@ private final class SettingsMockURLProtocol: URLProtocol, @unchecked Sendable {
     }
 }
 
+/// The mock handler runs on a URLProtocol thread, so the bodies it sees are recorded
+/// behind a lock and asserted from the test afterwards (an `#expect` inside a handler
+/// could silently never run).
+private final class BodyRecorder: Sendable {
+    private let storage = Mutex<[String: [Data]]>([:])
+
+    func record(_ data: Data, for path: String) {
+        storage.withLock { $0[path, default: []].append(data) }
+    }
+
+    func bodies(for path: String) -> [Data] {
+        storage.withLock { $0[path] ?? [] }
+    }
+
+    /// The JSON object of the one and only body posted to `path`.
+    func onlyJSONBody(for path: String) throws -> [String: Any] {
+        let all = bodies(for: path)
+        try #require(all.count == 1)
+        let object = try JSONSerialization.jsonObject(with: all[0])
+        return try #require(object as? [String: Any])
+    }
+}
+
+/// Installs a handler that answers by method + path and records every POST body.
+private func serve(
+    settings: String = #"{"id":"global"}"#,
+    models: String = #"{"models":[]}"#,
+    postSettingsStatus: Int = 200,
+    postSettingsBody: String = "{}",
+    recorder: BodyRecorder
+) {
+    SettingsMockURLProtocol.handler = { request in
+        let path = request.url?.path ?? ""
+        if request.httpMethod == "POST" {
+            recorder.record(try request.httpBodyStreamData(), for: path)
+        }
+        switch (request.httpMethod, path) {
+        case ("GET", "/api/settings"):
+            return (200, Data(settings.utf8))
+        case ("POST", "/api/settings/models"):
+            return (200, Data(models.utf8))
+        case ("POST", "/api/settings"):
+            return (postSettingsStatus, Data(postSettingsBody.utf8))
+        default:
+            return (404, Data(#"{"type":"error","error":{"code":"NOT_FOUND","message":"no route"}}"#.utf8))
+        }
+    }
+}
+
+@MainActor
 @Suite("SettingsViewModel", .serialized)
 struct SettingsViewModelTests {
-    private func makeViewModel() -> SettingsViewModel {
-        let config = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+    /// What the desktop has saved: Anthropic selected with a model snapshot, an OpenAI key
+    /// for a provider that is not selected, and a last-backup timestamp.
+    private static let loadedSettingsJSON = #"""
+        {"id":"global",
+         "providerConfig":{"provider":"Anthropic Claude","model":"claude-sonnet-5",
+           "modelSnapshot":{"contextWindow":200000,"maxOutputTokens":64000,"reasoningLevels":["low","high"],"cost":{"input":3,"output":15}}},
+         "providers":{"anthropicApiKey":"sk-ant-1","openaiApiKey":"sk-oai-2"},
+         "lastBackupAt":"2026-09-18T12:00:00.000Z"}
+        """#
+
+    private func makeViewModel(_ suite: String = #function) -> (SettingsViewModel, ServerConfigStore) {
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let config = ServerConfigStore(userDefaults: defaults)
         let client = APIClient(session: SettingsMockURLProtocol.makeSession(), serverConfig: config)
-        return SettingsViewModel(apiClient: client, serverConfig: config)
+        return (SettingsViewModel(apiClient: client, serverConfig: config), config)
     }
 
     @Test("loadSettings populates the selected provider, model, and API key")
     func loadSettingsPopulatesForm() async throws {
-        SettingsMockURLProtocol.handler = { _ in
-            let json = """
-                {"id":"global","providerConfig":{"provider":"Anthropic Claude","model":"claude-sonnet-5"},"providers":{"anthropicApiKey":"sk-ant-xyz"}}
-                """.data(using: .utf8)!
-            return (200, json)
-        }
-        let vm = makeViewModel()
+        serve(settings: Self.loadedSettingsJSON, recorder: BodyRecorder())
+        let (vm, _) = makeViewModel()
         await vm.loadSettings()
         #expect(vm.selectedProvider == .anthropicClaude)
         #expect(vm.modelText == "claude-sonnet-5")
-        #expect(vm.apiKeyText == "sk-ant-xyz")
+        #expect(vm.apiKeyText == "sk-ant-1")
+        #expect(vm.errorMessage == nil)
     }
 
-    @Test("fetchModels populates availableModels from the live catalog")
+    @Test("fetchModels posts the provider and key, and populates availableModels from the live catalog")
     func fetchModelsPopulatesCatalog() async throws {
-        SettingsMockURLProtocol.handler = { _ in
-            let json = """
-                {"models":[{"id":"claude-sonnet-5","displayName":"Claude Sonnet 5","snapshot":{"reasoningLevels":[]}}]}
-                """.data(using: .utf8)!
-            return (200, json)
-        }
-        let vm = makeViewModel()
-        vm.selectedProvider = .anthropicClaude
+        let recorder = BodyRecorder()
+        serve(
+            models: #"{"models":[{"id":"claude-sonnet-5","displayName":"Claude Sonnet 5","snapshot":{"reasoningLevels":[]}}]}"#,
+            recorder: recorder)
+        let (vm, _) = makeViewModel()
         vm.apiKeyText = "sk-ant-xyz"
         await vm.fetchModels()
         #expect(vm.availableModels.count == 1)
         #expect(vm.availableModels[0].id == "claude-sonnet-5")
         #expect(vm.errorMessage == nil)
+        let body = try recorder.onlyJSONBody(for: "/api/settings/models")
+        #expect(body["provider"] as? String == "Anthropic Claude")
+        #expect(body["apiKey"] as? String == "sk-ant-xyz")
     }
 
-    @Test("save() PATCHes only id/providerConfig/providers and reports success")
+    @Test("save() posts only id/providerConfig/providers and reports success")
     func saveSendsPartialPatch() async throws {
-        var capturedBody: [String: Any]?
-        SettingsMockURLProtocol.handler = { request in
-            capturedBody = try JSONSerialization.jsonObject(with: request.httpBodyStreamData()) as? [String: Any]
-            return (200, Data("{}".utf8))
-        }
-        let vm = makeViewModel()
-        vm.selectedProvider = .anthropicClaude
+        let recorder = BodyRecorder()
+        serve(recorder: recorder)
+        let (vm, _) = makeViewModel()
         vm.apiKeyText = "sk-ant-xyz"
         vm.modelText = "claude-sonnet-5"
         let success = await vm.save()
         #expect(success)
-        #expect(capturedBody?["id"] as? String == "global")
-        let providerConfig = capturedBody?["providerConfig"] as? [String: Any]
-        #expect(providerConfig?["provider"] as? String == "Anthropic Claude")
-        let providers = capturedBody?["providers"] as? [String: Any]
-        #expect(providers?["anthropicApiKey"] as? String == "sk-ant-xyz")
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        #expect(Set(body.keys) == ["id", "providerConfig", "providers"])
+        #expect(body["id"] as? String == "global")
+        let providerConfig = try #require(body["providerConfig"] as? [String: Any])
+        #expect(providerConfig["provider"] as? String == "Anthropic Claude")
+        #expect(providerConfig["model"] as? String == "claude-sonnet-5")
+        #expect(providerConfig.keys.contains("modelSnapshot") == false)
+        let providers = try #require(body["providers"] as? [String: Any])
+        #expect(providers["anthropicApiKey"] as? String == "sk-ant-xyz")
+    }
+
+    @Test("save() echoes the loaded lastBackupAt so the server does not null the desktop's timestamp")
+    func saveEchoesLastBackupAt() async throws {
+        let recorder = BodyRecorder()
+        serve(settings: Self.loadedSettingsJSON, recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        #expect(await vm.save())
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        #expect(body["lastBackupAt"] as? String == "2026-09-18T12:00:00.000Z")
+    }
+
+    @Test("save() keeps the model snapshot the desktop saved when provider and model are unchanged")
+    func savePreservesLoadedModelSnapshot() async throws {
+        let recorder = BodyRecorder()
+        serve(settings: Self.loadedSettingsJSON, recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        #expect(await vm.save())
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let providerConfig = try #require(body["providerConfig"] as? [String: Any])
+        let snapshot = try #require(providerConfig["modelSnapshot"] as? [String: Any])
+        #expect(snapshot["contextWindow"] as? Double == 200_000)
+        #expect(snapshot["maxOutputTokens"] as? Double == 64_000)
+        #expect(snapshot["reasoningLevels"] as? [String] == ["low", "high"])
+        let cost = try #require(snapshot["cost"] as? [String: Any])
+        #expect(cost["input"] as? Double == 3)
+        #expect(cost["output"] as? Double == 15)
+    }
+
+    @Test("save() sends the snapshot of the catalog entry the user picked, not the stale loaded one")
+    func savePicksCatalogSnapshotForChosenModel() async throws {
+        let recorder = BodyRecorder()
+        serve(
+            settings: Self.loadedSettingsJSON,
+            models: #"{"models":[{"id":"claude-opus-5","displayName":"Claude Opus 5","snapshot":{"contextWindow":1000000,"reasoningLevels":["high"]}}]}"#,
+            recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        await vm.fetchModels()
+        vm.modelText = "claude-opus-5"
+        #expect(await vm.save())
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let providerConfig = try #require(body["providerConfig"] as? [String: Any])
+        #expect(providerConfig["model"] as? String == "claude-opus-5")
+        let snapshot = try #require(providerConfig["modelSnapshot"] as? [String: Any])
+        #expect(snapshot["contextWindow"] as? Double == 1_000_000)
+    }
+
+    @Test("save() attaches no snapshot to a model the desktop has no snapshot for")
+    func saveDropsSnapshotForAnUnknownModel() async throws {
+        let recorder = BodyRecorder()
+        serve(settings: Self.loadedSettingsJSON, recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        vm.modelText = "some-custom-model"
+        #expect(await vm.save())
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let providerConfig = try #require(body["providerConfig"] as? [String: Any])
+        #expect(providerConfig["model"] as? String == "some-custom-model")
+        #expect(providerConfig.keys.contains("modelSnapshot") == false)
+    }
+
+    @Test("switching provider swaps the key and model, clears the catalog, and switching back restores them")
+    func switchingProviderSwapsKeyAndResetsModel() async throws {
+        serve(
+            settings: Self.loadedSettingsJSON,
+            models: #"{"models":[{"id":"claude-sonnet-5","displayName":"Claude Sonnet 5","snapshot":{"reasoningLevels":[]}}]}"#,
+            recorder: BodyRecorder())
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        await vm.fetchModels()
+        #expect(vm.availableModels.count == 1)
+
+        vm.select(provider: .openAiGpt)
+        #expect(vm.selectedProvider == .openAiGpt)
+        #expect(vm.apiKeyText == "sk-oai-2")
+        #expect(vm.modelText == "")
+        #expect(vm.availableModels.isEmpty)
+
+        vm.select(provider: .anthropicClaude)
+        #expect(vm.apiKeyText == "sk-ant-1")
+        #expect(vm.modelText == "claude-sonnet-5")
+    }
+
+    @Test("saving after a provider switch never copies the previous provider's key into the new one")
+    func savingAfterSwitchNeverCopiesTheOldKey() async throws {
+        let recorder = BodyRecorder()
+        serve(
+            settings: #"{"id":"global","providerConfig":{"provider":"Anthropic Claude","model":"claude-sonnet-5"},"providers":{"anthropicApiKey":"sk-ant-1"}}"#,
+            recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        vm.select(provider: .openAiGpt)
+        #expect(vm.apiKeyText == "")
+        vm.modelText = "gpt-x"
+        #expect(await vm.save())
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let providerConfig = try #require(body["providerConfig"] as? [String: Any])
+        #expect(providerConfig["provider"] as? String == "OpenAI GPT")
+        let providers = try #require(body["providers"] as? [String: Any])
+        #expect(providers["anthropicApiKey"] as? String == "sk-ant-1")
+        #expect(providers.keys.contains("openaiApiKey") == false)
+    }
+
+    @Test("clearing the key field removes that provider's key and leaves the other providers' keys alone")
+    func clearingAKeyRemovesOnlyThatKey() async throws {
+        let recorder = BodyRecorder()
+        serve(settings: Self.loadedSettingsJSON, recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        vm.apiKeyText = ""
+        #expect(await vm.save())
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let providers = try #require(body["providers"] as? [String: Any])
+        #expect(providers.keys.contains("anthropicApiKey") == false)
+        #expect(providers["openaiApiKey"] as? String == "sk-oai-2")
+    }
+
+    @Test("Ollama needs no API key: no key field, and the model list can be fetched without one")
+    func ollamaNeedsNoApiKey() async throws {
+        let recorder = BodyRecorder()
+        serve(recorder: recorder)
+        let (vm, _) = makeViewModel()
+        #expect(vm.providerUsesApiKey)
+        #expect(vm.canFetchModels == false)  // Anthropic, no key typed yet
+
+        vm.select(provider: .ollama)
+        #expect(vm.providerUsesApiKey == false)
+        #expect(vm.canFetchModels)
+        await vm.fetchModels()
+        let body = try recorder.onlyJSONBody(for: "/api/settings/models")
+        #expect(body["provider"] as? String == "Ollama")
+        #expect(body.keys.contains("apiKey") == false)
+    }
+
+    @Test("a bare host:port is normalized to an http:// address, stored, and shown back")
+    func saveServerURLNormalizes() async throws {
+        let cases: [(input: String, expected: String)] = [
+            ("192.168.1.10:60223", "http://192.168.1.10:60223"),
+            ("  http://mac.local:60223/  ", "http://mac.local:60223"),
+            ("https://exodus.example.com", "https://exodus.example.com"),
+        ]
+        for (input, expected) in cases {
+            let (vm, config) = makeViewModel()
+            vm.serverURLText = input
+            #expect(vm.saveServerURL(), "\(input) should be accepted")
+            #expect(config.baseURLString == expected)
+            #expect(vm.serverURLText == expected)
+            #expect(vm.errorMessage == nil)
+        }
+    }
+
+    @Test("an unusable server address is refused with a message and the stored one is left untouched")
+    func saveServerURLRejectsGarbage() async throws {
+        for input in ["", "   ", "http://", "://", "ftp://host"] {
+            let (vm, config) = makeViewModel()
+            vm.serverURLText = input
+            #expect(vm.saveServerURL() == false, "\(input.debugDescription) should be refused")
+            #expect(vm.errorMessage != nil)
+            #expect(config.baseURLString == "http://localhost:60223")
+        }
+    }
+
+    @Test("a transport failure is shown as a human message, not a URLError dump")
+    func transportErrorUsesAHumanMessage() async throws {
+        SettingsMockURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        let message = try #require(vm.errorMessage)
+        #expect(message == URLError(.cannotConnectToHost).localizedDescription)
+        #expect(message.contains("URLError") == false)
     }
 
     @Test("a failed save surfaces the server's error message")
     func saveSurfacesServerError() async throws {
-        SettingsMockURLProtocol.handler = { _ in
-            let json = """
-                {"type":"error","error":{"code":"VALIDATION_FAILED","message":"Invalid setting configuration"}}
-                """.data(using: .utf8)!
-            return (400, json)
-        }
-        let vm = makeViewModel()
+        serve(
+            postSettingsStatus: 400,
+            postSettingsBody: #"{"type":"error","error":{"code":"VALIDATION_FAILED","message":"Invalid setting configuration"}}"#,
+            recorder: BodyRecorder())
+        let (vm, _) = makeViewModel()
         let success = await vm.save()
         #expect(success == false)
         #expect(vm.errorMessage == "Invalid setting configuration")
@@ -2141,10 +2383,10 @@ import Observation
 @Observable
 public final class SettingsViewModel {
     public var serverURLText: String
-    public var selectedProvider: AiProviders = .anthropicClaude
+    public private(set) var selectedProvider: AiProviders = .anthropicClaude
     public var apiKeyText: String = ""
     public var modelText: String = ""
-    public var availableModels: [CachedModelEntry] = []
+    public private(set) var availableModels: [CachedModelEntry] = []
     public var isLoading = false
     public var isSaving = false
     public var isLoadingModels = false
@@ -2153,7 +2395,13 @@ public final class SettingsViewModel {
 
     private let apiClient: APIClient
     private let serverConfig: ServerConfigStore
-    private var loadedProviders = ProvidersConfig()
+
+    /// The provider settings as last loaded/saved, plus keys the user typed for providers
+    /// they have since switched away from. The selected provider's key lives in
+    /// `apiKeyText` until it is parked (on a switch) or saved.
+    private var workingProviders = ProvidersConfig()
+    private var loadedProviderConfig: ProviderConfig?
+    private var loadedLastBackupAt: String?
 
     public init(apiClient: APIClient, serverConfig: ServerConfigStore) {
         self.apiClient = apiClient
@@ -2161,8 +2409,42 @@ public final class SettingsViewModel {
         self.serverURLText = serverConfig.baseURLString
     }
 
-    public func saveServerURL() {
-        serverConfig.baseURLString = serverURLText
+    /// Ollama runs unauthenticated: `ProvidersSchema` has only `ollamaBaseUrl`, no key.
+    public var providerUsesApiKey: Bool { selectedProvider != .ollama }
+    public var canFetchModels: Bool { !providerUsesApiKey || !apiKeyText.isEmpty }
+
+    /// Normalizes what was typed — trims, defaults a missing scheme to `http://` (the field
+    /// takes a bare `192.168.1.10:60223` on a real device), drops trailing slashes — and
+    /// stores it only if it is an http(s) URL with a host. Otherwise sets `errorMessage`
+    /// and leaves the stored address untouched.
+    @discardableResult
+    public func saveServerURL() -> Bool {
+        var text = serverURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty, !text.contains("://") { text = "http://" + text }
+        while text.hasSuffix("/") { text.removeLast() }
+        guard let url = URL(string: text),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty
+        else {
+            errorMessage = "Server address must look like http://192.168.1.10:60223"
+            return false
+        }
+        errorMessage = nil
+        serverURLText = text
+        serverConfig.baseURLString = text
+        return true
+    }
+
+    /// Switches the selected provider. Parks the key typed for the provider being left, loads
+    /// the new provider's key, drops the model catalog (it belongs to one provider) and restores
+    /// the loaded model only when the loaded provider is the one being selected again.
+    public func select(provider: AiProviders) {
+        guard provider != selectedProvider else { return }
+        workingProviders = workingProviders.settingApiKey(apiKeyText.isEmpty ? nil : apiKeyText, for: selectedProvider)
+        selectedProvider = provider
+        apiKeyText = workingProviders.apiKey(for: provider) ?? ""
+        availableModels = []
+        modelText = provider.rawValue == loadedProviderConfig?.provider ? (loadedProviderConfig?.model ?? "") : ""
     }
 
     public func loadSettings() async {
@@ -2171,14 +2453,19 @@ public final class SettingsViewModel {
         defer { isLoading = false }
         do {
             let snapshot: SettingsSnapshot = try await apiClient.get("/api/settings")
-            if let providerRaw = snapshot.providerConfig?.provider, let provider = AiProviders(rawValue: providerRaw) {
+            workingProviders = snapshot.providers ?? ProvidersConfig()
+            loadedProviderConfig = snapshot.providerConfig
+            loadedLastBackupAt = snapshot.lastBackupAt
+            availableModels = []
+            if let raw = snapshot.providerConfig?.provider, let provider = AiProviders(rawValue: raw) {
                 selectedProvider = provider
+                modelText = snapshot.providerConfig?.model ?? ""
+            } else {
+                modelText = ""
             }
-            modelText = snapshot.providerConfig?.model ?? ""
-            loadedProviders = snapshot.providers ?? ProvidersConfig()
-            apiKeyText = loadedProviders.apiKey(for: selectedProvider) ?? ""
+            apiKeyText = workingProviders.apiKey(for: selectedProvider) ?? ""
         } catch {
-            errorMessage = (error as? HTTPError)?.message ?? String(describing: error)
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -2196,8 +2483,22 @@ public final class SettingsViewModel {
             let response: ListModelsResponse = try await apiClient.post("/api/settings/models", body: request)
             availableModels = response.models
         } catch {
-            errorMessage = (error as? HTTPError)?.message ?? String(describing: error)
+            errorMessage = error.localizedDescription
         }
+    }
+
+    /// `POST /api/settings` replaces `providerConfig` wholesale and the desktop feeds
+    /// `providerConfig.modelSnapshot` (context window, max output, reasoning levels, cost) to
+    /// its model resolver, so never send `nil` for a model the desktop already knows: prefer
+    /// the picked catalog entry; else keep the loaded snapshot only if provider AND model are
+    /// unchanged (a snapshot for a different model would be wrong data); else none.
+    private func resolvedModelSnapshot() -> ModelSnapshot? {
+        if let entry = availableModels.first(where: { $0.id == modelText }) { return entry.snapshot }
+        guard let loaded = loadedProviderConfig,
+              loaded.provider == selectedProvider.rawValue,
+              loaded.model == modelText
+        else { return nil }
+        return loaded.modelSnapshot
     }
 
     @discardableResult
@@ -2207,15 +2508,22 @@ public final class SettingsViewModel {
         didSave = false
         defer { isSaving = false }
         do {
-            let providers = loadedProviders.settingApiKey(apiKeyText.isEmpty ? nil : apiKeyText, for: selectedProvider)
-            let providerConfig = ProviderConfig(provider: selectedProvider.rawValue, model: modelText.isEmpty ? nil : modelText, modelSnapshot: nil)
-            let patch = SettingsPatch(id: "global", providerConfig: providerConfig, providers: providers)
+            let providers = workingProviders.settingApiKey(apiKeyText.isEmpty ? nil : apiKeyText, for: selectedProvider)
+            let providerConfig = ProviderConfig(
+                provider: selectedProvider.rawValue,
+                model: modelText.isEmpty ? nil : modelText,
+                modelSnapshot: modelText.isEmpty ? nil : resolvedModelSnapshot()
+            )
+            // `lastBackupAt` is echoed because the server writes it unconditionally (see SettingsPatch).
+            let patch = SettingsPatch(
+                id: "global", providerConfig: providerConfig, providers: providers, lastBackupAt: loadedLastBackupAt)
             try await apiClient.post("/api/settings", body: patch)
-            loadedProviders = providers
+            workingProviders = providers
+            loadedProviderConfig = providerConfig
             didSave = true
             return true
         } catch {
-            errorMessage = (error as? HTTPError)?.message ?? String(describing: error)
+            errorMessage = error.localizedDescription
             return false
         }
     }
@@ -2246,27 +2554,52 @@ public struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("连接") {
-                    TextField("http://localhost:60223", text: $viewModel.serverURLText)
+                    TextField("http://192.168.1.10:60223", text: $viewModel.serverURLText)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onSubmit { viewModel.saveServerURL() }
+                        .keyboardType(.URL)
+                        .onSubmit {
+                            // A new address means a different server: reload its provider settings.
+                            if viewModel.saveServerURL() {
+                                Task { await viewModel.loadSettings() }
+                            }
+                        }
                 }
 
                 Section("AI Providers") {
-                    Picker("Provider", selection: $viewModel.selectedProvider) {
+                    Picker(
+                        "Provider",
+                        selection: Binding(
+                            get: { viewModel.selectedProvider },
+                            set: { viewModel.select(provider: $0) })
+                    ) {
                         ForEach(AiProviders.allCases) { provider in
                             Text(provider.rawValue).tag(provider)
                         }
                     }
 
-                    SecureField("API Key", text: $viewModel.apiKeyText)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    if viewModel.providerUsesApiKey {
+                        SecureField("API Key", text: $viewModel.apiKeyText)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    } else {
+                        Text("Ollama runs on your Mac and needs no API key.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
                     if viewModel.availableModels.isEmpty {
                         TextField("Model", text: $viewModel.modelText)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
                     } else {
                         Picker("Model", selection: $viewModel.modelText) {
+                            // Keep the current value selectable even when it isn't in the catalog.
+                            if viewModel.modelText.isEmpty {
+                                Text("Select a model").tag("")
+                            } else if !viewModel.availableModels.contains(where: { $0.id == viewModel.modelText }) {
+                                Text(viewModel.modelText).tag(viewModel.modelText)
+                            }
                             ForEach(viewModel.availableModels) { model in
                                 Text(model.displayName).tag(model.id)
                             }
@@ -2282,7 +2615,7 @@ public struct SettingsView: View {
                             Text("Refresh model list")
                         }
                     }
-                    .disabled(viewModel.apiKeyText.isEmpty)
+                    .disabled(!viewModel.canFetchModels)
                 }
 
                 if let errorMessage = viewModel.errorMessage {
@@ -2296,7 +2629,7 @@ public struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         Task {
-                            viewModel.saveServerURL()
+                            guard viewModel.saveServerURL() else { return }
                             if await viewModel.save() {
                                 dismiss()
                             }
@@ -2355,9 +2688,9 @@ xcodebuild build -workspace ExodusIos.xcworkspace -scheme App -destination "gene
 
 Expected: `** BUILD SUCCEEDED **`.
 
-- [ ] **Step 8: Manually verify against a running desktop dev server**
+- [ ] **Step 8: Manual verification against a live desktop server — NOT for the implementer**
 
-In `../universal-client`, run `pnpm dev` and leave it running. Then in the Simulator, launch the app, tap "Open Settings", pick "Anthropic Claude", paste a real API key, tap "Refresh model list" (confirms a live catalog appears), pick a model, tap "Save". Confirm no error banner appears. Then check the desktop app's own Settings → AI Providers tab shows the same provider/model/key you just set from iOS (confirms the partial-patch round-trip is real, not just locally-believed success).
+This needs `pnpm dev` running in `../universal-client` and a real API key, so the human/controller does it in Task 11's end-to-end pass: in the Simulator, "Open Settings", pick "Anthropic Claude", paste a real key, "Refresh model list" (a live catalog appears), pick a model, "Save", then confirm the desktop app's own Settings → AI Providers tab shows the same provider/model/key and that its "last backup" and the model's context window / reasoning options are unchanged. The implementer skips this step and says so in the report.
 
 - [ ] **Step 9: Commit**
 
@@ -2368,8 +2701,10 @@ Add SettingsFeature: server URL + AI Providers form
 
 SettingsViewModel loads GET /api/settings into a narrow snapshot,
 optionally live-fetches a provider's model catalog via
-POST /api/settings/models, and saves via a POST /api/settings body
-containing only id/providerConfig/providers.
+POST /api/settings/models, and saves via a POST /api/settings body of
+id/providerConfig/providers plus the echoed lastBackupAt. Saving keeps
+the desktop's modelSnapshot, swaps the API key with the selected
+provider, and the server address is normalized before it is stored.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
