@@ -61,10 +61,38 @@ private final class BodyRecorder: Sendable {
     }
 }
 
+/// Holds one request in the mock handler until the test lets it go, so a test can act while that
+/// request is provably in flight. No sleeps: the test polls `waitUntilStarted()` and calls
+/// `release()`. Every wait is bounded, so a failing test cannot hang.
+private final class RequestGate: Sendable {
+    private let started = Mutex(false)
+    private let gate = DispatchSemaphore(value: 0)
+
+    /// Called from the mock handler (URLProtocol thread): announce the request, then block until released.
+    func arriveAndWait() {
+        started.withLock { $0 = true }
+        _ = gate.wait(timeout: .now() + 10)
+    }
+
+    func release() { gate.signal() }
+
+    /// Suspends the test until the handler holds the request; fails (never hangs) after 10 seconds.
+    func waitUntilStarted() async throws {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !started.withLock({ $0 }) {
+            try #require(ContinuousClock.now < deadline, "the request never reached the mock handler")
+            await Task.yield()
+        }
+    }
+}
+
 /// Installs a handler that answers by method + path and records every POST body.
 private func serve(
     settings: String = #"{"id":"global"}"#,
+    settingsStatus: Int = 200,
     models: String = #"{"models":[]}"#,
+    modelsStatus: Int = 200,
+    modelsGate: RequestGate? = nil,
     postSettingsStatus: Int = 200,
     postSettingsBody: String = "{}",
     recorder: BodyRecorder
@@ -76,9 +104,10 @@ private func serve(
         }
         switch (request.httpMethod, path) {
         case ("GET", "/api/settings"):
-            return (200, Data(settings.utf8))
+            return (settingsStatus, Data(settings.utf8))
         case ("POST", "/api/settings/models"):
-            return (200, Data(models.utf8))
+            modelsGate?.arriveAndWait()
+            return (modelsStatus, Data(models.utf8))
         case ("POST", "/api/settings"):
             return (postSettingsStatus, Data(postSettingsBody.utf8))
         default:
@@ -106,6 +135,36 @@ struct SettingsViewModelTests {
         let config = ServerConfigStore(userDefaults: defaults)
         let client = APIClient(session: SettingsMockURLProtocol.makeSession(), serverConfig: config)
         return (SettingsViewModel(apiClient: client, serverConfig: config), config)
+    }
+
+    private static let notLoadedMessage = "Connect to the server and load its settings before saving."
+    private static let serverUnavailableJSON = #"{"type":"error","error":{"code":"INTERNAL","message":"Server unavailable"}}"#
+    private static let claudeCatalogJSON = #"{"models":[{"id":"claude-sonnet-5","displayName":"Claude Sonnet 5","snapshot":{"reasoningLevels":[]}}]}"#
+    private static let ollamaCatalogJSON = #"{"models":[{"id":"llama3","displayName":"Llama 3","snapshot":{"reasoningLevels":[]}}]}"#
+
+    /// Starts `fetchModels()` for `provider` with `apiKey`, holds that request in flight in the mock
+    /// handler while `duringRequest` runs, then lets the response through and waits for `fetchModels()`
+    /// to finish. The test only proceeds once the handler really holds the request.
+    private func fetchModelsInterrupted(
+        provider: AiProviders = .anthropicClaude,
+        apiKey: String = "sk-ant-xyz",
+        modelsStatus: Int = 200,
+        models: String = Self.claudeCatalogJSON,
+        by duringRequest: (SettingsViewModel) -> Void
+    ) async throws -> (vm: SettingsViewModel, recorder: BodyRecorder) {
+        let recorder = BodyRecorder()
+        let gate = RequestGate()
+        serve(models: models, modelsStatus: modelsStatus, modelsGate: gate, recorder: recorder)
+        let (vm, _) = makeViewModel()
+        vm.select(provider: provider)
+        vm.apiKeyText = apiKey
+        let fetch = Task { await vm.fetchModels() }
+        defer { gate.release() }  // also on the failure path, so the handler thread is never left blocked
+        try await gate.waitUntilStarted()
+        duringRequest(vm)
+        gate.release()
+        await fetch.value
+        return (vm, recorder)
     }
 
     @Test("loadSettings populates the selected provider, model, and API key")
@@ -141,6 +200,7 @@ struct SettingsViewModelTests {
         let recorder = BodyRecorder()
         serve(recorder: recorder)
         let (vm, _) = makeViewModel()
+        await vm.loadSettings()  // save() refuses without a loaded server state
         vm.apiKeyText = "sk-ant-xyz"
         vm.modelText = "claude-sonnet-5"
         let success = await vm.save()
@@ -359,9 +419,175 @@ struct SettingsViewModelTests {
             postSettingsBody: #"{"type":"error","error":{"code":"VALIDATION_FAILED","message":"Invalid setting configuration"}}"#,
             recorder: BodyRecorder())
         let (vm, _) = makeViewModel()
+        await vm.loadSettings()  // save() refuses without a loaded server state
         let success = await vm.save()
         #expect(success == false)
         #expect(vm.errorMessage == "Invalid setting configuration")
+    }
+
+    // MARK: Never write to a server whose settings were not loaded (ruling 8)
+
+    @Test("save() is refused and posts nothing when the settings failed to load")
+    func saveIsRefusedWhenTheLoadFailed() async throws {
+        let recorder = BodyRecorder()
+        serve(settings: Self.serverUnavailableJSON, settingsStatus: 500, recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        #expect(vm.hasLoadedSettings == false)
+        #expect(vm.errorMessage == "Server unavailable")
+
+        vm.apiKeyText = "sk-ant-xyz"  // what a first-run user types after the failed load
+        vm.modelText = "claude-sonnet-5"
+        #expect(await vm.save() == false)
+        #expect(vm.errorMessage == Self.notLoadedMessage)
+        #expect(recorder.bodies(for: "/api/settings").isEmpty)
+    }
+
+    @Test("save() is refused and posts nothing when settings were never loaded")
+    func saveIsRefusedBeforeAnyLoad() async throws {
+        let recorder = BodyRecorder()
+        serve(recorder: recorder)
+        let (vm, _) = makeViewModel()
+        #expect(vm.hasLoadedSettings == false)
+        vm.apiKeyText = "sk-ant-xyz"
+        #expect(await vm.save() == false)
+        #expect(vm.errorMessage == Self.notLoadedMessage)
+        #expect(recorder.bodies(for: "/api/settings").isEmpty)
+    }
+
+    @Test("a failed reload clears the loaded state, so save() is refused again")
+    func saveIsRefusedAfterAFailedReload() async throws {
+        let recorder = BodyRecorder()
+        serve(settings: Self.loadedSettingsJSON, recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        #expect(vm.hasLoadedSettings)
+
+        serve(settings: Self.serverUnavailableJSON, settingsStatus: 500, recorder: recorder)
+        await vm.loadSettings()
+        #expect(vm.hasLoadedSettings == false)
+        #expect(await vm.save() == false)
+        #expect(recorder.bodies(for: "/api/settings").isEmpty)
+    }
+
+    @Test("a new server address has to be loaded before anything is saved to it")
+    func changingTheServerAddressRequiresAReloadBeforeSaving() async throws {
+        let recorder = BodyRecorder()
+        serve(settings: Self.loadedSettingsJSON, recorder: recorder)
+        let (vm, config) = makeViewModel()
+        await vm.loadSettings()
+        #expect(vm.hasLoadedSettings)
+
+        vm.serverURLText = "192.168.1.10:60223"
+        #expect(vm.saveServerURL())
+        #expect(config.baseURLString == "http://192.168.1.10:60223")
+        #expect(vm.hasLoadedSettings == false)
+        #expect(await vm.save() == false)
+        #expect(recorder.bodies(for: "/api/settings").isEmpty)
+
+        await vm.loadSettings()  // "Connect": load the new server's settings
+        #expect(vm.hasLoadedSettings)
+        #expect(await vm.save())
+        _ = try recorder.onlyJSONBody(for: "/api/settings")  // exactly one POST: the save after the reload
+    }
+
+    @Test("saving the address that is already stored leaves the loaded state alone")
+    func savingTheSameServerAddressKeepsTheLoadedState() async throws {
+        let recorder = BodyRecorder()
+        serve(settings: Self.loadedSettingsJSON, recorder: recorder)
+        let (vm, config) = makeViewModel()
+        await vm.loadSettings()
+        #expect(vm.hasLoadedSettings)
+
+        // The stored default, typed with a trailing slash: it normalizes to what is already stored.
+        vm.serverURLText = "http://localhost:60223/"
+        #expect(vm.saveServerURL())
+        #expect(config.baseURLString == "http://localhost:60223")
+        #expect(vm.hasLoadedSettings)
+        #expect(await vm.save())
+    }
+
+    // MARK: A model list is applied only if it is still the current one (ruling 9)
+
+    @Test("a model list that arrives after the provider was switched is ignored", .timeLimit(.minutes(1)))
+    func aModelListForAnotherProviderIsIgnored() async throws {
+        // Ollama needs no key, so the OpenAI form it is switched to has the same (empty) key:
+        // only the provider tells the two apart.
+        let (vm, recorder) = try await fetchModelsInterrupted(
+            provider: .ollama, apiKey: "", models: Self.ollamaCatalogJSON
+        ) { vm in
+            vm.select(provider: .openAiGpt)
+        }
+        // The request that was in flight was for Ollama ...
+        let body = try recorder.onlyJSONBody(for: "/api/settings/models")
+        #expect(body["provider"] as? String == "Ollama")
+        // ... so its catalog must not appear under OpenAI, and nothing else about OpenAI changed.
+        #expect(vm.selectedProvider == .openAiGpt)
+        #expect(vm.availableModels.isEmpty)
+        #expect(vm.apiKeyText == "")
+        #expect(vm.modelText == "")
+        #expect(vm.errorMessage == nil)
+        #expect(vm.isLoadingModels == false)
+    }
+
+    @Test("a model list requested with a key the user has since edited is ignored", .timeLimit(.minutes(1)))
+    func aModelListRequestedWithAnEditedKeyIsIgnored() async throws {
+        let (vm, recorder) = try await fetchModelsInterrupted { vm in
+            vm.apiKeyText = "sk-ant-xyz-edited"
+        }
+        let body = try recorder.onlyJSONBody(for: "/api/settings/models")
+        #expect(body["apiKey"] as? String == "sk-ant-xyz")
+        #expect(vm.availableModels.isEmpty)
+        #expect(vm.apiKeyText == "sk-ant-xyz-edited")
+        #expect(vm.errorMessage == nil)
+        #expect(vm.isLoadingModels == false)
+    }
+
+    @Test("a failed model-list request that is no longer current does not show its error", .timeLimit(.minutes(1)))
+    func aStaleModelListFailureIsNotShown() async throws {
+        let (vm, _) = try await fetchModelsInterrupted(
+            modelsStatus: 401,
+            models: #"{"type":"error","error":{"code":"UNAUTHORIZED","message":"Invalid API key"}}"#
+        ) { vm in
+            vm.select(provider: .openAiGpt)
+        }
+        #expect(vm.selectedProvider == .openAiGpt)
+        #expect(vm.errorMessage == nil)  // the Anthropic key's error must not be shown under OpenAI
+        #expect(vm.availableModels.isEmpty)
+        #expect(vm.isLoadingModels == false)
+    }
+
+    // MARK: Keys typed per provider survive provider switches (ruling 1)
+
+    @Test("keys typed for two providers are both saved")
+    func typedKeysForSeveralProvidersAreAllSaved() async throws {
+        let recorder = BodyRecorder()
+        serve(settings: Self.loadedSettingsJSON, recorder: recorder)
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()  // Anthropic selected; loaded keys are sk-ant-1 and sk-oai-2
+        vm.apiKeyText = "sk-ant-typed"  // replaces the loaded Anthropic key
+        vm.select(provider: .openAiGpt)
+        vm.apiKeyText = "sk-oai-typed"  // replaces the loaded OpenAI key
+        #expect(await vm.save())
+        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let providers = try #require(body["providers"] as? [String: Any])
+        #expect(providers["anthropicApiKey"] as? String == "sk-ant-typed")
+        #expect(providers["openaiApiKey"] as? String == "sk-oai-typed")
+    }
+
+    @Test("switching back restores the key typed for that provider, not the one that was loaded")
+    func switchingBackRestoresTheTypedKey() async throws {
+        serve(settings: Self.loadedSettingsJSON, recorder: BodyRecorder())
+        let (vm, _) = makeViewModel()
+        await vm.loadSettings()
+        vm.apiKeyText = "sk-ant-typed"
+        vm.select(provider: .openAiGpt)
+        vm.apiKeyText = "sk-oai-typed"
+
+        vm.select(provider: .anthropicClaude)
+        #expect(vm.apiKeyText == "sk-ant-typed")
+        vm.select(provider: .openAiGpt)
+        #expect(vm.apiKeyText == "sk-oai-typed")
     }
 }
 

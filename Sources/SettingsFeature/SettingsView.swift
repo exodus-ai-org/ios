@@ -87,15 +87,21 @@ public struct SettingsView: View {
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(viewModel.hasLoadedSettings ? "Save" : "Connect") {
                         Task {
                             guard viewModel.saveServerURL() else { return }
+                            // Not loaded (first run, or the address just changed): connect to that server and
+                            // load its settings instead of writing. Never write to a server we haven't read.
+                            guard viewModel.hasLoadedSettings else {
+                                await viewModel.loadSettings()
+                                return
+                            }
                             if await viewModel.save() {
                                 dismiss()
                             }
                         }
                     }
-                    .disabled(viewModel.isSaving)
+                    .disabled(viewModel.isSaving || viewModel.isLoading)
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

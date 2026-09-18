@@ -16,6 +16,10 @@ public final class SettingsViewModel {
     public var isLoadingModels = false
     public var errorMessage: String?
     public var didSave = false
+    /// True only after a successful `loadSettings()` for the stored server address. `POST /api/settings`
+    /// replaces `providers` and `providerConfig` wholesale and nulls `lastBackupAt`, so `save()` refuses
+    /// without it: a form that never loaded must not overwrite a server it has not seen.
+    public private(set) var hasLoadedSettings = false
 
     private let apiClient: APIClient
     private let serverConfig: ServerConfigStore
@@ -55,6 +59,8 @@ public final class SettingsViewModel {
         }
         errorMessage = nil
         serverURLText = text
+        // Another address is another server: whatever was loaded belongs to the old one.
+        if text != serverConfig.baseURLString { hasLoadedSettings = false }
         serverConfig.baseURLString = text
         return true
     }
@@ -74,6 +80,7 @@ public final class SettingsViewModel {
     public func loadSettings() async {
         isLoading = true
         errorMessage = nil
+        hasLoadedSettings = false  // stays false if this load fails, and while it is in flight
         defer { isLoading = false }
         do {
             let snapshot: SettingsSnapshot = try await apiClient.get("/api/settings")
@@ -88,6 +95,7 @@ public final class SettingsViewModel {
                 modelText = ""
             }
             apiKeyText = workingProviders.apiKey(for: selectedProvider) ?? ""
+            hasLoadedSettings = true
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -97,18 +105,30 @@ public final class SettingsViewModel {
         isLoadingModels = true
         errorMessage = nil
         defer { isLoadingModels = false }
+        // A catalog belongs to the provider and key it was requested for. If either changed while the
+        // request was in flight, its outcome (models or error) is stale and must not reach the form.
+        let requestedProvider = selectedProvider
+        let requestedKey = apiKeyText
         do {
             let request = ListModelsRequest(
-                provider: selectedProvider.rawValue,
-                apiKey: apiKeyText.isEmpty ? nil : apiKeyText,
+                provider: requestedProvider.rawValue,
+                apiKey: requestedKey.isEmpty ? nil : requestedKey,
                 baseUrl: nil,
                 apiVersion: nil
             )
             let response: ListModelsResponse = try await apiClient.post("/api/settings/models", body: request)
+            guard isCurrent(provider: requestedProvider, apiKey: requestedKey) else { return }
             availableModels = response.models
         } catch {
+            guard isCurrent(provider: requestedProvider, apiKey: requestedKey) else { return }
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Whether a model-list request sent for `provider` and `apiKey` still matches the form, i.e. the
+    /// user has neither switched provider nor edited the key since it was sent.
+    private func isCurrent(provider: AiProviders, apiKey: String) -> Bool {
+        selectedProvider == provider && apiKeyText == apiKey
     }
 
     /// `POST /api/settings` replaces `providerConfig` wholesale and the desktop feeds
@@ -127,6 +147,10 @@ public final class SettingsViewModel {
 
     @discardableResult
     public func save() async -> Bool {
+        guard hasLoadedSettings else {
+            errorMessage = "Connect to the server and load its settings before saving."
+            return false
+        }
         isSaving = true
         errorMessage = nil
         didSave = false
