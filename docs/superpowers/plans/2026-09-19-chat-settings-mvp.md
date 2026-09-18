@@ -4249,6 +4249,40 @@ Walk through, on a fresh install (no prior UserDefaults state, so Server URL def
 6. Swipe-to-delete that chat from the list. Confirm it disappears and (checking the desktop app or its DB) is actually gone server-side, not just hidden locally.
 7. Tap the workspace switcher title, confirm "Philharmonic(即将支持)" is visible but disabled and does nothing when tapped.
 
+- [ ] **Step 3b: Checks that the task reviews turned up but no unit test can make (human, in the Simulator and once on a real iPhone)**
+
+Each item is something the automated tests could not reach because it depends on real SwiftUI/URLSession behaviour or on the desktop's data. Tick them off, or file a follow-up for any that fail.
+
+*First run and connection*
+- [ ] With the desktop server NOT running, launch on a fresh install. The root screen shows "Can't load chats" with a Retry button (not "No chats yet").
+- [ ] Open Settings (gear) with the server still down: an error is shown. Type the correct address and tap Save without pressing Return. The toolbar button reads **Connect**, tapping it loads that server's settings instead of writing anything; it then reads **Save**. Dismissing Settings reloads the chat list by itself (no pull-to-refresh needed).
+- [ ] Enter a bare `127.0.0.1:60223` (no `http://`): it is stored and shown as `http://127.0.0.1:60223`. Enter `ftp://x` or leave it empty: it is refused with a message and the old address stays.
+- [ ] Tap into a chat while the list is still loading, then come back: no "cancelled" alert.
+
+*Settings round trip (compare with the desktop app's Settings → AI Providers)*
+- [ ] Refresh the model list, pick a model, Save. The desktop shows the same provider/model/key. The desktop's "last backup" label, and the model's context window / reasoning-effort options in its composer, are unchanged (the phone must not erase them).
+- [ ] With two providers' keys stored, switch the provider picker: the key field swaps; Save does not copy one provider's key into another; a key you typed for a provider you switched away from is kept.
+- [ ] Ollama: no API-key field, and "Refresh model list" works without a key.
+
+*Chat list*
+- [ ] Tapping the empty right-hand side of a row (not just the text) opens the chat.
+- [ ] Swipe-to-delete: the row springs back, then disappears once the server confirms; the chat is really gone on the desktop.
+- [ ] Rows read "N minutes/hours/days ago" (created time — the server has no updated time). Project chats appear in the list too.
+
+*Chat detail*
+- [ ] Ask for a multi-paragraph reply with **bold** and a bullet list: paragraphs and line breaks are preserved (list markers show as "- item").
+- [ ] With a reasoning model, the chain-of-thought text is NOT shown in the bubble, only the answer.
+- [ ] Between sending and the first token, note what the screen shows. (Known gap: nothing appears until the first assistant frame — only the disabled send button. File a follow-up if it feels dead.)
+- [ ] A long reply keeps scrolling to the bottom as it streams.
+- [ ] Open an existing chat: the title reads "Chat" (not "New Chat"); a brand-new chat reads "New Chat" until the generated title arrives.
+- [ ] Stop the desktop server, then send a message: the alert reads a human sentence such as "Could not connect to the server." — NOT `URLError(_nsError: …)`. The draft is not lost and the composer works again after you dismiss it.
+- [ ] Use an invalid API key: the alert shows the server's message and the composer is usable again afterwards.
+- [ ] Pull down on a chat whose history failed to load: it retries.
+- [ ] Start a reply, leave the chat, come back while it streams: the partial reply is there and it keeps streaming (Step 3.5). Then do the same and let the reply FAIL while you are away (for example stop the server): on return there is no error — known limitation, note whether it bothers you.
+
+*On a real iPhone (same Wi-Fi as the Mac)*
+- [ ] Set the address to the Mac's LAN IP or `<name>.local` with the port. iOS shows the "find and connect to devices on your local network" prompt with the Chinese explanation from `NSLocalNetworkUsageDescription`; after Allow, the chat list loads. (An `http://` address that is a public hostname is refused by App Transport Security — expected.)
+
 - [ ] **Step 4: Note any findings**
 
 If anything in Step 3 doesn't match, that's a real bug to fix before considering this plan done — file it as a follow-up task rather than silently patching around it, since every prior task's automated tests already passed and a manual-only failure here means a gap in what those tests covered.
