@@ -65,6 +65,15 @@ let project = Project(
             dependencies: [.target(name: "Models")]
         ),
         moduleTarget(name: "NetworkingKit", dependencies: [.target(name: "Models")]),
+        .target(
+            name: "NetworkingKitTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "\(bundleIdRoot).NetworkingKitTests",
+            deploymentTargets: deploymentTargets,
+            buildableFolders: ["Tests/NetworkingKitTests"],
+            dependencies: [.target(name: "NetworkingKit"), .target(name: "Models")]
+        ),
         moduleTarget(
             name: "ChatFeature",
             dependencies: [.target(name: "NetworkingKit"), .target(name: "Models")]
