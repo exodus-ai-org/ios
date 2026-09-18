@@ -2729,6 +2729,17 @@ EOF
 - Consumes: `APIClient` (NetworkingKit); `ChatSummary` (Models).
 - Produces: `public struct ChatListView: View { public init(apiClient: APIClient, onSelectChat: @escaping (String) -> Void, onNewChat: @escaping (String) -> Void) }` — `onSelectChat`/`onNewChat` hand a chat id up to whatever owns navigation (Task 10's `RootView`), keeping `ChatFeature` itself free of any `PhilharmonicFeature`/`SettingsFeature` knowledge.
 
+**Controller rulings baked into this task** (found by checking the plan's original list against the desktop server and a real user flow; each has a test below):
+
+1. **Cancellation is not an error.** SwiftUI cancels a view's `.task` (and an interrupted `.refreshable`) when the view goes away, and the in-flight `URLSession` call then throws `URLError(.cancelled)` / `CancellationError`. The original `load()` put that in `errorMessage`, so tapping into a chat while the list was still loading showed a "cancelled" alert the next time the user came back. `load()` and `delete(_:)` swallow cancellation silently.
+2. **A failed load is not an empty list.** With the server unreachable the original view showed "No chats yet" behind the alert. `loadFailed` distinguishes the two; the view shows a "Can't load chats" state with a Retry button, and a failed *re*load keeps the chats already on screen.
+3. **The row shows how long ago the chat was created.** Spec §5 says "relative-updated-time", but `GET /api/history` returns raw `chat` rows (`getAllChats`, `src/main/lib/db/queries.ts:60`) and that table has only `createdAt`, no `updatedAt`, so created-time is all the server can give. Rows keep the server's order (`desc(createdAt)`). The original showed the raw ISO string.
+4. **`GET /api/history` with no `projectId` returns ALL chats, project chats included** (`queries.ts:69`). The MVP list shows them as they come.
+5. User-facing errors are `error.localizedDescription` (for `HTTPError` that is the server's message), as in Task 7.
+6. `chats` is `private(set)`: tests fill the list by loading through the mock, not by assigning to it.
+
+Swift 6 notes for the tests below: the view model is `@MainActor`, so the suite is `@MainActor`; the mock handler runs on a URLProtocol thread, so requests are recorded behind a `Mutex` and asserted afterwards — never with `#expect` inside a handler (it can silently never run) and never with a captured `var`. `-only-testing:` takes the Swift TYPE name (`ChatFeatureTests/ChatListViewModelTests`); a wrong name matches nothing yet reports success with 0 tests, so check that a green run reports N > 0. If you still hit a Swift 6 diagnostic, fix it minimally and record it in the report; never lower `SWIFT_VERSION` and never weaken an assertion.
+
 - [ ] **Step 1: Add the `ChatFeatureTests` target to `Project.swift`**
 
 Add after `moduleTarget(name: "ChatFeature", ...)`:
@@ -2757,6 +2768,7 @@ Run: `tuist generate --no-open`
 import Foundation
 import Models
 import NetworkingKit
+import Synchronization
 import Testing
 
 @testable import ChatFeature
@@ -2793,55 +2805,166 @@ private final class ChatListMockURLProtocol: URLProtocol, @unchecked Sendable {
     }
 }
 
+/// The handler runs on a URLProtocol thread, so the requests it sees are recorded behind a
+/// lock and asserted from the test afterwards.
+private final class RequestRecorder: Sendable {
+    private let storage = Mutex<[String]>([])
+    func record(_ line: String) { storage.withLock { $0.append(line) } }
+    var requests: [String] { storage.withLock { $0 } }
+}
+
+private let twoChatsJSON = #"""
+    [{"id":"c1","title":"Trip planning","createdAt":"2026-09-18T00:00:00.000Z","favorite":false,"projectId":null},
+     {"id":"c2","title":"New chat","createdAt":"2026-09-17T00:00:00.000Z","favorite":null,"projectId":"p1"}]
+    """#
+
+private let serverErrorJSON =
+    #"{"type":"error","error":{"code":"DB_QUERY_FAILED","message":"Failed to get chat history"}}"#
+
+/// Answers `GET /api/history` and `DELETE /api/chat/<id>`, recording "METHOD path" for every request.
+private func serve(
+    history: String = "[]",
+    historyStatus: Int = 200,
+    deleteStatus: Int = 200,
+    deleteBody: String = #"{"success":true}"#,
+    recorder: RequestRecorder
+) {
+    ChatListMockURLProtocol.handler = { request in
+        let method = request.httpMethod ?? "GET"
+        let path = request.url?.path ?? ""
+        recorder.record("\(method) \(path)")
+        if method == "GET", path == "/api/history" {
+            return (historyStatus, Data(history.utf8))
+        }
+        if method == "DELETE", path.hasPrefix("/api/chat/") {
+            return (deleteStatus, Data(deleteBody.utf8))
+        }
+        return (404, Data(#"{"type":"error","error":{"code":"NOT_FOUND","message":"no route"}}"#.utf8))
+    }
+}
+
+@MainActor
 @Suite("ChatListViewModel", .serialized)
 struct ChatListViewModelTests {
-    private func makeViewModel() -> ChatListViewModel {
-        let config = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+    private func makeViewModel(_ suite: String = #function) -> ChatListViewModel {
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let config = ServerConfigStore(userDefaults: defaults)
         let client = APIClient(session: ChatListMockURLProtocol.makeSession(), serverConfig: config)
         return ChatListViewModel(apiClient: client)
     }
 
-    @Test("load() populates chats from GET /api/history")
-    func loadPopulatesChats() async throws {
-        ChatListMockURLProtocol.handler = { request in
-            #expect(request.url?.path == "/api/history")
-            let json = """
-                [{"id":"c1","title":"Trip planning","createdAt":"2026-09-18T00:00:00.000Z"},{"id":"c2","title":"New chat","createdAt":"2026-09-17T00:00:00.000Z"}]
-                """.data(using: .utf8)!
-            return (200, json)
-        }
+    @Test("load() fills the list from GET /api/history, in the server's order")
+    func loadPopulatesChatsInServerOrder() async throws {
+        let recorder = RequestRecorder()
+        serve(history: twoChatsJSON, recorder: recorder)
         let vm = makeViewModel()
         await vm.load()
-        #expect(vm.chats.count == 2)
-        #expect(vm.chats[0].id == "c1")
+        #expect(vm.chats.map(\.id) == ["c1", "c2"])
+        #expect(vm.chats[0].title == "Trip planning")
+        #expect(recorder.requests == ["GET /api/history"])
+        #expect(vm.errorMessage == nil)
+        #expect(vm.loadFailed == false)
+    }
+
+    @Test("delete(_:) sends DELETE /api/chat/<id> and removes only that chat after it succeeds")
+    func deleteRemovesChatAfterSuccessfulDelete() async throws {
+        let recorder = RequestRecorder()
+        serve(history: twoChatsJSON, recorder: recorder)
+        let vm = makeViewModel()
+        await vm.load()
+        await vm.delete(vm.chats[0])
+        #expect(recorder.requests == ["GET /api/history", "DELETE /api/chat/c1"])
+        #expect(vm.chats.map(\.id) == ["c2"])
         #expect(vm.errorMessage == nil)
     }
 
-    @Test("delete(_:) removes the chat from the local list after a successful DELETE")
-    func deleteRemovesChat() async throws {
-        let chat = ChatSummary(id: "c1", title: "Trip planning", createdAt: "2026-09-18T00:00:00.000Z")
-        ChatListMockURLProtocol.handler = { request in
-            #expect(request.httpMethod == "DELETE")
-            #expect(request.url?.path == "/api/chat/c1")
-            return (200, Data("{\"success\":true}".utf8))
-        }
+    @Test("a failed delete keeps the chat in the list and shows the server's message")
+    func failedDeleteKeepsTheChat() async throws {
+        serve(
+            history: twoChatsJSON,
+            deleteStatus: 500,
+            deleteBody: #"{"type":"error","error":{"code":"DB_QUERY_FAILED","message":"Failed to delete chat"}}"#,
+            recorder: RequestRecorder())
         let vm = makeViewModel()
-        vm.chats = [chat]
-        await vm.delete(chat)
-        #expect(vm.chats.isEmpty)
+        await vm.load()
+        await vm.delete(vm.chats[0])
+        #expect(vm.chats.map(\.id) == ["c1", "c2"])
+        #expect(vm.errorMessage == "Failed to delete chat")
     }
 
-    @Test("a failed load surfaces the server's error message")
+    @Test("a failed load surfaces the server's message and is marked as a failure, not an empty list")
     func loadSurfacesError() async throws {
-        ChatListMockURLProtocol.handler = { _ in
-            let json = """
-                {"type":"error","error":{"code":"DB_QUERY_FAILED","message":"Failed to get chat history"}}
-                """.data(using: .utf8)!
-            return (500, json)
-        }
+        serve(history: serverErrorJSON, historyStatus: 500, recorder: RequestRecorder())
         let vm = makeViewModel()
         await vm.load()
         #expect(vm.errorMessage == "Failed to get chat history")
+        #expect(vm.loadFailed)
+        #expect(vm.chats.isEmpty)
+    }
+
+    @Test("a failed reload keeps the chats already on screen")
+    func failedReloadKeepsExistingChats() async throws {
+        serve(history: twoChatsJSON, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        serve(history: serverErrorJSON, historyStatus: 500, recorder: RequestRecorder())
+        await vm.load()
+        #expect(vm.chats.map(\.id) == ["c1", "c2"])
+        #expect(vm.errorMessage == "Failed to get chat history")
+        #expect(vm.loadFailed)
+    }
+
+    @Test("a successful reload clears the failure state")
+    func successfulReloadClearsFailure() async throws {
+        serve(history: serverErrorJSON, historyStatus: 500, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        #expect(vm.loadFailed)
+        serve(history: twoChatsJSON, recorder: RequestRecorder())
+        await vm.load()
+        #expect(vm.loadFailed == false)
+        #expect(vm.errorMessage == nil)
+        #expect(vm.chats.count == 2)
+    }
+
+    @Test("a cancelled load or delete is not shown as an error")
+    func cancellationIsNotAnError() async throws {
+        serve(history: twoChatsJSON, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+
+        ChatListMockURLProtocol.handler = { _ in throw URLError(.cancelled) }
+        await vm.load()
+        #expect(vm.errorMessage == nil)
+        #expect(vm.loadFailed == false)
+        #expect(vm.chats.count == 2)
+
+        await vm.delete(vm.chats[0])
+        #expect(vm.errorMessage == nil)
+        #expect(vm.chats.count == 2)
+    }
+
+    @Test("a transport failure is shown as a human message, not a URLError dump")
+    func transportErrorUsesAHumanMessage() async throws {
+        ChatListMockURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }
+        let vm = makeViewModel()
+        await vm.load()
+        let message = try #require(vm.errorMessage)
+        #expect(message == URLError(.cannotConnectToHost).localizedDescription)
+        // A bare in-process URLError describes itself as "(NSURLErrorDomain error -1004.)"; the
+        // dump form (`String(describing:)`) contains "Domain=" and must not reach the user.
+        #expect(message.contains("Domain=") == false)
+        #expect(vm.loadFailed)
+    }
+
+    @Test("relative time is human-readable, handles fractional and plain ISO strings, and falls back to the raw text")
+    func relativeTimeIsHumanReadable() throws {
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-09-20T00:00:00Z"))
+        let en = Locale(identifier: "en_US")
+        #expect(ChatListViewModel.relativeTime(forCreatedAt: "2026-09-18T00:00:00.000Z", now: now, locale: en) == "2 days ago")
+        #expect(ChatListViewModel.relativeTime(forCreatedAt: "2026-09-19T21:00:00Z", now: now, locale: en) == "3 hours ago")
+        #expect(ChatListViewModel.relativeTime(forCreatedAt: "not a date", now: now, locale: en) == "not a date")
     }
 }
 ```
@@ -2862,8 +2985,10 @@ import Observation
 @MainActor
 @Observable
 public final class ChatListViewModel {
-    public var chats: [ChatSummary] = []
-    public var isLoading = false
+    public private(set) var chats: [ChatSummary] = []
+    public private(set) var isLoading = false
+    /// True when the last load failed — lets the view tell "couldn't load" from "no chats yet".
+    public private(set) var loadFailed = false
     public var errorMessage: String?
 
     private let apiClient: APIClient
@@ -2878,8 +3003,12 @@ public final class ChatListViewModel {
         defer { isLoading = false }
         do {
             chats = try await apiClient.get("/api/history")
+            loadFailed = false
         } catch {
-            errorMessage = (error as? HTTPError)?.message ?? String(describing: error)
+            // SwiftUI cancels a view's `.task` when the view goes away; that is not a failure.
+            guard !Self.isCancellation(error) else { return }
+            loadFailed = true
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -2888,8 +3017,30 @@ public final class ChatListViewModel {
             try await apiClient.delete("/api/chat/\(chat.id)")
             chats.removeAll { $0.id == chat.id }
         } catch {
-            errorMessage = (error as? HTTPError)?.message ?? String(describing: error)
+            guard !Self.isCancellation(error) else { return }
+            errorMessage = error.localizedDescription
         }
+    }
+
+    /// The server's chat list carries only `createdAt` (the `chat` table has no `updatedAt`),
+    /// so a row shows how long ago the chat was created. Accepts ISO-8601 with or without
+    /// fractional seconds; anything else is returned unchanged.
+    public nonisolated static func relativeTime(
+        forCreatedAt iso: String, now: Date = .now, locale: Locale = .current
+    ) -> String {
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        guard let date = withFraction.date(from: iso) ?? plain.date(from: iso) else { return iso }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: now)
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 }
 ```
@@ -2925,7 +3076,9 @@ public struct ChatListView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(chat.title).font(.body)
-                        Text(chat.createdAt).font(.caption).foregroundStyle(.secondary)
+                        Text(ChatListViewModel.relativeTime(forCreatedAt: chat.createdAt))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -2938,10 +3091,20 @@ public struct ChatListView: View {
             }
         }
         .overlay {
-            if viewModel.isLoading && viewModel.chats.isEmpty {
-                ProgressView()
-            } else if viewModel.chats.isEmpty {
-                ContentUnavailableView("No chats yet", systemImage: "message")
+            if viewModel.chats.isEmpty {
+                if viewModel.isLoading {
+                    ProgressView()
+                } else if viewModel.loadFailed {
+                    ContentUnavailableView {
+                        Label("Can't load chats", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text("Pull down or tap Retry to try again.")
+                    } actions: {
+                        Button("Retry") { Task { await viewModel.load() } }
+                    }
+                } else {
+                    ContentUnavailableView("No chats yet", systemImage: "message")
+                }
             }
         }
         .toolbar {
