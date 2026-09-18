@@ -1646,13 +1646,20 @@ private final class StreamingMockURLProtocol: URLProtocol, @unchecked Sendable {
     /// instantly (the default) cannot be used to test "the turn is still
     /// in flight" — it stops being in flight essentially immediately.
     nonisolated(unsafe) static var finishesLoading: Bool = true
+    /// HTTP status the mock answers with. Every test that depends on it sets it
+    /// explicitly (the suite is `.serialized`, statics are shared).
+    nonisolated(unsafe) static var statusCode: Int = 200
+    /// The `timeoutInterval` of the last request the mock saw — lets a test pin
+    /// the request configuration `ChatStreamManager` builds.
+    nonisolated(unsafe) static var lastTimeout: TimeInterval?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        Self.lastTimeout = request.timeoutInterval
         let response = HTTPURLResponse(
-            url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+            url: request.url!, statusCode: Self.statusCode, httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": "text/event-stream"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         for chunk in Self.chunks {
@@ -1682,6 +1689,7 @@ struct ChatStreamManagerTests {
             data: {"type":"done","messages":[{"id":"u1","role":"user","content":"hi"},{"id":"a1","role":"assistant","content":"Hello"}]}\n\n
             """
         StreamingMockURLProtocol.finishesLoading = true
+        StreamingMockURLProtocol.statusCode = 200
         StreamingMockURLProtocol.chunks = [Data(sse.utf8)]
 
         let manager = ChatStreamManager(sseClient: SSEClient(session: StreamingMockURLProtocol.makeSession()))
@@ -1702,6 +1710,40 @@ struct ChatStreamManagerTests {
         #expect(finalMessages.count == 2)
         #expect(finalMessages.last?.displayText == "Hello")
         #expect(await manager.isStreaming("c1") == false)
+        // The server sends no keep-alive frames, so the request must tolerate a
+        // long silent stretch (see `makeRequest`).
+        #expect(StreamingMockURLProtocol.lastTimeout == 3600)
+    }
+
+    @Test("a non-2xx response (e.g. no provider configured yet) surfaces the server's message as .failed and ends the stream")
+    func httpErrorSurfacesServerMessage() async throws {
+        StreamingMockURLProtocol.finishesLoading = true
+        StreamingMockURLProtocol.statusCode = 400
+        StreamingMockURLProtocol.chunks = [
+            Data(#"{"type":"error","error":{"code":"NO_PROVIDER","message":"Please configure a provider in Settings"}}"#.utf8)
+        ]
+        defer { StreamingMockURLProtocol.statusCode = 200 }
+
+        let manager = ChatStreamManager(sseClient: SSEClient(session: StreamingMockURLProtocol.makeSession()))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        var seenStatuses: [ChatStatus] = []
+        var failure: String?
+        var sawFinished = false
+        for await update in await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig) {
+            switch update {
+            case .status(let s): seenStatuses.append(s)
+            case .failed(let message): failure = message
+            case .finished: sawFinished = true
+            default: break
+            }
+        }
+
+        #expect(failure == "Please configure a provider in Settings")
+        #expect(seenStatuses.last == .error)
+        #expect(!sawFinished)
+        #expect(await manager.isStreaming("c1") == false)
     }
 
     @Test("an in-flight stream can be attached to from a second observer and replays current state")
@@ -1712,6 +1754,7 @@ struct ChatStreamManagerTests {
         // otherwise finish (and call ChatStreamManager.finish(chatId:)) in
         // well under a millisecond.
         StreamingMockURLProtocol.finishesLoading = false
+        StreamingMockURLProtocol.statusCode = 200
         let sse = """
             data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"partial"}}\n\n
             """
@@ -1869,6 +1912,11 @@ public actor ChatStreamManager {
         var request = URLRequest(url: base.appendingPathComponent("/api/chat"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // The server sends no keep-alive frames, and URLSession's default 60 s
+        // *inactivity* timeout would kill a turn during a long silent stretch (a
+        // reasoning model thinking before its first token, a slow tool call) that
+        // the desktop's `fetch` simply waits out. Allow up to an hour of silence.
+        request.timeoutInterval = 3600
         struct Body: Encodable {
             let id: String
             let messages: [ChatMessage]
