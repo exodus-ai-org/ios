@@ -4032,6 +4032,15 @@ EOF
 - Consumes: `ChatListView`, `ChatDetailView` (ChatFeature); `SettingsView` (SettingsFeature); `PhilharmonicPlaceholderView` (PhilharmonicFeature); `APIClient`, `ChatStreamManager`, `ServerConfigStore` (NetworkingKit).
 - Produces: the final `RootView` — no later task modifies it.
 
+**Controller rulings baked into this task** (carried over from the reviews of Tasks 4-9):
+
+1. **Reload the chat list when Settings closes.** `ChatListView` loads in `.task`, which runs when the list appears — not when a sheet above it is dismissed. The first-run flow on a real device is: the default `localhost` is unreachable, the list shows "Can't load chats", the user opens Settings, enters the Mac's LAN address and saves. Without a reload the list would stay on the error until the user pulled down. `RootView` bumps a token when the sheet is dismissed and the list carries `.id(token)`, which re-creates it and re-runs its `.task`.
+2. **Settings is presented as a sheet, never pushed.** `SettingsView` owns a `NavigationStack`, calls `dismiss()` and reloads its form in `.task` on every appearance (Task 7 review).
+3. **Nothing in the app writes `ServerConfigStore.baseURLString` except `SettingsViewModel.saveServerURL()`.** Its "never save to a server whose settings were not loaded" guard is invalidated only there (Task 7 review). `RootView`/`ExodusApp` only read the store.
+4. **Exactly one `ChatStreamManager`,** constructed in `ExodusApp.init` and passed down (Task 6 review).
+5. **The "Info.plist review" is a real check:** Task 1 put `NSAppTransportSecurity → NSAllowsLocalNetworking` and `NSLocalNetworkUsageDescription` in the App target; Step 4 verifies both are in the GENERATED plist. `NSAllowsLocalNetworking` lets plain `http://` reach IP addresses, `.local` and unqualified hosts (a LAN Mac) but not a public hostname, which iOS then refuses with its own App Transport Security error — correct for a LAN-only MVP.
+6. **Step 5 is launch-and-look only for the implementer.** Nothing in this environment can tap the Simulator, so the tap-through (workspace menu, gear/Settings sheet, New Chat push, list reload after saving a new address) is done by the human in Task 11. The implementer launches the app, takes a screenshot of the root screen, and says exactly what it shows. With no desktop server running the root screen should show the "Can't load chats" state (Task 8), which is itself a useful check.
+
 - [ ] **Step 1: Implement `AppWorkspace.swift`**
 
 ```swift
@@ -4061,6 +4070,8 @@ struct RootView: View {
     @State private var workspace: AppWorkspace = .chat
     @State private var path: [String] = []
     @State private var showSettings = false
+    /// Bumped when the Settings sheet closes so the chat list reloads from the (possibly new) server.
+    @State private var listReloadToken = 0
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -4072,6 +4083,7 @@ struct RootView: View {
                         onSelectChat: { chatId in path.append(chatId) },
                         onNewChat: { chatId in path.append(chatId) }
                     )
+                    .id(listReloadToken)
                 case .philharmonic:
                     PhilharmonicPlaceholderView()
                 }
@@ -4113,7 +4125,7 @@ struct RootView: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .sheet(isPresented: $showSettings, onDismiss: { listReloadToken += 1 }) {
             SettingsView(apiClient: apiClient, serverConfig: serverConfig)
         }
     }
@@ -4156,7 +4168,9 @@ xcodebuild build -workspace ExodusIos.xcworkspace -scheme App -destination "gene
 
 Expected: `** BUILD SUCCEEDED **`.
 
-- [ ] **Step 5: Manually verify the workspace switcher and navigation in the Simulator**
+Then the Info.plist review: `plutil -p` the generated App plist (Tuist puts it under `Derived/InfoPlists/`) and confirm it contains `NSAppTransportSecurity` with `NSAllowsLocalNetworking = true` and a non-empty `NSLocalNetworkUsageDescription`. Report the two values you saw.
+
+- [ ] **Step 5: Launch in the Simulator and look at the root screen**
 
 ```bash
 xcodebuild build \
@@ -4168,7 +4182,7 @@ xcrun simctl install booted /tmp/exodus-ios-dd/Build/Products/Debug-iphonesimula
 xcrun simctl launch booted app.yancey.exodus.exodus-ios
 ```
 
-In the Simulator: confirm the nav bar title reads "Chat" with a chevron; tapping it shows a menu with "Chat" (checked) and "Philharmonic(即将支持)" (disabled); tapping the gear icon opens Settings as a sheet; tapping "New Chat" pushes into an empty `ChatDetailView`.
+Take a screenshot of the root screen (`xcrun simctl io booted screenshot <path under the scratchpad directory>`, then read it) and report what it shows. Expected: the nav bar title "Chat" with a chevron, a gear button on the right, the New Chat button, and — if no desktop server is running — the "Can't load chats" state; if `pnpm dev` is running in `../universal-client`, the chat list. You cannot tap the Simulator from here, so the rest of the original manual check (the workspace menu with "Chat" checked and "Philharmonic(即将支持)" disabled, the gear opening Settings as a sheet, New Chat pushing an empty `ChatDetailView`, the list reloading after a new address is saved) is Task 11's human pass: say so in the report. Use a derived-data path under the scratchpad directory rather than `/tmp`.
 
 - [ ] **Step 6: Commit**
 
