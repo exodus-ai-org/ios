@@ -16,71 +16,46 @@ public struct ChatDetailView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(viewModel.messages) { message in
-                            MessageRow(
-                                message: message,
-                                showsTypingIndicator: viewModel.isTurnInFlight && message.id == viewModel.messages.last?.id
-                            )
-                            .id(message.id)
-                        }
-                        // Between tapping send and the first assistant message the transcript ends
-                        // with the user's message; without this the screen would show nothing.
-                        if viewModel.showsPendingRow {
-                            AssistantBubble(text: AttributedString("…"))
-                                .id(Self.pendingRowID)
-                        }
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(viewModel.messages) { message in
+                        MessageRow(
+                            message: message,
+                            showsTypingIndicator: viewModel.isTurnInFlight && message.id == viewModel.messages.last?.id
+                        )
+                        .id(message.id)
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+                    // Between tapping send and the first assistant message the transcript ends
+                    // with the user's message; without this the screen would show nothing.
+                    if viewModel.showsPendingRow {
+                        AssistantBubble(text: AttributedString("…"))
+                            .id(Self.pendingRowID)
+                    }
                 }
-                // Pull down to retry a history load that failed (the composer stays disabled until it succeeds).
-                .scrollBounceBehavior(.always)
-                .refreshable { await viewModel.loadHistory() }
-                .onChange(of: viewModel.messages.count) {
-                    scrollToBottom(proxy, animated: true)
-                }
-                // Follow a reply as it streams in: the count is constant while the last message grows.
-                .onChange(of: viewModel.messages.last?.answerText) {
-                    scrollToBottom(proxy, animated: false)
-                }
-                // Sending adds the pending row; reaching it is the point of `isTurnInFlight` flipping.
-                .onChange(of: viewModel.isTurnInFlight) {
-                    scrollToBottom(proxy, animated: true)
-                }
+                .padding(.horizontal)
+                .padding(.top, 8)
             }
-
-            Divider()
-
-            HStack {
-                TextField("Message", text: $viewModel.composerText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                if viewModel.isTurnInFlight {
-                    // The way out of a turn that will not finish (a half-open connection can otherwise
-                    // keep the composer locked for up to an hour).
-                    Button {
-                        Task { await viewModel.stop() }
-                    } label: {
-                        Label("Stop", systemImage: "stop.circle.fill")
-                            .labelStyle(.iconOnly)
-                            .font(.title2)
-                    }
-                } else {
-                    Button {
-                        Task { await viewModel.sendMessage() }
-                    } label: {
-                        Label("Send", systemImage: "arrow.up.circle.fill")
-                            .labelStyle(.iconOnly)
-                            .font(.title2)
-                    }
-                    .disabled(!viewModel.canSend)
-                }
+            // Pull down to retry a history load that failed (the composer stays disabled until it succeeds).
+            .scrollBounceBehavior(.always)
+            .scrollDismissesKeyboard(.interactively)
+            .refreshable { await viewModel.loadHistory() }
+            .onChange(of: viewModel.messages.count) {
+                scrollToBottom(proxy, animated: true)
             }
-            .padding()
+            // Follow a reply as it streams in: the count is constant while the last message grows.
+            .onChange(of: viewModel.messages.last?.answerText) {
+                scrollToBottom(proxy, animated: false)
+            }
+            // Sending adds the pending row; reaching it is the point of `isTurnInFlight` flipping.
+            .onChange(of: viewModel.isTurnInFlight) {
+                scrollToBottom(proxy, animated: true)
+            }
         }
+        .overlay {
+            if viewModel.showsEmptyState { emptyState }
+        }
+        .safeAreaBar(edge: .bottom) { composer }
         .navigationTitle(viewModel.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.onAppear() }
@@ -95,6 +70,54 @@ public struct ChatDetailView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+    }
+
+    private var emptyState: some View {
+        Text("What can I help with?")
+            .font(.title2.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+    }
+
+    private var composer: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            TextField("Ask Exodus", text: $viewModel.composerText, axis: .vertical)
+                .lineLimit(1...5)
+                .padding(.vertical, 8)
+                .accessibilityIdentifier("composerField")
+            if viewModel.isTurnInFlight {
+                // The way out of a turn that will not finish (a half-open connection can otherwise
+                // keep the composer locked for up to an hour).
+                Button {
+                    Task { await viewModel.stop() }
+                } label: {
+                    Label("Stop", systemImage: "stop.fill")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .accessibilityIdentifier("stopButton")
+            } else {
+                Button {
+                    Task { await viewModel.sendMessage() }
+                } label: {
+                    Label("Send", systemImage: "arrow.up")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .disabled(!viewModel.canSend)
+                .accessibilityIdentifier("sendButton")
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .glassEffect(.regular, in: .rect(cornerRadius: 26))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
     }
 
     /// Stable id of the pending "…" row, so the scroll view can be pointed at it.

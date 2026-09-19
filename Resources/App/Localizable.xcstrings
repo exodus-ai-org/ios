@@ -9,6 +9,10 @@
       "comment" : "Field label for a provider's API key.",
       "extractionState" : "manual"
     },
+    "Ask Exodus" : {
+      "comment" : "Placeholder of the message field. Exodus is the app's name and stays as is.",
+      "extractionState" : "manual"
+    },
     "Can't load chats" : {
       "comment" : "Title shown when the conversation list could not be loaded.",
       "extractionState" : "manual"
@@ -142,6 +146,10 @@
       "comment" : "Placeholder row in the model picker when no model is chosen.",
       "extractionState" : "manual"
     },
+    "Send" : {
+      "comment" : "Accessibility label of the send button.",
+      "extractionState" : "manual"
+    },
     "Server address" : {
       "comment" : "Accessibility label of the server address field in Settings.",
       "extractionState" : "manual"
@@ -162,6 +170,10 @@
         }
       }
     },
+    "Stop" : {
+      "comment" : "Accessibility label of the button that stops the reply in progress.",
+      "extractionState" : "manual"
+    },
     "The Philharmonic multi-agent workspace hasn't been ported to iOS yet." : {
       "comment" : "Placeholder screen body. Philharmonic is a product name and stays untranslated.",
       "extractionState" : "manual"
@@ -172,6 +184,10 @@
     },
     "Used: %@" : {
       "comment" : "Row for a tool call in the transcript. %@ is the tool's name.",
+      "extractionState" : "manual"
+    },
+    "What can I help with?" : {
+      "comment" : "Greeting in the middle of an empty new conversation.",
       "extractionState" : "manual"
     }
   },
