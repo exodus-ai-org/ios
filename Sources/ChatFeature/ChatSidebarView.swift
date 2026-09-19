@@ -3,8 +3,9 @@ import NetworkingKit
 import SwiftUI
 
 /// The drawer's content: workspaces, Recents, and an inline search. It owns its `NavigationStack`, so
-/// the title, the search button and the bottom bar are native. Rows have no swipe actions (a left
-/// swipe closes the drawer); a chat is deleted from its long-press menu.
+/// the title and the search button are native; the bottom bar is a `safeAreaBar` of its own, because a
+/// bottom-bar toolbar item cannot show a labelled button. Rows have no swipe actions (a left swipe
+/// closes the drawer); a chat is deleted from its long-press menu.
 public struct ChatSidebarView<Workspaces: View>: View {
     @State private var list: ChatListViewModel
     @State private var search: ChatSearchViewModel
