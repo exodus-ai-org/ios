@@ -93,6 +93,24 @@ public actor ChatStreamManager {
         return output
     }
 
+    /// Ends the turn for `chatId` at the user's request (Stop). It is the only way out of a stream
+    /// whose connection went half-open (the request allows an hour of silence, see `makeRequest`).
+    ///
+    /// The observer is told the turn is idle and handed the messages accumulated so far, then its
+    /// stream ends and the entry is removed. A stop is not an error, so nothing is yielded as
+    /// `.failed`. Removing the entry here is what makes the cancelled task's own late
+    /// `finish`/`fail` no-ops (their generation no longer matches anything): there is deliberately
+    /// no second cleanup path that could finish the continuation twice. Does nothing when no
+    /// turn is in flight for this chat.
+    public func cancel(_ chatId: String) {
+        guard let stream = streams[chatId] else { return }
+        stream.task?.cancel()
+        stream.continuation?.yield(.status(.idle))
+        stream.continuation?.yield(.finished(stream.messages))
+        stream.continuation?.finish()
+        streams[chatId] = nil
+    }
+
     private func apply(chatId: String, generation: UUID, event: ChatSseEvent) {
         guard var stream = streams[chatId], stream.generation == generation else { return }
         switch event {

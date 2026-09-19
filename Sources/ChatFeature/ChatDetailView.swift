@@ -23,6 +23,12 @@ public struct ChatDetailView: View {
                             )
                             .id(message.id)
                         }
+                        // Between tapping send and the first assistant message the transcript ends
+                        // with the user's message; without this the screen would show nothing.
+                        if viewModel.showsPendingRow {
+                            AssistantBubble(text: AttributedString("…"))
+                                .id(Self.pendingRowID)
+                        }
                     }
                     .padding(.horizontal)
                     .padding(.top, 8)
@@ -37,6 +43,10 @@ public struct ChatDetailView: View {
                 .onChange(of: viewModel.messages.last?.answerText) {
                     scrollToBottom(proxy, animated: false)
                 }
+                // Sending adds the pending row; reaching it is the point of `isTurnInFlight` flipping.
+                .onChange(of: viewModel.isTurnInFlight) {
+                    scrollToBottom(proxy, animated: true)
+                }
             }
 
             Divider()
@@ -44,12 +54,26 @@ public struct ChatDetailView: View {
             HStack {
                 TextField("Message", text: $viewModel.composerText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
-                Button {
-                    Task { await viewModel.sendMessage() }
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill").font(.title2)
+                if viewModel.isTurnInFlight {
+                    // The way out of a turn that will not finish (a half-open connection can otherwise
+                    // keep the composer locked for up to an hour).
+                    Button {
+                        Task { await viewModel.stop() }
+                    } label: {
+                        Label("Stop", systemImage: "stop.circle.fill")
+                            .labelStyle(.iconOnly)
+                            .font(.title2)
+                    }
+                } else {
+                    Button {
+                        Task { await viewModel.sendMessage() }
+                    } label: {
+                        Label("Send", systemImage: "arrow.up.circle.fill")
+                            .labelStyle(.iconOnly)
+                            .font(.title2)
+                    }
+                    .disabled(!viewModel.canSend)
                 }
-                .disabled(!viewModel.canSend)
             }
             .padding()
         }
@@ -69,12 +93,16 @@ public struct ChatDetailView: View {
         }
     }
 
+    /// Stable id of the pending "…" row, so the scroll view can be pointed at it.
+    private static let pendingRowID = "pending"
+
     private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
-        guard let lastId = viewModel.messages.last?.id else { return }
+        let targetId = viewModel.showsPendingRow ? Self.pendingRowID : viewModel.messages.last?.id
+        guard let targetId else { return }
         if animated {
-            withAnimation { proxy.scrollTo(lastId, anchor: .bottom) }
+            withAnimation { proxy.scrollTo(targetId, anchor: .bottom) }
         } else {
-            proxy.scrollTo(lastId, anchor: .bottom)
+            proxy.scrollTo(targetId, anchor: .bottom)
         }
     }
 }

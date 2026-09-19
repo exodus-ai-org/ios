@@ -1,5 +1,6 @@
 import Foundation
 import Models
+import Synchronization
 import Testing
 
 @testable import NetworkingKit
@@ -64,6 +65,58 @@ private final class StreamingMockURLProtocol: URLProtocol, @unchecked Sendable {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StreamingMockURLProtocol.self]
         return URLSession(configuration: config)
+    }
+}
+
+/// Everything one observer of a turn receives. The observer is drained in its own task and the
+/// test polls this log against a deadline, so a stream that never ends fails the test instead
+/// of hanging the run.
+private final class UpdateLog: Sendable {
+    private let storage = Mutex<[ChatStreamUpdate]>([])
+    private let endedFlag = Mutex(false)
+
+    func drain(_ updates: AsyncStream<ChatStreamUpdate>) async {
+        for await update in updates { storage.withLock { $0.append(update) } }
+        endedFlag.withLock { $0 = true }
+    }
+
+    /// True once the observer's stream has finished (no more updates will ever arrive).
+    var ended: Bool { endedFlag.withLock { $0 } }
+
+    /// The updates in arrival order, one short tag each: "status:idle", "messages", "title",
+    /// "finished", "failed:<message>".
+    var tags: [String] {
+        storage.withLock {
+            $0.map { update in
+                switch update {
+                case .status(let status): "status:\(status.rawValue)"
+                case .messages: "messages"
+                case .title: "title"
+                case .finished: "finished"
+                case .failed(let message): "failed:\(message)"
+                }
+            }
+        }
+    }
+
+    var finishedMessages: [[ChatMessage]] {
+        storage.withLock {
+            $0.compactMap { update -> [ChatMessage]? in
+                if case .finished(let messages) = update { return messages }
+                return nil
+            }
+        }
+    }
+}
+
+/// Polls (bounded) until `condition` holds; a deadline, not a timing assumption.
+private func waitUntil(
+    _ what: String, timeout: Duration = .seconds(10), _ condition: @Sendable () async -> Bool
+) async throws {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while !(await condition()) {
+        try #require(ContinuousClock.now < deadline, "timed out waiting for \(what)")
+        try await Task.sleep(for: .milliseconds(2))
     }
 }
 
@@ -344,5 +397,131 @@ struct ChatStreamManagerTests {
         _ = try #require(await manager.attach("c1"))
         let end = await originalIterator.next()
         #expect(end == nil)
+    }
+
+    // MARK: - cancel (the user's Stop)
+
+    // Time limit: a `cancel` that leaves the observer's stream open would hang the drain.
+    @Test(
+        "cancel ends an in-flight turn as idle, not as a failure: .status(.idle) then .finished with the partial reply, and the entry is gone",
+        .timeLimit(.minutes(1)))
+    func cancelEndsTheTurnAsIdle() async throws {
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.finishesLoading = false
+        let partial = """
+            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"partial"}}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(partial.utf8)]
+        defer { StreamingMockURLProtocol.reset() }
+
+        let session = StreamingMockURLProtocol.makeSession()
+        defer { session.invalidateAndCancel() }  // ends the held-open connection even if an assertion below fails
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        let log = UpdateLog()
+        let updates = await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig)
+        let drain = Task { await log.drain(updates) }
+        try await waitUntil("the partial reply to arrive") { log.tags.contains("messages") }
+        #expect(await manager.isStreaming("c1"))
+
+        await manager.cancel("c1")
+        // Removed by `cancel` itself, not later by the cancelled task unwinding.
+        #expect(await manager.isStreaming("c1") == false)
+        await manager.cancel("c1")  // a second cancel finds nothing and must not double-finish anything
+
+        try await waitUntil("the observer's stream to end") { log.ended }
+        await drain.value
+
+        #expect(log.tags == ["status:submitted", "messages", "status:idle", "finished"])
+        let finished = try #require(log.finishedMessages.first)
+        #expect(finished.map(\.displayText) == ["hi", "partial"])
+        #expect(await manager.isStreaming("c1") == false)
+        #expect(await manager.attach("c1") == nil)
+    }
+
+    @Test(
+        "a send after a cancel runs a clean new turn, and the cancelled turn's task cannot disturb it",
+        .timeLimit(.minutes(1)))
+    func sendAfterCancelStartsACleanTurn() async throws {
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.finishesLoading = false
+        let partial = """
+            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"partial"}}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(partial.utf8)]
+        defer { StreamingMockURLProtocol.reset() }
+
+        let session = StreamingMockURLProtocol.makeSession()
+        defer { session.invalidateAndCancel() }
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        let firstLog = UpdateLog()
+        let first = await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig)
+        let firstDrain = Task { await firstLog.drain(first) }
+        try await waitUntil("the partial reply to arrive") { firstLog.tags.contains("messages") }
+        await manager.cancel("c1")
+        try await waitUntil("the first observer's stream to end") { firstLog.ended }
+        await firstDrain.value
+
+        // Second turn on the same chat: a complete response, then the connection closes.
+        StreamingMockURLProtocol.finishesLoading = true
+        let fresh = """
+            data: {"type":"message_update","message":{"id":"a2","role":"assistant","content":"fresh"}}\n\n\
+            data: {"type":"done","messages":[{"id":"u1","role":"user","content":"hi"},{"id":"a2","role":"assistant","content":"fresh"}]}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(fresh.utf8)]
+        let secondLog = UpdateLog()
+        let second = await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig)
+        await secondLog.drain(second)  // returns when the turn ends; bounded by the time limit
+
+        let tags = secondLog.tags
+        #expect(tags.first == "status:submitted")
+        #expect(tags.suffix(2) == ["status:idle", "finished"])
+        #expect(tags.contains { $0.hasPrefix("failed") } == false)
+        #expect(secondLog.finishedMessages.first?.last?.displayText == "fresh")
+        #expect(await manager.isStreaming("c1") == false)
+        // The first observer got exactly one ending, from the cancel.
+        #expect(firstLog.tags == ["status:submitted", "messages", "status:idle", "finished"])
+    }
+
+    @Test(
+        "cancel does nothing when no turn is in flight for that chat, and leaves another chat's turn alone",
+        .timeLimit(.minutes(1)))
+    func cancelWithNothingInFlightIsANoOp() async throws {
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.finishesLoading = false
+        let partial = """
+            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"partial"}}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(partial.utf8)]
+        defer { StreamingMockURLProtocol.reset() }
+
+        let session = StreamingMockURLProtocol.makeSession()
+        defer { session.invalidateAndCancel() }
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        await manager.cancel("c1")  // nothing at all has been sent yet
+        #expect(await manager.isStreaming("c1") == false)
+
+        let log = UpdateLog()
+        let updates = await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig)
+        let drain = Task { await log.drain(updates) }
+        try await waitUntil("the partial reply to arrive") { log.tags.contains("messages") }
+
+        await manager.cancel("some-other-chat")
+        #expect(await manager.isStreaming("some-other-chat") == false)
+        #expect(await manager.isStreaming("c1"))  // c1's turn is untouched
+        #expect(log.ended == false)
+        #expect(log.tags == ["status:submitted", "messages"])
+
+        await manager.cancel("c1")  // clean up the held-open turn
+        try await waitUntil("the observer's stream to end") { log.ended }
+        await drain.value
     }
 }

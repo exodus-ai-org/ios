@@ -31,9 +31,9 @@ struct MessageRow: View {
             }
         case "assistant":
             if !message.answerText.isEmpty {
-                assistantBubble(Self.renderedText(message.answerText))
+                AssistantBubble(text: Self.renderedText(message.answerText))
             } else if showsTypingIndicator {
-                assistantBubble(AttributedString("…"))
+                AssistantBubble(text: AttributedString("…"))
             }
         case "toolResult":
             HStack(spacing: 6) {
@@ -48,8 +48,14 @@ struct MessageRow: View {
             EmptyView()
         }
     }
+}
 
-    private func assistantBubble(_ text: AttributedString) -> some View {
+/// The assistant-style bubble. `MessageRow` renders assistant text with it, and `ChatDetailView`
+/// reuses it for the pending "…" row while a turn waits for its first token.
+struct AssistantBubble: View {
+    let text: AttributedString
+
+    var body: some View {
         HStack {
             Text(text)
                 .padding(10)

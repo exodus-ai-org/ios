@@ -82,6 +82,16 @@ private let partialReply = """
     data: {"type":"message_update","message":{"id":"a2","role":"assistant","content":"Hel"}}\n\n
     """
 
+private let toolResultReply = """
+    data: {"type":"message_update","message":{"id":"t1","role":"toolResult","toolName":"search","content":"ok"}}\n\n
+    """
+
+/// A chat whose transcript ends with the user's message (for example a turn that failed): nothing
+/// is in flight, so there must be no pending row.
+private let userOnlyHistoryJSON = #"""
+    [{"id":"u1","chatId":"c1","role":"user","content":"hi","searchText":"hi","createdAt":"2026-09-18T12:00:00.000Z"}]
+    """#
+
 private let envelope404 = #"{"type":"error","error":{"code":"CHAT_NOT_FOUND","message":"Chat not found"}}"#
 
 /// Answers `GET /api/chat/<id>` with `history` and `POST /api/chat` with `reply`, recording every request.
@@ -368,6 +378,168 @@ struct ChatDetailViewModelTests {
         harness.session.invalidateAndCancel()
         await firstSend.value
         await appear.value
+    }
+
+    // MARK: - Pending row (waiting for the first token)
+
+    @Test("showsPendingRow is false while idle: on an empty chat, after a history ending with the user's message, and after a completed turn")
+    func pendingRowIsHiddenWhileIdle() async throws {
+        serve(history: "[]", reply: helloReply, recorder: RequestRecorder())
+        let empty = Harness().makeViewModel()
+        await empty.loadHistory()
+        #expect(empty.messages.isEmpty)
+        #expect(empty.showsPendingRow == false)
+
+        serve(history: userOnlyHistoryJSON, recorder: RequestRecorder())
+        let endsWithUser = Harness().makeViewModel()
+        await endsWithUser.loadHistory()
+        #expect(endsWithUser.messages.map(\.role) == ["user"])
+        #expect(endsWithUser.showsPendingRow == false)
+
+        serve(history: "[]", reply: helloReply, recorder: RequestRecorder())
+        let completed = Harness().makeViewModel()
+        await completed.loadHistory()
+        completed.composerText = "hey"
+        await completed.sendMessage()
+        #expect(completed.status == .idle)
+        #expect(completed.showsPendingRow == false)
+    }
+
+    @Test("showsPendingRow is true from tapping send until the server's first assistant message", .timeLimit(.minutes(1)))
+    func pendingRowShowsWhileWaitingForTheFirstToken() async throws {
+        let recorder = RequestRecorder()
+        // The server has accepted the turn but sent nothing yet (a reasoning model thinking).
+        serve(history: "[]", reply: "", holdReplyOpen: true, recorder: recorder)
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        let send = Task { await vm.sendMessage() }
+        try await waitUntil("the chat POST to reach the server") { recorder.lines.contains("POST /api/chat") }
+
+        #expect(vm.isTurnInFlight)
+        #expect(vm.messages.map(\.role) == ["user"])  // the last message is the user's: nothing else on screen yet
+        #expect(vm.showsPendingRow)
+
+        harness.session.invalidateAndCancel()  // end the held-open connection so the send returns
+        await send.value
+    }
+
+    @Test("showsPendingRow turns false once the assistant's partial reply arrives, while the turn is still in flight", .timeLimit(.minutes(1)))
+    func pendingRowHidesOnceTheAssistantReplies() async throws {
+        serve(history: "[]", reply: partialReply, holdReplyOpen: true, recorder: RequestRecorder())
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        let send = Task { await vm.sendMessage() }
+        try await waitUntil("the partial reply to arrive") { vm.messages.last?.displayText == "Hel" }
+
+        #expect(vm.isTurnInFlight)
+        #expect(vm.messages.last?.role == "assistant")
+        #expect(vm.showsPendingRow == false)
+
+        harness.session.invalidateAndCancel()
+        await send.value
+    }
+
+    @Test("showsPendingRow stays true while the last message is a tool result: the model has not spoken since", .timeLimit(.minutes(1)))
+    func pendingRowShowsAfterAToolResult() async throws {
+        serve(history: "[]", reply: toolResultReply, holdReplyOpen: true, recorder: RequestRecorder())
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        let send = Task { await vm.sendMessage() }
+        try await waitUntil("the tool result to arrive") { vm.messages.last?.role == "toolResult" }
+
+        #expect(vm.isTurnInFlight)
+        #expect(vm.showsPendingRow)
+
+        harness.session.invalidateAndCancel()
+        await send.value
+    }
+
+    // MARK: - Stop
+
+    @Test("stop() ends an in-flight turn: the partial reply stays, no error appears, and the composer works again", .timeLimit(.minutes(1)))
+    func stopEndsAnInFlightTurn() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", reply: partialReply, holdReplyOpen: true, recorder: recorder)
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }  // ends the held-open connection even if an assertion below fails
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        let send = Task { await vm.sendMessage() }
+        try await waitUntil("the partial reply to arrive") { vm.messages.last?.displayText == "Hel" }
+        #expect(vm.isTurnInFlight)
+        #expect(vm.canSend == false)
+
+        await vm.stop()
+        try await waitUntil("the stopped turn to end") { vm.status == .idle }
+        await send.value  // `sendMessage` returns by itself: the observer's stream was finished (bounded by the time limit)
+
+        #expect(vm.status == .idle)
+        #expect(vm.messages.map(\.role) == ["user", "assistant"])
+        #expect(vm.messages.last?.displayText == "Hel")  // the partial reply stays
+        #expect(vm.errorMessage == nil)  // a stop is not an error
+        #expect(vm.showsPendingRow == false)
+        #expect(await harness.manager.isStreaming("c1") == false)
+        #expect(recorder.lines.filter { $0 == "POST /api/chat" }.count == 1)
+
+        vm.composerText = "again"
+        #expect(vm.canSend)
+    }
+
+    @Test("stop() with no turn in flight does nothing")
+    func stopWhileIdleIsANoOp() async throws {
+        let recorder = RequestRecorder()
+        serve(history: historyRowsJSON, recorder: recorder)
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        let before = vm.messages
+
+        await vm.stop()
+
+        #expect(vm.status == .idle)
+        #expect(vm.messages == before)
+        #expect(vm.errorMessage == nil)
+        #expect(recorder.lines == ["GET /api/chat/c1"])
+    }
+
+    @Test("stop() from a view model that is not in a turn does not cancel a turn another view model started", .timeLimit(.minutes(1)))
+    func stopFromAnIdleViewModelLeavesTheTurnAlone() async throws {
+        serve(history: "[]", reply: partialReply, holdReplyOpen: true, recorder: RequestRecorder())
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        let first = harness.makeViewModel()
+        await first.loadHistory()
+        first.composerText = "hey"
+        let send = Task { await first.sendMessage() }
+        try await waitUntil("the partial reply to arrive") {
+            await harness.manager.isStreaming("c1") && first.messages.last?.displayText == "Hel"
+        }
+
+        // Same chat, same manager, but this view model never attached to the turn, so it is idle.
+        let bystander = harness.makeViewModel()
+        #expect(bystander.status == .idle)
+        await bystander.stop()
+
+        #expect(await harness.manager.isStreaming("c1"))
+        #expect(first.isTurnInFlight)
+        #expect(first.messages.last?.displayText == "Hel")
+
+        harness.session.invalidateAndCancel()
+        await send.value
     }
 
     @Test("the navigation title comes from the title event, else New Chat for an empty transcript and Chat once there are messages")

@@ -30,6 +30,11 @@ public final class ChatDetailViewModel {
 
     public var isTurnInFlight: Bool { status == .submitted || status == .streaming }
 
+    /// True while a turn is in flight and nothing the assistant said is at the end of the
+    /// transcript yet: from tapping send until the server's first assistant message, and again
+    /// after a tool result. The view shows a "…" bubble so the screen is not dead in the meantime.
+    public var showsPendingRow: Bool { isTurnInFlight && messages.last?.role != "assistant" }
+
     public var canSend: Bool {
         hasLoadedHistory && !isTurnInFlight
             && !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -72,6 +77,15 @@ public final class ChatDetailViewModel {
 
         let updates = await streamManager.send(chatId: chatId, messages: messages, serverConfig: serverConfig)
         await consume(updates)
+    }
+
+    /// Ends the turn in flight (the Stop button): the partial reply stays, and no error is shown.
+    /// `consume` receives the manager's `.status(.idle)` and `.finished` and ends by itself.
+    /// Does nothing when this view model has no turn in flight, so an idle view model can never
+    /// cancel a turn that belongs to someone else.
+    public func stop() async {
+        guard isTurnInFlight else { return }
+        await streamManager.cancel(chatId)
     }
 
     private func consume(_ updates: AsyncStream<ChatStreamUpdate>) async {
