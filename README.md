@@ -1,8 +1,11 @@
 # Exodus iOS
 
-A native iPhone client for the desktop Exodus app (`exodus`): it lists chats, sends messages,
-streams the replies and edits the AI-provider settings, all through the desktop's local HTTP server.
-It stores nothing but the server address. Swift 6, SwiftUI, no third-party dependencies. See the
+A native iPhone client for the desktop Exodus app (`exodus`): a ChatGPT-style slide-out drawer lists your
+Recents and searches them, and the chat beside it sends messages, streams the replies and edits the
+AI-provider settings, all through the desktop's local HTTP server.
+It stores nothing but the server address. Swift 6 and SwiftUI: prefer native frameworks as much as
+possible and reach for a third-party library only where it is clearly worthwhile — today the app has
+none. See the
 [design spec](docs/superpowers/specs/2026-09-18-chat-settings-mvp-design.md) and the
 [implementation plan](docs/superpowers/plans/2026-09-19-chat-settings-mvp.md).
 
@@ -36,10 +39,10 @@ matches nothing and still prints `** TEST SUCCEEDED **`, so look for a `Test run
 
 - `Models`: Codable wire types shared with the desktop (chat messages, SSE events, settings).
 - `NetworkingKit`: REST and SSE clients, `ChatStreamManager` (keeps a reply streaming while you navigate), the stored server address.
-- `ChatFeature`: chat list and chat detail (history, streaming send, Stop).
+- `ChatFeature`: chat sidebar (Recents, search) and chat detail (history, streaming send, Stop).
 - `SettingsFeature`: server address and AI-provider settings.
 - `PhilharmonicFeature`: placeholder for a later phase.
-- `App`: composition root and the Chat/Philharmonic switcher.
+- `App`: composition root, the drawer shell (`SideDrawer`, `AppShell`) and the workspace list.
 
 ## Connecting to the desktop
 
@@ -74,6 +77,14 @@ python3 scripts/l10n.py audit                    # add --source-only while strin
 string whose English text matches one of its own, and `audit` fails when a Swift literal is missing from the
 catalog, a shipped language is untranslated or a placeholder differs from the English.
 
+What the audit actually reads is limited, so prefer the forms it checks. It finds string literals passed to
+`Text`, `Label`, `Button`, `TextField`, `SecureField`, `Section`, `Picker`, `Toggle`, `ContentUnavailableView`,
+`.navigationTitle`, `.accessibilityLabel`/`.accessibilityHint`/`.accessibilityValue`, `.alert`,
+`String(localized:)` and `LocalizedStringResource`, plus CJK characters anywhere in Swift source and ternaries
+of two string literals. Other initializers are NOT checked — `Menu`, `NavigationLink`, `LabeledContent`, `Link`,
+`.confirmationDialog`, `.help`, `.badge` and `.searchable(prompt:)` among them — so a literal passed to one of
+those would ship untranslated without the audit noticing. Use a checked form, or extend the tool first.
+
 Rules the audit enforces or relies on:
 
 - Never build a sentence by concatenation; give the whole sentence a key with placeholders.
@@ -84,6 +95,14 @@ Rules the audit enforces or relies on:
 
 Translations other than English are machine-generated unless they were copied from the desktop, and native
 speakers have not reviewed them.
+
+## Known limits
+
+The sidebar's search field is hand-built rather than `.searchable`, because `.searchable` was inert inside the
+drawer on the iOS 27.0 simulator. Translations other than English are machine-generated unless they were copied
+from the desktop, and no native speaker has reviewed them. There are no automated UI tests for the drawer: a
+committed test would need a stub server, so the drawer, the search flow and the ten languages were checked by
+hand in the Simulator with a temporary XCUITest target that is not part of this repository.
 
 ## Security note
 

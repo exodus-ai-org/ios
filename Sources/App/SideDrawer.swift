@@ -62,6 +62,9 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
                         .accessibilityElement()
                         .accessibilityLabel("Close sidebar")
                         .accessibilityAddTraits(.isButton)
+                        // `onTapGesture` alone can be dead to a VoiceOver activation of a synthesized
+                        // element, so spell the action out.
+                        .accessibilityAction { setOpen(false) }
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -83,7 +86,12 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
     private func dragGesture(drawerWidth: CGFloat, base: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12)
             .updating($drag) { value, state, _ in
-                guard isHorizontal(value.translation), canStart(at: value.startLocation) else { return }
+                // Reset, never return early: a drag that turns vertical after starting horizontal would
+                // otherwise leave the card parked at the offset of its last horizontal sample.
+                guard isHorizontal(value.translation), canStart(at: value.startLocation) else {
+                    state = 0
+                    return
+                }
                 state = value.translation.width
             }
             .onEnded { value in

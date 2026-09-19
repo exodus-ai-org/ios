@@ -22,6 +22,10 @@ struct WorkspaceRow: View {
                 }
             }
         }
+        // Without a style the row takes the button tint; `.plain` plus an explicit foreground keeps it
+        // consistent with the Recents rows and lets the unavailable workspace read as unavailable.
+        .buttonStyle(.plain)
+        .foregroundStyle(option.isAvailable ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
         .disabled(!option.isAvailable)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
