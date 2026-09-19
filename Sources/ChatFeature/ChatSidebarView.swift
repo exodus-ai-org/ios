@@ -58,11 +58,12 @@ public struct ChatSidebarView<Workspaces: View>: View {
                         ForEach(list.chats) { chat in
                             row(for: chat)
                         }
+                        recentsStateRow
                     }
                 }
             }
             .listStyle(.plain)
-            .overlay { overlayContent }
+            .overlay { searchStateOverlay }
             .navigationTitle(isSearching ? "" : Self.appName)
             .navigationBarTitleDisplayMode(isSearching ? .inline : .large)
             .safeAreaBar(edge: .top) {
@@ -156,8 +157,47 @@ public struct ChatSidebarView<Workspaces: View>: View {
 
     // MARK: - States
 
+    /// A row of the Recents section, not an overlay of the whole list: the list carries the workspace
+    /// rows now, and a centred overlay covered them — at an accessibility text size it printed "Can't
+    /// load chats" straight across Chat and Philharmonic.
     @ViewBuilder
-    private var overlayContent: some View {
+    private var recentsStateRow: some View {
+        if list.chats.isEmpty {
+            Group {
+                // Not loaded yet reads as "loading", never as "No chats yet".
+                if list.isLoading || !list.hasLoaded {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else if list.loadFailed {
+                    ContentUnavailableView {
+                        Label("Can't load chats", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        // The error text lives here, not in an alert (see `showsErrorAlert`).
+                        VStack(spacing: 4) {
+                            if let message = list.errorMessage {
+                                Text(message)
+                            }
+                            Text("Pull down or tap Retry to try again.")
+                        }
+                    } actions: {
+                        // A list row makes its buttons plain, which would leave Retry looking like
+                        // static text; `.borderless` gives it the tint back.
+                        Button("Retry") { Task { await list.load() } }
+                            .buttonStyle(.borderless)
+                    }
+                } else {
+                    ContentUnavailableView("No chats yet", systemImage: "message")
+                }
+            }
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+        }
+    }
+
+    /// Search mode keeps its overlay: the results it would cover are the ones it replaces, and the
+    /// spinner over stale results while a new query runs is the point.
+    @ViewBuilder
+    private var searchStateOverlay: some View {
         if isSearching && search.hasQuery {
             switch search.phase {
             // A retry shows the spinner too, so Retry gives feedback and the failure view is not
@@ -177,27 +217,6 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 ContentUnavailableView("No results", systemImage: "magnifyingglass")
             case .idle, .results:
                 EmptyView()
-            }
-        } else if list.chats.isEmpty {
-            // Not loaded yet reads as "loading", never as "No chats yet".
-            if list.isLoading || !list.hasLoaded {
-                ProgressView()
-            } else if list.loadFailed {
-                ContentUnavailableView {
-                    Label("Can't load chats", systemImage: "wifi.exclamationmark")
-                } description: {
-                    // The error text lives here, not in an alert (see `showsErrorAlert`).
-                    VStack(spacing: 4) {
-                        if let message = list.errorMessage {
-                            Text(message)
-                        }
-                        Text("Pull down or tap Retry to try again.")
-                    }
-                } actions: {
-                    Button("Retry") { Task { await list.load() } }
-                }
-            } else {
-                ContentUnavailableView("No chats yet", systemImage: "message")
             }
         }
     }
