@@ -71,6 +71,7 @@ public struct SettingsView: View {
                     } label: {
                         if viewModel.isLoadingModels {
                             ProgressView()
+                                .accessibilityLabel("Loading models")
                         } else {
                             Text("Refresh model list")
                         }

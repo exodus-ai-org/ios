@@ -55,14 +55,20 @@ struct RootView: View {
                         HStack(spacing: 4) {
                             Text(workspace.rawValue).font(.headline)
                             Image(systemName: "chevron.down").font(.caption)
+                                .accessibilityHidden(true)
                         }
                     }
+                    // The label names the control; the value keeps the current workspace readable.
+                    .accessibilityLabel("Workspace")
+                    .accessibilityValue(workspace.rawValue)
+                    .accessibilityHint("Switch between Chat and Philharmonic")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showSettings = true
                     } label: {
-                        Image(systemName: "gearshape")
+                        Label("Settings", systemImage: "gearshape")
+                            .labelStyle(.iconOnly)
                     }
                 }
             }
