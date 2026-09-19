@@ -27,6 +27,18 @@ public struct ModelSnapshot: Codable, Equatable, Sendable {
         self.reasoningLevels = reasoningLevels
         self.cost = cost
     }
+
+    /// Tolerant on purpose: the desktop's schema defaults `reasoningLevels` to `[]` and its server
+    /// stores whatever settings are posted, so a stored snapshot can lack any key. A strict decode
+    /// would fail the whole `SettingsSnapshot`, and the phone could then never load or save
+    /// settings. Encoding stays the synthesized one (all four keys, `nil` optionals omitted).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        contextWindow = try container.decodeIfPresent(Double.self, forKey: .contextWindow)
+        maxOutputTokens = try container.decodeIfPresent(Double.self, forKey: .maxOutputTokens)
+        reasoningLevels = try container.decodeIfPresent([String].self, forKey: .reasoningLevels) ?? []
+        cost = try container.decodeIfPresent(ModelCost.self, forKey: .cost)
+    }
 }
 
 public struct ProviderConfig: Codable, Equatable, Sendable {

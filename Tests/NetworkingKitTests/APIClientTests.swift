@@ -141,6 +141,97 @@ struct APIClientTests {
         #expect(recorder.requests.count == 1)
     }
 
+    // MARK: - Non-2xx with no usable body
+
+    @Test("a non-2xx with an empty body reads 'HTTP <status>', not a blank message")
+    func emptyErrorBodyFallsBackToTheStatus() async throws {
+        let recorder = stub(status: 502)
+        await #expect(
+            throws: HTTPError(statusCode: 502, code: "UNKNOWN_ERROR", message: "HTTP 502")
+        ) {
+            try await makeClient().delete("/api/chat/c1")
+        }
+        #expect(recorder.requests.count == 1)
+    }
+
+    @Test("a non-2xx with a whitespace-only body reads 'HTTP <status>' too")
+    func whitespaceErrorBodyFallsBackToTheStatus() async throws {
+        let recorder = stub(status: 502, body: " \n\t ")
+        await #expect(
+            throws: HTTPError(statusCode: 502, code: "UNKNOWN_ERROR", message: "HTTP 502")
+        ) {
+            let _: [ChatSummary] = try await makeClient().get("/api/history")
+        }
+        #expect(recorder.requests.count == 1)
+    }
+
+    @Test("a non-2xx with a plain-text body keeps that text as the message")
+    func plainTextErrorBodyIsKept() async throws {
+        let recorder = stub(status: 502, body: "Bad Gateway")
+        await #expect(
+            throws: HTTPError(statusCode: 502, code: "UNKNOWN_ERROR", message: "Bad Gateway")
+        ) {
+            try await makeClient().delete("/api/chat/c1")
+        }
+        #expect(recorder.requests.count == 1)
+    }
+
+    // MARK: - Requests go to the configured base URL
+
+    /// A client on its own isolated `UserDefaults` suite (removed first and again afterwards), so a
+    /// test that changes the address cannot leak it into another test's client.
+    private func withConfiguredClient(
+        suite: String, baseURL: String?,
+        _ body: (APIClient, ServerConfigStore) async throws -> Void
+    ) async throws {
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let serverConfig = ServerConfigStore(userDefaults: defaults)
+        if let baseURL { serverConfig.baseURLString = baseURL }
+        let client = APIClient(session: MockURLProtocol.makeSession(), serverConfig: serverConfig)
+        try await body(client, serverConfig)
+    }
+
+    @Test("a request goes to the address in ServerConfigStore, not a hardcoded one")
+    func requestGoesToTheConfiguredBaseURL() async throws {
+        let recorder = stub(status: 200, body: "[]")
+        try await withConfiguredClient(suite: "APIClientTests.configuredBaseURL", baseURL: "http://192.168.1.10:8080") {
+            client, _ in
+            let _: [ChatSummary] = try await client.get("/api/history")
+        }
+        let request = try #require(recorder.requests.first)
+        #expect(recorder.requests.count == 1)
+        #expect(request.url?.absoluteString == "http://192.168.1.10:8080/api/history")
+        #expect(request.url?.host == "192.168.1.10")
+        #expect(request.url?.port == 8080)
+        #expect(request.url?.scheme == "http")
+    }
+
+    @Test("the address is read on every request: changing it between two calls changes where the second goes")
+    func changingTheAddressRedirectsTheNextRequest() async throws {
+        let recorder = stub(status: 200, body: "[]")
+        try await withConfiguredClient(suite: "APIClientTests.changingBaseURL", baseURL: "http://192.168.1.10:8080") {
+            client, serverConfig in
+            let _: [ChatSummary] = try await client.get("/api/history")
+            serverConfig.baseURLString = "http://192.168.1.20:9090"
+            let _: [ChatSummary] = try await client.get("/api/history")
+        }
+        #expect(
+            recorder.requests.map { $0.url?.absoluteString } == [
+                "http://192.168.1.10:8080/api/history", "http://192.168.1.20:9090/api/history"
+            ])
+    }
+
+    @Test("with nothing configured a request goes to the default desktop address")
+    func unconfiguredRequestGoesToTheDefaultAddress() async throws {
+        let recorder = stub(status: 200, body: "[]")
+        try await withConfiguredClient(suite: "APIClientTests.defaultBaseURL", baseURL: nil) { client, _ in
+            let _: [ChatSummary] = try await client.get("/api/history")
+        }
+        #expect(recorder.requests.first?.url?.absoluteString == "http://localhost:60223/api/history")
+    }
+
     @Test("a non-2xx Anthropic-style error body throws HTTPError with the server's message")
     func throwsHTTPErrorOnFailure() async throws {
         MockURLProtocol.handler = { _ in
@@ -169,6 +260,7 @@ private final class RequestRecorder: Sendable {
     struct RecordedRequest: Sendable {
         let method: String?
         let path: String?
+        let url: URL?
         let body: Data
     }
 
@@ -176,7 +268,7 @@ private final class RequestRecorder: Sendable {
 
     func record(_ request: URLRequest) throws {
         let body = try request.httpBodyStreamData()
-        let entry = RecordedRequest(method: request.httpMethod, path: request.url?.path, body: body)
+        let entry = RecordedRequest(method: request.httpMethod, path: request.url?.path, url: request.url, body: body)
         storage.withLock { $0.append(entry) }
     }
 

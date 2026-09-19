@@ -85,6 +85,82 @@ struct SettingsTests {
         #expect(updated == ProvidersConfig())
     }
 
+    // MARK: - ModelSnapshot tolerates missing keys (the server persists posted settings without validation)
+
+    @Test("an empty snapshot object decodes to the defaults instead of throwing")
+    func emptyModelSnapshotDecodesToDefaults() throws {
+        let snapshot = try JSONDecoder().decode(ModelSnapshot.self, from: Data("{}".utf8))
+        #expect(snapshot == ModelSnapshot())
+        #expect(snapshot.reasoningLevels == [])
+        #expect(snapshot.contextWindow == nil)
+        #expect(snapshot.maxOutputTokens == nil)
+        #expect(snapshot.cost == nil)
+    }
+
+    @Test("a snapshot whose every field is null decodes to the defaults")
+    func nullModelSnapshotFieldsDecodeToDefaults() throws {
+        let json = #"{"contextWindow":null,"maxOutputTokens":null,"reasoningLevels":null,"cost":null}"#
+        let snapshot = try JSONDecoder().decode(ModelSnapshot.self, from: Data(json.utf8))
+        #expect(snapshot == ModelSnapshot())
+    }
+
+    @Test("a snapshot with only some keys keeps those values and defaults the rest")
+    func partialModelSnapshotKeepsWhatIsThere() throws {
+        let json = #"{"contextWindow":200000,"cost":{"input":3,"output":15}}"#
+        let snapshot = try JSONDecoder().decode(ModelSnapshot.self, from: Data(json.utf8))
+        #expect(snapshot.contextWindow == 200000)
+        #expect(snapshot.cost == ModelCost(input: 3, output: 15))
+        #expect(snapshot.maxOutputTokens == nil)
+        #expect(snapshot.reasoningLevels == [])
+    }
+
+    @Test("a full snapshot round-trips through encode and decode unchanged, with all four keys on the wire")
+    func fullModelSnapshotRoundTrips() throws {
+        let original = ModelSnapshot(
+            contextWindow: 200000, maxOutputTokens: 8192, reasoningLevels: ["off", "low", "high"],
+            cost: ModelCost(input: 3, output: 15))
+        let data = try JSONEncoder().encode(original)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(Set(object.keys) == ["contextWindow", "maxOutputTokens", "reasoningLevels", "cost"])
+        #expect(try JSONDecoder().decode(ModelSnapshot.self, from: data) == original)
+    }
+
+    @Test("a default snapshot still encodes reasoningLevels as an empty array and round-trips")
+    func defaultModelSnapshotRoundTrips() throws {
+        let data = try JSONEncoder().encode(ModelSnapshot())
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect((object["reasoningLevels"] as? [Any])?.isEmpty == true)
+        #expect(try JSONDecoder().decode(ModelSnapshot.self, from: data) == ModelSnapshot())
+    }
+
+    @Test("a settings snapshot whose stored modelSnapshot lacks reasoningLevels still decodes")
+    func settingsSnapshotWithLegacyModelSnapshotDecodes() throws {
+        let json = """
+            {
+              "id": "global",
+              "providerConfig": {
+                "provider": "Anthropic Claude",
+                "model": "claude-sonnet-5",
+                "modelSnapshot": {"contextWindow": 200000, "maxOutputTokens": 8192, "cost": {"input": 3, "output": 15}}
+              },
+              "providers": {"anthropicApiKey": "sk-ant-xyz"}
+            }
+            """
+        let snapshot = try JSONDecoder().decode(SettingsSnapshot.self, from: Data(json.utf8))
+        #expect(snapshot.providerConfig?.provider == "Anthropic Claude")
+        #expect(snapshot.providerConfig?.modelSnapshot?.contextWindow == 200000)
+        #expect(snapshot.providerConfig?.modelSnapshot?.reasoningLevels == [])
+        #expect(snapshot.providers?.anthropicApiKey == "sk-ant-xyz")
+    }
+
+    @Test("a catalog entry whose snapshot lacks reasoningLevels still decodes")
+    func catalogEntryWithoutReasoningLevelsDecodes() throws {
+        let json = #"{"models":[{"id":"m1","displayName":"Model One","snapshot":{}}]}"#
+        let response = try JSONDecoder().decode(ListModelsResponse.self, from: Data(json.utf8))
+        #expect(response.models.map(\.id) == ["m1"])
+        #expect(response.models[0].snapshot == ModelSnapshot())
+    }
+
     @Test("decodes a live model catalog response")
     func decodesListModelsResponse() throws {
         let json = """

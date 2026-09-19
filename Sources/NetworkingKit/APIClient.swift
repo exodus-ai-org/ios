@@ -58,8 +58,12 @@ public struct APIClient: Sendable {
         if let envelope = try? JSONDecoder().decode(ServerErrorEnvelope.self, from: data) {
             throw HTTPError(statusCode: http.statusCode, code: envelope.error.code, message: envelope.error.message)
         }
-        let fallbackMessage = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
-        throw HTTPError(statusCode: http.statusCode, code: "UNKNOWN_ERROR", message: fallbackMessage)
+        // `String(data: Data(), encoding: .utf8)` is `""`, not nil, so an empty body (a proxy's bare
+        // 502) must be caught explicitly or the user gets a blank alert. Text that has content is
+        // kept exactly as the server sent it.
+        let text = String(data: data, encoding: .utf8) ?? ""
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "HTTP \(http.statusCode)" : text
+        throw HTTPError(statusCode: http.statusCode, code: "UNKNOWN_ERROR", message: message)
     }
 }
 
