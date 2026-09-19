@@ -10,8 +10,8 @@ public struct APIClient: Sendable {
         self.serverConfig = serverConfig
     }
 
-    public func get<T: Decodable>(_ path: String) async throws -> T {
-        try await send(path: path, method: "GET", body: Optional<String>.none)
+    public func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+        try await send(path: path, query: query, method: "GET", body: Optional<String>.none)
     }
 
     public func post<Body: Encodable, T: Decodable>(_ path: String, body: Body) async throws -> T {
@@ -29,6 +29,7 @@ public struct APIClient: Sendable {
 
     private func send<Body: Encodable, T: Decodable>(
         path: String,
+        query: [URLQueryItem] = [],
         method: String,
         body: Body?,
         decodeResponse: Bool = true
@@ -38,7 +39,20 @@ public struct APIClient: Sendable {
                 statusCode: 0, code: "INVALID_BASE_URL",
                 message: String(localized: "Invalid server URL: \(serverConfig.baseURLString)"))
         }
-        var request = URLRequest(url: base.appendingPathComponent(path))
+        var url = base.appendingPathComponent(path)
+        if !query.isEmpty {
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            components?.percentEncodedQuery = query
+                .map { "\(Self.encodeQueryComponent($0.name))=\(Self.encodeQueryComponent($0.value ?? ""))" }
+                .joined(separator: "&")
+            guard let withQuery = components?.url else {
+                throw HTTPError(
+                    statusCode: 0, code: "INVALID_BASE_URL",
+                    message: String(localized: "Invalid server URL: \(serverConfig.baseURLString)"))
+            }
+            url = withQuery
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         if let body {
             request.httpBody = try JSONEncoder().encode(body)
@@ -52,6 +66,14 @@ public struct APIClient: Sendable {
             return EmptyResponse() as! T
         }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// Percent-encodes one query name or value. `+ & = # ? ;` are encoded too (unlike
+    /// `urlQueryAllowed`), so a value such as `c++ & 100%` reaches the server as typed.
+    private static func encodeQueryComponent(_ text: String) -> String {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "+&=#?;")
+        return text.addingPercentEncoding(withAllowedCharacters: allowed) ?? text
     }
 
     private static func throwIfError(data: Data, response: URLResponse) throws {

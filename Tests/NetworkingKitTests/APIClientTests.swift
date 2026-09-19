@@ -250,6 +250,36 @@ struct APIClientTests {
             #expect(error.message == "API key is required")
         }
     }
+
+    @Test("get(_:query:) percent-encodes reserved characters so the server decodes the original text")
+    func getEncodesReservedCharacters() async throws {
+        let recorder = stub(status: 200, body: "[]")
+        let _: [ChatSummary] = try await makeClient().get(
+            "/api/v1/chat/search", query: [URLQueryItem(name: "query", value: "c++ & 100%")])
+        let url = try #require(recorder.requests.first?.url)
+        #expect(url.path == "/api/v1/chat/search")
+        #expect(url.absoluteString.hasSuffix("/api/v1/chat/search?query=c%2B%2B%20%26%20100%25"))
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        #expect(items == [URLQueryItem(name: "query", value: "c++ & 100%")])
+    }
+
+    @Test("query values with CJK text, spaces and # are UTF-8 percent-encoded")
+    func getEncodesCJKAndFragmentCharacters() async throws {
+        let recorder = stub(status: 200, body: "[]")
+        let _: [ChatSummary] = try await makeClient().get(
+            "/api/v1/chat/search", query: [URLQueryItem(name: "query", value: "你好 #1")])
+        let url = try #require(recorder.requests.first?.url)
+        #expect(url.absoluteString.hasSuffix("?query=%E4%BD%A0%E5%A5%BD%20%231"))
+    }
+
+    @Test("a get without query items sends no question mark")
+    func getWithoutQueryHasNoQueryString() async throws {
+        let recorder = stub(status: 200, body: "[]")
+        let _: [ChatSummary] = try await makeClient().get("/api/v1/history")
+        let url = try #require(recorder.requests.first?.url)
+        #expect(url.query == nil)
+        #expect(url.absoluteString.hasSuffix("/api/v1/history"))
+    }
 }
 
 /// Log of the requests that reached `MockURLProtocol`. The handler runs on
