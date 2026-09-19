@@ -1,6 +1,19 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "CFBundleName" : {
+      "comment" : "Bundle name. The app name is a brand and is never translated.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus"
+          }
+        }
+      },
+      "shouldTranslate" : false
+    },
     "NSLocalNetworkUsageDescription" : {
       "comment" : "Local-network permission prompt. Exodus is the app's name and stays as is.",
       "extractionState" : "manual",
