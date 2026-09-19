@@ -21,6 +21,10 @@ private func moduleTarget(
 
 let project = Project(
     name: "ExodusIos",
+    options: .options(
+        defaultKnownRegions: ["en", "zh-Hant", "zh-HK", "ja", "ko", "fr", "de", "es", "pt-BR", "it"],
+        developmentRegion: "en"
+    ),
     settings: .settings(base: ["SWIFT_VERSION": "6.0"]),
     targets: [
         .target(
@@ -37,7 +41,7 @@ let project = Project(
                         "NSAllowsLocalNetworking": true
                     ],
                     "NSLocalNetworkUsageDescription":
-                        "Exodus 需要访问本地网络以连接到你电脑上运行的 Exodus 服务。"
+                        "Exodus needs local network access to connect to the Exodus service running on your computer."
                 ]
             ),
             buildableFolders: ["Sources/App", "Resources/App"],

@@ -37,11 +37,17 @@ struct MessageRow: View {
             }
         case "toolResult":
             HStack(spacing: 6) {
-                Image(systemName: message.isError ? "exclamationmark.triangle" : "checkmark.circle")
+                Image(systemName: message.isError ? "exclamationmark.triangle" : "checkmark.circle") // l10n:ignore: SF Symbol names
                     .foregroundStyle(message.isError ? .red : .secondary)
-                Text("Used: \(message.toolName ?? "tool")")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if let toolName = message.toolName {
+                    Text("Used: \(toolName)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Used a tool")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
             }
         default:

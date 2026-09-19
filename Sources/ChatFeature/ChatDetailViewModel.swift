@@ -40,7 +40,9 @@ public final class ChatDetailViewModel {
             && !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    public var displayTitle: String { chatTitle ?? (messages.isEmpty ? "New Chat" : "Chat") }
+    public var displayTitle: String {
+        chatTitle ?? (messages.isEmpty ? String(localized: "New chat") : String(localized: "Chat"))
+    }
 
     public func onAppear() async {
         if await streamManager.isStreaming(chatId), let updates = await streamManager.attach(chatId) {

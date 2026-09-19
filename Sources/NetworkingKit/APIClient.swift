@@ -34,7 +34,9 @@ public struct APIClient: Sendable {
         decodeResponse: Bool = true
     ) async throws -> T {
         guard let base = URL(string: serverConfig.baseURLString) else {
-            throw HTTPError(statusCode: 0, code: "INVALID_BASE_URL", message: "Invalid server URL: \(serverConfig.baseURLString)")
+            throw HTTPError(
+                statusCode: 0, code: "INVALID_BASE_URL",
+                message: String(localized: "Invalid server URL: \(serverConfig.baseURLString)"))
         }
         var request = URLRequest(url: base.appendingPathComponent(path))
         request.httpMethod = method
@@ -62,7 +64,9 @@ public struct APIClient: Sendable {
         // 502) must be caught explicitly or the user gets a blank alert. Text that has content is
         // kept exactly as the server sent it.
         let text = String(data: data, encoding: .utf8) ?? ""
-        let message = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "HTTP \(http.statusCode)" : text
+        let message =
+            text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? String(localized: "HTTP \(http.statusCode)") : text
         throw HTTPError(statusCode: http.statusCode, code: "UNKNOWN_ERROR", message: message)
     }
 }

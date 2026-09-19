@@ -46,8 +46,44 @@ matches nothing and still prints `** TEST SUCCEEDED **`, so look for a `Test run
 Run the desktop app from `../exodus` (`bun start`); it serves the API on port 60223 under `/api/v1`, the
 versioned prefix this app addresses. The default address, `http://localhost:60223`, works from the Simulator
 on the same Mac. On a real iPhone open Settings (gear),
-then 连接, and enter the Mac's LAN IP or `<name>.local` with the port, e.g. `http://192.168.1.10:60223`.
+then Connection, and enter the Mac's LAN IP or `<name>.local` with the port, e.g. `http://192.168.1.10:60223`.
 iOS asks once for local-network permission.
+
+## Localization
+
+Every user-visible string lives in `Resources/App/Localizable.xcstrings`, and the permission prompt in
+`Resources/App/InfoPlist.xcstrings`. Both are keyed by the English source text. SwiftUI string literals
+(`Text("Save")`, `Button("Cancel")`, `.navigationTitle(...)`) localize automatically; other code uses
+`String(localized: "…")` or `LocalizedStringResource("…")`. The modules are static frameworks, so every
+string resolves from the app's main bundle.
+
+The shipped languages are English (the source), Traditional Chinese for Taiwan (`zh-Hant`) and for Hong Kong
+(`zh-HK`), Japanese, Korean, French, German, Spanish, Brazilian Portuguese and Italian. There is no Simplified
+Chinese, matching the desktop: a Simplified Chinese phone shows English.
+
+`scripts/l10n.py` (Python 3.9, standard library only) maintains the catalogs:
+
+```sh
+python3 scripts/l10n.py add "Text" --comment "Where it appears and what any %@ stands for."
+python3 scripts/l10n.py fill translations.json   # {"Text": {"de": "…", "ja": "…"}}
+python3 scripts/l10n.py seed-from-desktop ~/Code/exodus/exodus/packages/shared/src/i18n/locales
+python3 scripts/l10n.py audit                    # add --source-only while strings are still being added
+```
+
+`add` creates the key, `fill` merges translations, `seed-from-desktop` copies the desktop's translation of every
+string whose English text matches one of its own, and `audit` fails when a Swift literal is missing from the
+catalog, a shipped language is untranslated or a placeholder differs from the English.
+
+Rules the audit enforces or relies on:
+
+- Never build a sentence by concatenation; give the whole sentence a key with placeholders.
+- Never pass a ternary of two string literals to a SwiftUI text initializer, because it can resolve to the
+  non-localizing `String` overload. Use `if`/`else` with one literal per branch.
+- User data (chat titles, search snippets, server text, model names) is shown from a `String` variable or
+  `Text(verbatim:)`, never as a literal key.
+
+Translations other than English are machine-generated unless they were copied from the desktop, and native
+speakers have not reviewed them.
 
 ## Security note
 

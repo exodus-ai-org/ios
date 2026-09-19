@@ -13,17 +13,22 @@ public struct SettingsView: View {
     public var body: some View {
         NavigationStack {
             Form {
-                Section("连接") {
-                    TextField("http://192.168.1.10:60223", text: $viewModel.serverURLText)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .onSubmit {
-                            // A new address means a different server: reload its provider settings.
-                            if viewModel.saveServerURL() {
-                                Task { await viewModel.loadSettings() }
-                            }
+                Section("Connection") {
+                    TextField(
+                        text: $viewModel.serverURLText,
+                        prompt: Text(verbatim: "http://192.168.1.10:60223")
+                    ) {
+                        Text("Server address")
+                    }
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .onSubmit {
+                        // A new address means a different server: reload its provider settings.
+                        if viewModel.saveServerURL() {
+                            Task { await viewModel.loadSettings() }
                         }
+                    }
                 }
 
                 Section("AI Providers") {
@@ -88,7 +93,7 @@ public struct SettingsView: View {
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(viewModel.hasLoadedSettings ? "Save" : "Connect") {
+                    Button {
                         Task {
                             guard viewModel.saveServerURL() else { return }
                             // Not loaded (first run, or the address just changed): connect to that server and
@@ -100,6 +105,12 @@ public struct SettingsView: View {
                             if await viewModel.save() {
                                 dismiss()
                             }
+                        }
+                    } label: {
+                        if viewModel.hasLoadedSettings {
+                            Text("Save")
+                        } else {
+                            Text("Connect")
                         }
                     }
                     .disabled(viewModel.isSaving || viewModel.isLoading)

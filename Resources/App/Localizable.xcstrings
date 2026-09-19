@@ -1,0 +1,114 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "AI Providers" : {
+      "comment" : "Settings section header.",
+      "extractionState" : "manual"
+    },
+    "API Key" : {
+      "comment" : "Field label for a provider's API key.",
+      "extractionState" : "manual"
+    },
+    "Cancel" : {
+      "comment" : "Dismisses a screen or leaves search, changing nothing.",
+      "extractionState" : "manual"
+    },
+    "Chat" : {
+      "comment" : "Name of the chat workspace, and the title of an open conversation that has no name yet.",
+      "extractionState" : "manual"
+    },
+    "Coming soon" : {
+      "comment" : "Marks a workspace that is not available yet, and the title of its placeholder screen.",
+      "extractionState" : "manual"
+    },
+    "Connect" : {
+      "comment" : "Toolbar button in Settings before the server's settings are loaded.",
+      "extractionState" : "manual"
+    },
+    "Connect to the server and load its settings before saving." : {
+      "comment" : "Error shown when saving is attempted before the server's settings were loaded.",
+      "extractionState" : "manual"
+    },
+    "Connection" : {
+      "comment" : "Settings section header for the server address.",
+      "extractionState" : "manual"
+    },
+    "HTTP %lld" : {
+      "comment" : "Fallback error text for a server response without a message. %lld is the HTTP status code.",
+      "extractionState" : "manual"
+    },
+    "Invalid server URL" : {
+      "comment" : "Short error when the stored server address cannot be parsed.",
+      "extractionState" : "manual"
+    },
+    "Invalid server URL: %@" : {
+      "comment" : "Error. %@ is the address the user typed.",
+      "extractionState" : "manual"
+    },
+    "Loading models" : {
+      "comment" : "Accessibility label of the spinner while the model list loads.",
+      "extractionState" : "manual"
+    },
+    "Model" : {
+      "comment" : "Label for the AI model field or picker.",
+      "extractionState" : "manual"
+    },
+    "New chat" : {
+      "comment" : "Button that starts a new conversation, and the title of an empty conversation.",
+      "extractionState" : "manual"
+    },
+    "Ollama runs on your Mac and needs no API key." : {
+      "comment" : "Footnote shown instead of the API key field when the Ollama provider is selected.",
+      "extractionState" : "manual"
+    },
+    "Provider" : {
+      "comment" : "Picker label: which AI provider to use.",
+      "extractionState" : "manual"
+    },
+    "Refresh model list" : {
+      "comment" : "Button that reloads the provider's model list.",
+      "extractionState" : "manual"
+    },
+    "Save" : {
+      "comment" : "Toolbar button in Settings.",
+      "extractionState" : "manual"
+    },
+    "Select a model" : {
+      "comment" : "Placeholder row in the model picker when no model is chosen.",
+      "extractionState" : "manual"
+    },
+    "Server address" : {
+      "comment" : "Accessibility label of the server address field in Settings.",
+      "extractionState" : "manual"
+    },
+    "Server address must look like %@" : {
+      "comment" : "Validation error. %@ is an example address such as http://192.168.1.10:60223 and must stay unchanged.",
+      "extractionState" : "manual"
+    },
+    "Settings" : {
+      "comment" : "Title of the Settings screen and accessibility label of the gear button.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen"
+          }
+        }
+      }
+    },
+    "The Philharmonic multi-agent workspace hasn't been ported to iOS yet." : {
+      "comment" : "Placeholder screen body. Philharmonic is a product name and stays untranslated.",
+      "extractionState" : "manual"
+    },
+    "Used a tool" : {
+      "comment" : "Row for a tool call whose name is unknown.",
+      "extractionState" : "manual"
+    },
+    "Used: %@" : {
+      "comment" : "Row for a tool call in the transcript. %@ is the tool's name.",
+      "extractionState" : "manual"
+    }
+  },
+  "version" : "1.0"
+}

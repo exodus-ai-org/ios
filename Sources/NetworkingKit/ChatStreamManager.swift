@@ -75,7 +75,7 @@ public actor ChatStreamManager {
 
         let task = Task { [weak self] in
             guard let request else {
-                await self?.fail(chatId: chatId, generation: generation, message: "Invalid server URL")
+                await self?.fail(chatId: chatId, generation: generation, message: String(localized: "Invalid server URL"))
                 return
             }
             do {

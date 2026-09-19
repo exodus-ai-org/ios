@@ -1,0 +1,18 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSLocalNetworkUsageDescription" : {
+      "comment" : "Local-network permission prompt. Exodus is the app's name and stays as is.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus needs local network access to connect to the Exodus service running on your computer."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

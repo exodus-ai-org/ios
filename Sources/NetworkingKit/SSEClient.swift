@@ -19,7 +19,9 @@ public struct SSEClient: Sendable {
                         if let envelope = try? JSONDecoder().decode(ServerErrorEnvelope.self, from: body) {
                             throw HTTPError(statusCode: http.statusCode, code: envelope.error.code, message: envelope.error.message)
                         }
-                        throw HTTPError(statusCode: http.statusCode, code: "UNKNOWN_ERROR", message: "HTTP \(http.statusCode)")
+                        throw HTTPError(
+                            statusCode: http.statusCode, code: "UNKNOWN_ERROR",
+                            message: String(localized: "HTTP \(http.statusCode)"))
                     }
                     for try await line in bytes.lines {
                         if let event = SSEFrameParsing.decodeEvent(fromLine: line) {

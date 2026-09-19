@@ -542,11 +542,11 @@ struct ChatDetailViewModelTests {
         await send.value
     }
 
-    @Test("the navigation title comes from the title event, else New Chat for an empty transcript and Chat once there are messages")
+    @Test("the navigation title comes from the title event, else New chat for an empty transcript and Chat once there are messages")
     func displayTitle() async throws {
         serve(history: historyRowsJSON, recorder: RequestRecorder())
         let vm = Harness().makeViewModel()
-        #expect(vm.displayTitle == "New Chat")
+        #expect(vm.displayTitle == "New chat")
         await vm.loadHistory()
         #expect(vm.displayTitle == "Chat")
     }

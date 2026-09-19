@@ -21,6 +21,8 @@ public final class SettingsViewModel {
     /// without it: a form that never loaded must not overwrite a server it has not seen.
     public private(set) var hasLoadedSettings = false
 
+    private static let exampleServerURL = "http://192.168.1.10:60223"
+
     private let apiClient: APIClient
     private let serverConfig: ServerConfigStore
 
@@ -54,7 +56,7 @@ public final class SettingsViewModel {
               let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
               let host = url.host, !host.isEmpty
         else {
-            errorMessage = "Server address must look like http://192.168.1.10:60223"
+            errorMessage = String(localized: "Server address must look like \(Self.exampleServerURL)")
             return false
         }
         errorMessage = nil
@@ -159,7 +161,7 @@ public final class SettingsViewModel {
     @discardableResult
     public func save() async -> Bool {
         guard hasLoadedSettings else {
-            errorMessage = "Connect to the server and load its settings before saving."
+            errorMessage = String(localized: "Connect to the server and load its settings before saving.")
             return false
         }
         isSaving = true
