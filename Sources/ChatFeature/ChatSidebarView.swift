@@ -75,7 +75,11 @@ public struct ChatSidebarView<Workspaces: View>: View {
             }
             .toolbar { sidebarToolbar }
             // Hidden while searching so it cannot ghost through the keyboard.
-            .toolbarVisibility(isSearching ? .hidden : .visible, for: .bottomBar)
+            .safeAreaBar(edge: .bottom) {
+                if !isSearching {
+                    bottomBar
+                }
+            }
             // A full `load()`, not `refresh()`: this runs at launch and again after Settings closes, and
             // Settings can change the server address, so a silent refresh could leave the old server's
             // chats on screen.
@@ -235,21 +239,37 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 .accessibilityIdentifier("sidebarSearch")
             }
         }
-        ToolbarItem(placement: .bottomBar) {
+    }
+
+    /// A bar of its own, not `ToolbarItem(placement: .bottomBar)`: a bottom-bar item ignores
+    /// `.labelStyle(.titleAndIcon)` and rendered New chat as a bare compose glyph, while the design
+    /// asks for a labelled pill next to the round gear.
+    private var bottomBar: some View {
+        HStack {
             Button(action: onNewChat) {
                 Label("New chat", systemImage: "square.and.pencil")
                     .labelStyle(.titleAndIcon)
+                    // The longest translation ("Nouvelle conversation") must fit on one line next to
+                    // the gear, in a sidebar 0.78 of the screen wide.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
             }
             .buttonStyle(.glassProminent)
             .accessibilityIdentifier("sidebarNewChat")
-        }
-        ToolbarSpacer(.flexible, placement: .bottomBar)
-        ToolbarItem(placement: .bottomBar) {
+            Spacer(minLength: 12)
             Button(action: onOpenSettings) {
                 Label("Settings", systemImage: "gearshape")
+                    .labelStyle(.iconOnly)
             }
+            .buttonStyle(.glass)
             .accessibilityIdentifier("sidebarSettings")
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        // A bar, like a toolbar: it stops growing where a toolbar would. The sidebar is a fixed
+        // fraction of the screen, and "Nouvelle conversation" next to the gear only fits on one line
+        // up to about this size; past it the title would truncate. The list itself still scales.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 
     private func leaveSearch() {
