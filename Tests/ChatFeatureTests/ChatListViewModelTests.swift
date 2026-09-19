@@ -388,13 +388,4 @@ struct ChatListViewModelTests {
         #expect(message.contains("Domain=") == false)
         #expect(vm.loadFailed)
     }
-
-    @Test("relative time is human-readable, handles fractional and plain ISO strings, and falls back to the raw text")
-    func relativeTimeIsHumanReadable() throws {
-        let now = try #require(ISO8601DateFormatter().date(from: "2026-09-20T00:00:00Z"))
-        let en = Locale(identifier: "en_US")
-        #expect(ChatListViewModel.relativeTime(forCreatedAt: "2026-09-18T00:00:00.000Z", now: now, locale: en) == "2 days ago")
-        #expect(ChatListViewModel.relativeTime(forCreatedAt: "2026-09-19T21:00:00Z", now: now, locale: en) == "3 hours ago")
-        #expect(ChatListViewModel.relativeTime(forCreatedAt: "not a date", now: now, locale: en) == "not a date")
-    }
 }

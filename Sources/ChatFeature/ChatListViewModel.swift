@@ -76,23 +76,6 @@ public final class ChatListViewModel {
         }
     }
 
-    /// The server's chat list carries only `createdAt` (the `chat` table has no `updatedAt`),
-    /// so a row shows how long ago the chat was created. Accepts ISO-8601 with or without
-    /// fractional seconds; anything else is returned unchanged.
-    public nonisolated static func relativeTime(
-        forCreatedAt iso: String, now: Date = .now, locale: Locale = .current
-    ) -> String {
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        guard let date = withFraction.date(from: iso) ?? plain.date(from: iso) else { return iso }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = locale
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: now)
-    }
-
     private static func isCancellation(_ error: Error) -> Bool {
         error is CancellationError || (error as? URLError)?.code == .cancelled
     }

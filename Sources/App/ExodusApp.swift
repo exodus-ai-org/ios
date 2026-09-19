@@ -16,7 +16,7 @@ struct ExodusApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(apiClient: apiClient, streamManager: streamManager, serverConfig: serverConfig)
+            AppShell(apiClient: apiClient, streamManager: streamManager, serverConfig: serverConfig)
         }
     }
 }

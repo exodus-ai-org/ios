@@ -25,6 +25,10 @@
       "comment" : "Accessibility label of the button that clears the search text.",
       "extractionState" : "manual"
     },
+    "Close sidebar" : {
+      "comment" : "Accessibility label of the button and scrim that close the sidebar.",
+      "extractionState" : "manual"
+    },
     "Coming soon" : {
       "comment" : "Marks a workspace that is not available yet, and the title of its placeholder screen.",
       "extractionState" : "manual"
@@ -88,6 +92,15 @@
     "Ollama runs on your Mac and needs no API key." : {
       "comment" : "Footnote shown instead of the API key field when the Ollama provider is selected.",
       "extractionState" : "manual"
+    },
+    "Open sidebar" : {
+      "comment" : "Accessibility label of the button that opens the sidebar.",
+      "extractionState" : "manual"
+    },
+    "Philharmonic" : {
+      "comment" : "Product name of the multi-agent workspace; never translated.",
+      "extractionState" : "manual",
+      "shouldTranslate" : false
     },
     "Provider" : {
       "comment" : "Picker label: which AI provider to use.",
