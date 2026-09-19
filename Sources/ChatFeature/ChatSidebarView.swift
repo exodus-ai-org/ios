@@ -104,51 +104,52 @@ public struct ChatSidebarView<Workspaces: View>: View {
     // MARK: - Rows
 
     private func row(for chat: ChatSummary) -> some View {
-        Button {
-            onSelectChat(chat.id, chat.title)
-        } label: {
-            Text(chat.title.collapsedWhitespace)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .listRowBackground(chat.id == activeChatId ? Color.accentColor.opacity(0.12) : Color.clear)
-        .accessibilityAddTraits(chat.id == activeChatId ? .isSelected : [])
-        // Closes over this row's chat, so nothing indexes `list.chats` after a concurrent load.
-        .contextMenu {
-            Button(role: .destructive) {
-                Task {
-                    if await list.delete(chat) { onDeleteChat(chat.id) }
+        Text(chat.title.collapsedWhitespace)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            // Not a `Button`: one inside a `List` fires on touch-up wherever the finger ended up, so a
+            // left swipe over a row closed the drawer and opened that chat at the same time. A
+            // `TapGesture` fails as soon as the finger moves, which leaves the swipe to the drawer.
+            .onTapGesture { onSelectChat(chat.id, chat.title) }
+            .listRowBackground(chat.id == activeChatId ? Color.accentColor.opacity(0.12) : Color.clear)
+            // What the `Button` gave VoiceOver, spelled out: the trait and an activation action.
+            .accessibilityAddTraits(chat.id == activeChatId ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { onSelectChat(chat.id, chat.title) }
+            // Closes over this row's chat, so nothing indexes `list.chats` after a concurrent load.
+            .contextMenu {
+                Button(role: .destructive) {
+                    Task {
+                        if await list.delete(chat) { onDeleteChat(chat.id) }
+                    }
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
-            } label: {
-                Label("Delete", systemImage: "trash")
             }
-        }
     }
 
     @ViewBuilder
     private var searchResultRows: some View {
         if case .results(let results) = search.phase {
             ForEach(results) { result in
-                Button {
-                    onSelectChat(result.id, result.title)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        // The view model collapsed the title's whitespace when it grouped the hits.
-                        Text(result.title)
-                            .lineLimit(1)
-                        if let snippet = result.snippet {
-                            Text(snippet)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
+                VStack(alignment: .leading, spacing: 2) {
+                    // The view model collapsed the title's whitespace when it grouped the hits.
+                    Text(result.title)
+                        .lineLimit(1)
+                    if let snippet = result.snippet {
+                        Text(snippet)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                // Same as the Recents rows: a tap selects, a swipe belongs to the drawer.
+                .onTapGesture { onSelectChat(result.id, result.title) }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { onSelectChat(result.id, result.title) }
             }
         }
     }
