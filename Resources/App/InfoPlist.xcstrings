@@ -5,10 +5,64 @@
       "comment" : "Local-network permission prompt. Exodus is the app's name and stays as is.",
       "extractionState" : "manual",
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus benötigt Zugriff auf das lokale Netzwerk, um sich mit dem auf Ihrem Computer laufenden Exodus-Dienst zu verbinden."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Exodus needs local network access to connect to the Exodus service running on your computer."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus necesita acceso a la red local para conectarse al servicio de Exodus que se ejecuta en su equipo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus a besoin d'un accès au réseau local pour se connecter au service Exodus qui s'exécute sur votre ordinateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus ha bisogno dell'accesso alla rete locale per connettersi al servizio Exodus in esecuzione sul tuo computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodusは、お使いのコンピュータで動作しているExodusサービスに接続するために、ローカルネットワークへのアクセスを必要とします。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus가 컴퓨터에서 실행 중인 Exodus 서비스에 연결하려면 로컬 네트워크 접근 권한이 필요합니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Exodus precisa de acesso à rede local para se conectar ao serviço do Exodus em execução no seu computador."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 需要本地網絡存取權，才能連線到在你電腦上執行的 Exodus 服務。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 需要區域網路存取權，才能連線到在你電腦上執行的 Exodus 服務。"
           }
         }
       }
