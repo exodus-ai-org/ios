@@ -86,6 +86,11 @@ private let toolResultReply = """
     data: {"type":"message_update","message":{"id":"t1","role":"toolResult","toolName":"search","content":"ok"}}\n\n
     """
 
+private let multilineTitleReply = """
+    data: {"type":"title","title":"First line\\n\\nSecond line"}\n\n\
+    data: {"type":"done","messages":[{"id":"u2","role":"user","content":"hey"},{"id":"a2","role":"assistant","content":"Hello!"}]}\n\n
+    """
+
 /// A chat whose transcript ends with the user's message (for example a turn that failed): nothing
 /// is in flight, so there must be no pending row.
 private let userOnlyHistoryJSON = #"""
@@ -161,8 +166,9 @@ private struct Harness {
         manager = ChatStreamManager(sseClient: SSEClient(session: session))
     }
 
-    func makeViewModel(chatId: String = "c1") -> ChatDetailViewModel {
-        ChatDetailViewModel(chatId: chatId, apiClient: apiClient, streamManager: manager, serverConfig: config)
+    func makeViewModel(chatId: String = "c1", title: String? = nil) -> ChatDetailViewModel {
+        ChatDetailViewModel(
+            chatId: chatId, title: title, apiClient: apiClient, streamManager: manager, serverConfig: config)
     }
 }
 
@@ -549,5 +555,70 @@ struct ChatDetailViewModelTests {
         #expect(vm.displayTitle == "New chat")
         await vm.loadHistory()
         #expect(vm.displayTitle == "Chat")
+    }
+
+    // MARK: - Titles on one line, and the empty state
+
+    @Test("a chat opened with a title shows it, collapsed to one line")
+    func initialTitleIsShownOnOneLine() async throws {
+        serve(history: "[]", recorder: RequestRecorder())
+        #expect(Harness().makeViewModel(title: "Trip planning").displayTitle == "Trip planning")
+        #expect(Harness().makeViewModel(title: "Line one\n\nLine two").displayTitle == "Line one Line two")
+        #expect(Harness().makeViewModel(title: "  \n ").displayTitle == "New chat")
+    }
+
+    @Test("a title event is collapsed to one line too", .timeLimit(.minutes(1)))
+    func titleEventIsCollapsed() async throws {
+        serve(history: "[]", reply: multilineTitleReply, recorder: RequestRecorder())
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        #expect(vm.chatTitle == "First line Second line")
+    }
+
+    @Test("showsEmptyState is true only for a loaded, empty, idle chat")
+    func emptyStateOnlyForALoadedEmptyChat() async throws {
+        serve(history: "[]", recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        #expect(vm.showsEmptyState == false)  // not loaded yet: the screen must not flash "empty"
+        await vm.loadHistory()
+        #expect(vm.showsEmptyState)
+    }
+
+    @Test("showsEmptyState is false when the transcript has messages")
+    func noEmptyStateWithMessages() async throws {
+        serve(history: historyRowsJSON, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        #expect(vm.showsEmptyState == false)
+    }
+
+    @Test("showsEmptyState is false after a failed load")
+    func noEmptyStateAfterAFailedLoad() async throws {
+        serve(history: envelope404, historyStatus: 500, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        #expect(vm.hasLoadedHistory == false)
+        #expect(vm.showsEmptyState == false)
+    }
+
+    @Test("showsEmptyState is false while a turn is in flight", .timeLimit(.minutes(1)))
+    func noEmptyStateWhileATurnIsInFlight() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", reply: "", holdReplyOpen: true, recorder: recorder)
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        let send = Task { await vm.sendMessage() }
+        try await waitUntil("the chat POST to reach the server") { recorder.lines.contains("POST /api/v1/chat") }
+        #expect(vm.showsEmptyState == false)
+        harness.session.invalidateAndCancel()
+        await send.value
     }
 }

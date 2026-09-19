@@ -5,10 +5,14 @@ import SwiftUI
 public struct ChatDetailView: View {
     @State private var viewModel: ChatDetailViewModel
 
-    public init(chatId: String, apiClient: APIClient, streamManager: ChatStreamManager, serverConfig: ServerConfigStore) {
+    public init(
+        chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
+        serverConfig: ServerConfigStore
+    ) {
         _viewModel = State(
             initialValue: ChatDetailViewModel(
-                chatId: chatId, apiClient: apiClient, streamManager: streamManager, serverConfig: serverConfig))
+                chatId: chatId, title: title, apiClient: apiClient, streamManager: streamManager,
+                serverConfig: serverConfig))
     }
 
     public var body: some View {

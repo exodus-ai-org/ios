@@ -311,6 +311,71 @@ struct ChatListViewModelTests {
         #expect(vm.chats.map(\.id) == ["c1", "c2"])
     }
 
+    // MARK: - Delete result and silent refresh (the sidebar deletes by long-press and reloads when it opens)
+
+    @Test("delete(_:) reports whether the server confirmed the delete")
+    func deleteReportsSuccess() async throws {
+        serve(history: twoChatsJSON, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        let first = try #require(vm.chats.first)
+        #expect(await vm.delete(first) == true)
+
+        serve(
+            history: twoChatsJSON, deleteStatus: 500,
+            deleteBody: #"{"type":"error","error":{"code":"DB_QUERY_FAILED","message":"Failed to delete chat"}}"#,
+            recorder: RequestRecorder())
+        let second = try #require(vm.chats.first)
+        #expect(await vm.delete(second) == false)
+        #expect(vm.chats.map(\.id) == ["c2"])
+    }
+
+    @Test("refresh() replaces a list that is on screen without touching the error state")
+    func refreshReplacesTheListSilently() async throws {
+        serve(history: twoChatsJSON, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        serve(
+            history: #"[{"id":"c3","title":"Fresh","createdAt":"2026-09-19T00:00:00.000Z"}]"#, recorder: RequestRecorder())
+        await vm.refresh()
+        #expect(vm.chats.map(\.id) == ["c3"])
+        #expect(vm.errorMessage == nil)
+        #expect(vm.loadFailed == false)
+    }
+
+    @Test("refresh() keeps the stale list and raises no error when the server fails")
+    func refreshFailureIsSilentWhileAListIsShown() async throws {
+        serve(history: twoChatsJSON, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        serve(history: serverErrorJSON, historyStatus: 500, recorder: RequestRecorder())
+        await vm.refresh()
+        #expect(vm.chats.map(\.id) == ["c1", "c2"])
+        #expect(vm.errorMessage == nil)
+        #expect(vm.showsErrorAlert == false)
+    }
+
+    @Test("refresh() before anything is shown behaves like load(): a failure is reported")
+    func refreshOnAnEmptyListLoads() async throws {
+        serve(history: serverErrorJSON, historyStatus: 500, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.refresh()
+        #expect(vm.loadFailed)
+        #expect(vm.errorMessage == "Failed to get chat history")
+    }
+
+    @Test("refresh() does not resurrect a chat that was deleted")
+    func refreshKeepsDeletedChatsGone() async throws {
+        serve(history: twoChatsJSON, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        let first = try #require(vm.chats.first)
+        await vm.delete(first)
+        serve(history: twoChatsJSON, recorder: RequestRecorder())  // a stale answer that still lists c1
+        await vm.refresh()
+        #expect(vm.chats.map(\.id) == ["c2"])
+    }
+
     @Test("a transport failure is shown as a human message, not a URLError dump")
     func transportErrorUsesAHumanMessage() async throws {
         ChatListMockURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }

@@ -21,8 +21,12 @@ public final class ChatDetailViewModel {
     private let streamManager: ChatStreamManager
     private let serverConfig: ServerConfigStore
 
-    public init(chatId: String, apiClient: APIClient, streamManager: ChatStreamManager, serverConfig: ServerConfigStore) {
+    public init(
+        chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
+        serverConfig: ServerConfigStore
+    ) {
         self.chatId = chatId
+        self.chatTitle = Self.oneLine(title)
         self.apiClient = apiClient
         self.streamManager = streamManager
         self.serverConfig = serverConfig
@@ -39,6 +43,10 @@ public final class ChatDetailViewModel {
         hasLoadedHistory && !isTurnInFlight
             && !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    /// True for a loaded, empty chat with nothing in flight: the view shows its greeting. Never true
+    /// before the history is known, so opening a chat does not flash the greeting.
+    public var showsEmptyState: Bool { hasLoadedHistory && messages.isEmpty && !isTurnInFlight }
 
     public var displayTitle: String {
         chatTitle ?? (messages.isEmpty ? String(localized: "New chat") : String(localized: "Chat"))
@@ -98,7 +106,7 @@ public final class ChatDetailViewModel {
             case .status(let status):
                 self.status = status
             case .title(let title):
-                chatTitle = title
+                chatTitle = Self.oneLine(title) ?? chatTitle
             case .finished(let messages):
                 self.messages = messages
                 status = .idle
@@ -111,5 +119,11 @@ public final class ChatDetailViewModel {
 
     private static func isCancellation(_ error: Error) -> Bool {
         error is CancellationError || (error as? URLError)?.code == .cancelled
+    }
+
+    /// A chat title on one line; nil when there is nothing to show. Real titles can be long and multi-line.
+    private static func oneLine(_ title: String?) -> String? {
+        guard let collapsed = title?.collapsedWhitespace, !collapsed.isEmpty else { return nil }
+        return collapsed
     }
 }

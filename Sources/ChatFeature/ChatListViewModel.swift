@@ -48,14 +48,31 @@ public final class ChatListViewModel {
         }
     }
 
-    public func delete(_ chat: ChatSummary) async {
+    /// Reloads in the background (the drawer opened, Settings closed). While a list is on screen a
+    /// failure is dropped: a stale list is still useful, and an alert every time the drawer opens
+    /// offline would be noise. With nothing on screen it is a plain `load()`.
+    public func refresh() async {
+        guard hasLoaded, !chats.isEmpty else {
+            await load()
+            return
+        }
+        guard let loaded: [ChatSummary] = try? await apiClient.get("/api/v1/history") else { return }
+        chats = loaded.filter { !deletedIDs.contains($0.id) }
+        loadFailed = false
+    }
+
+    /// True only when the server confirmed the delete.
+    @discardableResult
+    public func delete(_ chat: ChatSummary) async -> Bool {
         do {
             try await apiClient.delete("/api/v1/chat/\(chat.id)")
             deletedIDs.insert(chat.id)
             chats.removeAll { $0.id == chat.id }
+            return true
         } catch {
-            guard !Self.isCancellation(error) else { return }
+            guard !Self.isCancellation(error) else { return false }
             errorMessage = error.localizedDescription
+            return false
         }
     }
 
