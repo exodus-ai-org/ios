@@ -182,6 +182,135 @@ struct ChatListViewModelTests {
         #expect(vm.chats.count == 2)
     }
 
+    // MARK: - One error surface (the alert is only for errors the empty state can't show)
+
+    @Test("an empty list whose load failed keeps the error text for the empty state and raises no alert")
+    func aFailedFirstLoadRaisesNoAlert() async throws {
+        serve(history: serverErrorJSON, historyStatus: 500, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        #expect(vm.errorMessage == "Failed to get chat history")  // what the "Can't load chats" state displays
+        #expect(vm.loadFailed)
+        #expect(vm.chats.isEmpty)
+        #expect(vm.showsErrorAlert == false)
+    }
+
+    @Test("a failed delete with chats on screen raises the alert until it is dismissed")
+    func aFailedDeleteRaisesTheAlert() async throws {
+        serve(
+            history: twoChatsJSON,
+            deleteStatus: 500,
+            deleteBody: #"{"type":"error","error":{"code":"DB_QUERY_FAILED","message":"Failed to delete chat"}}"#,
+            recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        #expect(vm.showsErrorAlert == false)
+        let first = try #require(vm.chats.first)
+        await vm.delete(first)
+        #expect(vm.errorMessage == "Failed to delete chat")
+        #expect(vm.showsErrorAlert)
+        vm.errorMessage = nil  // what dismissing the alert does
+        #expect(vm.showsErrorAlert == false)
+    }
+
+    @Test("a failed reload with chats on screen raises the alert")
+    func aFailedReloadRaisesTheAlert() async throws {
+        serve(history: twoChatsJSON, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        serve(history: serverErrorJSON, historyStatus: 500, recorder: RequestRecorder())
+        await vm.load()
+        #expect(vm.chats.count == 2)
+        #expect(vm.loadFailed)
+        #expect(vm.errorMessage == "Failed to get chat history")
+        #expect(vm.showsErrorAlert)
+    }
+
+    @Test("with no error there is no alert, before and after a load")
+    func noErrorMeansNoAlert() async throws {
+        let vm = makeViewModel()
+        #expect(vm.errorMessage == nil)
+        #expect(vm.showsErrorAlert == false)
+        serve(history: twoChatsJSON, recorder: RequestRecorder())
+        await vm.load()
+        #expect(vm.showsErrorAlert == false)
+    }
+
+    // MARK: - hasLoaded (the empty state must not read "No chats yet" before the first load finishes)
+
+    @Test("a fresh view model has not loaded: it looks empty but must not be read as 'loaded and empty'")
+    func aFreshViewModelHasNotLoaded() async throws {
+        let vm = makeViewModel()
+        #expect(vm.hasLoaded == false)
+        #expect(vm.isLoading == false)
+        #expect(vm.loadFailed == false)
+        #expect(vm.chats.isEmpty)
+    }
+
+    @Test("hasLoaded becomes true when a load finishes successfully")
+    func hasLoadedAfterASuccessfulLoad() async throws {
+        serve(history: "[]", recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        #expect(vm.hasLoaded)
+        #expect(vm.chats.isEmpty)  // loaded and empty: this is the only state that reads "No chats yet"
+        #expect(vm.loadFailed == false)
+    }
+
+    @Test("hasLoaded becomes true when a load finishes with a failure")
+    func hasLoadedAfterAFailedLoad() async throws {
+        serve(history: serverErrorJSON, historyStatus: 500, recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        #expect(vm.hasLoaded)
+        #expect(vm.loadFailed)
+    }
+
+    @Test("a load that is only cancelled does not count as loaded")
+    func aCancelledLoadDoesNotCountAsLoaded() async throws {
+        ChatListMockURLProtocol.handler = { _ in throw URLError(.cancelled) }
+        let vm = makeViewModel()
+        await vm.load()
+        #expect(vm.hasLoaded == false)
+        #expect(vm.loadFailed == false)
+        #expect(vm.errorMessage == nil)
+        #expect(vm.isLoading == false)
+    }
+
+    // MARK: - A load cannot resurrect a chat deleted earlier
+
+    @Test("a load that still returns a chat deleted earlier does not bring it back")
+    func aLoadCannotResurrectADeletedChat() async throws {
+        let recorder = RequestRecorder()
+        serve(history: twoChatsJSON, recorder: recorder)
+        let vm = makeViewModel()
+        await vm.load()
+        let first = try #require(vm.chats.first)
+        #expect(first.id == "c1")
+        await vm.delete(first)
+        #expect(vm.chats.map(\.id) == ["c2"])
+
+        await vm.load()  // the mock still answers [c1, c2], as a load that started before the delete would
+        #expect(vm.chats.map(\.id) == ["c2"])
+        #expect(recorder.requests == ["GET /api/history", "DELETE /api/chat/c1", "GET /api/history"])
+    }
+
+    @Test("a chat whose delete FAILED is not remembered as deleted, so a reload still shows it")
+    func aFailedDeleteIsNotRemembered() async throws {
+        serve(
+            history: twoChatsJSON,
+            deleteStatus: 500,
+            deleteBody: #"{"type":"error","error":{"code":"DB_QUERY_FAILED","message":"Failed to delete chat"}}"#,
+            recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        let first = try #require(vm.chats.first)
+        await vm.delete(first)
+        #expect(vm.chats.map(\.id) == ["c1", "c2"])
+        await vm.load()
+        #expect(vm.chats.map(\.id) == ["c1", "c2"])
+    }
+
     @Test("a transport failure is shown as a human message, not a URLError dump")
     func transportErrorUsesAHumanMessage() async throws {
         ChatListMockURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }

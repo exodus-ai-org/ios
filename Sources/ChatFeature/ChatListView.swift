@@ -29,23 +29,31 @@ public struct ChatListView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-            }
-            .onDelete { offsets in
-                for index in offsets {
-                    let chat = viewModel.chats[index]
-                    Task { await viewModel.delete(chat) }
+                // Closes over this row's chat, so nothing indexes `viewModel.chats` after a concurrent
+                // `load()` may have shrunk it.
+                .swipeActions(edge: .trailing) {
+                    Button("Delete", role: .destructive) {
+                        Task { await viewModel.delete(chat) }
+                    }
                 }
             }
         }
         .overlay {
             if viewModel.chats.isEmpty {
-                if viewModel.isLoading {
+                // Not loaded yet reads as "loading", never as "No chats yet".
+                if viewModel.isLoading || !viewModel.hasLoaded {
                     ProgressView()
                 } else if viewModel.loadFailed {
                     ContentUnavailableView {
                         Label("Can't load chats", systemImage: "wifi.exclamationmark")
                     } description: {
-                        Text("Pull down or tap Retry to try again.")
+                        // The error text lives here, not in an alert (see `showsErrorAlert`).
+                        VStack(spacing: 4) {
+                            if let message = viewModel.errorMessage {
+                                Text(message)
+                            }
+                            Text("Pull down or tap Retry to try again.")
+                        }
                     } actions: {
                         Button("Retry") { Task { await viewModel.load() } }
                     }
@@ -68,7 +76,7 @@ public struct ChatListView: View {
         .alert(
             "Error",
             isPresented: Binding(
-                get: { viewModel.errorMessage != nil },
+                get: { viewModel.showsErrorAlert },
                 set: { if !$0 { viewModel.errorMessage = nil } }
             )
         ) {
