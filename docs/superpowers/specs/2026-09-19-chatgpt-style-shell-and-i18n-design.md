@@ -1,6 +1,6 @@
 # exodus-ios: ChatGPT-style shell + i18n Design
 
-Status: design approved by the user in conversation (2026-09-19); written spec pending review
+Status: design approved by the user in conversation and spec reviewed (2026-09-19); implementation plan written
 Date: 2026-09-19
 
 ## 1. Context and goal
@@ -20,6 +20,13 @@ chat list and pushes a chat on top of it. This change does two things at once:
 
 This spec supersedes two MVP non-goals: cross-chat search (now built) and locale support (now
 built, following the phone's language; still no in-app switch).
+
+**Prerequisite found while planning.** On 2026-09-19 the desktop repo (now `~/Code/exodus/exodus`;
+the `universal-client` folder is gone) mounted every route under a versioned `/api/v1` prefix and
+named `exodus-ios` as a client that must follow. Against the current server the shipped app's
+unversioned paths are all 404. The implementation plan's first task moves every endpoint to
+`/api/v1/...`; every path in this spec means the `/api/v1` form, and the older documents under
+`docs/superpowers/` predate it.
 
 ## 2. Non-goals
 
@@ -66,7 +73,7 @@ Dependency direction is unchanged: App → features → NetworkingKit → Models
 | Models | `ChatSearchHit.swift` | New (§8). |
 | NetworkingKit | `APIClient.swift` | `get(_:query:)` (§8). Client-generated error text localized. |
 | SettingsFeature, PhilharmonicFeature | views and view model | String externalization only. |
-| repo | `scripts/audit-l10n.py`, `README.md` | New audit; README i18n section. |
+| repo | `scripts/l10n.py`, `README.md` | New l10n tool (add, fill, seed, audit); README i18n section. |
 
 ## 5. SideDrawer (App target)
 
@@ -144,7 +151,11 @@ have a long-press `contextMenu` with a destructive "Delete" (no swipe actions). 
 prominent glass "New chat" pill (leading) and a glass gear button (trailing) via `ToolbarSpacer`.
 Loading, empty and failure states are the MVP's (spinner only before the first load, "No chats
 yet", "Can't load chats" with Retry, pull to refresh, one error surface), rewritten to fit the
-narrow column. Deletion keeps the MVP's `deletedIDs` guard so a chat does not reappear from a
+narrow column. Reloads the user did not ask for (the drawer opening, Settings closing) use a new
+`ChatListViewModel.refresh()`: it replaces the list silently and, while a list is on screen, drops
+a failure instead of raising an alert (a stale list is still useful, and an alert on every drawer
+open while offline would be noise); pull to refresh still uses `load()`. Titles can be long and
+multi-line (real data: up to 1211 characters), so a row collapses whitespace and shows one line. Deletion keeps the MVP's `deletedIDs` guard so a chat does not reappear from a
 concurrent reload; the view calls `onDeleteChat` only when `delete(_:)` returned `true`.
 
 **Search mode** (entered from the magnifier). A top safe-area bar holds a glass capsule with a
@@ -156,20 +167,21 @@ results of §8. Cancel, or the drawer closing, leaves search mode.
 
 ## 8. Search
 
-**Server contract** (`GET /api/chat/search?query=<text>`, identical route and `SearchHit` type in
-`universal-client` and the migrated `exodus` backend as of 2026-09-19): a bare JSON array (no
-envelope, no pagination, provider order) of message database rows plus the chat's `title`. Fields
+**Server contract** (`GET /api/v1/chat/search?query=<text>`, verified against the running desktop
+on 2026-09-19): a bare JSON array (no envelope, no pagination, provider order) of message database
+rows plus the chat's `title`. Fields
 used: `id`, `chatId`, `role`, `searchText`, `title`, `createdAt`. `searchText` is the indexable text
 of a user or assistant message (text blocks only; thinking blocks and tool-result rows are
-excluded) and may be null. Other columns are ignored. The plan re-verifies this against the running
-backend before implementing.
+excluded) and may be null. Other columns (`content`, `usage`, `toolName`, …) are ignored. The plan's
+first task smoke-checks the endpoint.
 
 **`Models.ChatSearchHit`** (`Decodable, Equatable, Sendable, Identifiable`): `id`, `chatId`,
 `role`, `searchText: String?`, `title: String`, `createdAt: String?`. Decoding requires only `id`,
 `chatId` and `title`; everything else is `decodeIfPresent`.
 
 **`APIClient.get<T>(_ path: String, query: [URLQueryItem] = [])`.** Builds the URL with
-`URLComponents`, so a `?` in a path is no longer percent-encoded. Query values are percent-encoded
+`URLComponents`: callers pass query items instead of embedding `?query=` in the path
+(`appendingPathComponent` would percent-encode the `?`). Query values are percent-encoded
 with the URL-query-allowed set minus `+ & = # ? ;`, so `c++ & 100%` reaches the server intact. The
 existing `get(_:)` calls and tests are unchanged.
 
@@ -201,8 +213,8 @@ Retry.
 - **Top bar** (§6): drawer toggle, title, New chat. The inline title comes from `ChatDetailView`
   (`navigationTitle`). `ChatDetailViewModel` gains an optional initial title, so a chat opened from
   the sidebar or search shows its real title; the localized fallback is "New chat" for an empty
-  transcript and "Chat" otherwise. This closes the MVP follow-up "real chat title in the detail
-  screen".
+  transcript and "Chat" otherwise. Every title shown is collapsed to one line. This closes the MVP
+  follow-up "real chat title in the detail screen".
 - **Composer**: a `safeAreaBar(edge: .bottom)` glass capsule with a `TextField("Ask Exodus")`
   (1 to 5 lines) and a circular prominent glass button that is Send (`arrow.up`, disabled when
   `!canSend`) or, while a turn is in flight, Stop (`stop.fill`). The transcript uses
@@ -234,7 +246,7 @@ the app, so `Bundle.main` is the right bundle for all of them and no `bundle:` a
   server URL") uses `String(localized:)`. Server-provided error text is shown verbatim.
 - Dates and numbers use system formatters, which follow the locale.
 
-**Languages** (the desktop's set, `src/shared/i18n/locales.ts` in `universal-client`):
+**Languages** (the desktop's set, `packages/shared/src/i18n/locales.ts` in the desktop repo `exodus`):
 
 | Catalog language | Source of wording |
 | --- | --- |
@@ -245,8 +257,9 @@ the app, so `Bundle.main` is the right bundle for all of them and no `bundle:` a
 
 There is deliberately no `zh-Hans`: the desktop makes Simplified Chinese fall back to English
 (`resolveLocale`), and iOS matches it. Adding Simplified Chinese later is one more catalog column.
-For every English string that also exists in the desktop catalogs, the desktop's translation is
-reused; the rest is translated when the catalogs are filled in. Those translations have not been
+For every English string that also exists in the desktop catalogs
+(`packages/shared/src/i18n/locales/<locale>/*.json`), the desktop's translation is reused
+(`scripts/l10n.py seed-from-desktop` copies it); the rest is translated when the catalogs are filled in. Those translations have not been
 reviewed by a native speaker, and the README says so.
 
 **Language selection.** iOS picks the language from the phone's preferences; users can also set a
@@ -259,7 +272,7 @@ equal the English source (added to the shipped set and documented in the README)
 the local-network permission text) becomes English source plus translations. The known strings are
 inventoried in the plan; the audit below is the source of truth for completeness.
 
-**Audit (`scripts/audit-l10n.py`, Python 3, standard library only)**, modeled on the desktop's
+**Audit (`scripts/l10n.py audit`, Python 3, standard library only)**, modeled on the desktop's
 `catalog-audit` and `no-hardcoded-strings` tests. It fails when:
 
 1. a catalog key has no translated value in a shipped language (unless `shouldTranslate: false`);
@@ -268,7 +281,10 @@ inventoried in the plan; the audit below is the source of truth for completeness
 4. a SwiftUI/`String(localized:)` string literal under `Sources/` is missing from the catalog
    (interpolations are normalized to placeholders; suppress a false positive with a trailing
    `// l10n:ignore`);
-5. Swift source outside comments contains CJK characters.
+5. Swift source outside comments contains CJK characters;
+6. a ternary of two string literals appears in Swift source (handed to a SwiftUI text initializer it
+   may resolve to the non-localizing `String` overload; suppress a non-text use such as an SF Symbol
+   name with `// l10n:ignore`).
 
 Keys never referenced by code are reported as warnings.
 
@@ -295,7 +311,7 @@ resolves to the English key.
 committed): drawer open by edge swipe, close by left swipe and by tapping the scrim; search open,
 type, results, Cancel; composer above the keyboard; the same screens with
 `-AppleLanguages (de)` (long labels), `(zh-Hant)` and `(zh-Hans)` (expect English); Dynamic Type
-at a large size. `python3 scripts/audit-l10n.py` and every module's tests must pass.
+at a large size. `python3 scripts/l10n.py audit` and every module's tests must pass.
 
 **Human walkthrough** on a device, after the plan's last task: real-device drag feel, VoiceOver
 through the drawer, Reduce Motion, a chat streamed end to end, search against real history.
@@ -314,6 +330,7 @@ through the drawer, Reduce Motion, a chat streamed end to end, search against re
 
 ## 13. Suggested build order (the plan owns the final task list)
 
+0. Adopt `/api/v1` everywhere (fixes the shipped app against the current desktop).
 1. i18n foundation: `Project.swift` options, empty catalogs, the audit script, externalize every
    existing string with English source only.
 2. `APIClient.get(_:query:)`, `ChatSearchHit`, `ChatSearchViewModel` (TDD).
