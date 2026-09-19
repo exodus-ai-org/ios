@@ -107,6 +107,10 @@ public struct ChatSidebarView<Workspaces: View>: View {
             // The insets alone do not shrink a row below the list's own minimum, which is what held
             // the rows at 52 pt. 44 pt is the touch-target floor, never less.
             .environment(\.defaultMinListRowHeight, 44)
+            // The bottom bar is not a system `.bottomBar`, so it does not get the scroll edge
+            // effect for free: without it the rows print through the pill and the gear, and at
+            // an accessibility text size a title is chopped mid-word by them.
+            .scrollEdgeEffectStyle(.hard, for: .bottom)
             // The bottom bar is not a system `.bottomBar`, so it does not get this for free: without
             // it the rows scroll out from under the pill and read through it.
             .overlay { searchStateOverlay }
