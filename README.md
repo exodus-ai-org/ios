@@ -2,12 +2,14 @@
 
 A native iPhone client for the desktop Exodus app (`exodus`): a ChatGPT-style slide-out drawer lists your
 Recents and searches them, and the chat beside it sends messages, streams the replies and edits the
-AI-provider settings, all through the desktop's local HTTP server.
-It stores nothing but the server address. Swift 6 and SwiftUI: prefer native frameworks as much as
-possible and reach for a third-party library only where it is clearly worthwhile — today the app has
-none. See the
-[design spec](docs/superpowers/specs/2026-09-18-chat-settings-mvp-design.md) and the
-[implementation plan](docs/superpowers/plans/2026-09-19-chat-settings-mvp.md).
+AI-provider settings, all through the desktop's local HTTP server. It stores nothing but the server address.
+Swift 6 and SwiftUI: prefer native frameworks as much as possible and reach for a third-party library only
+where it is clearly worthwhile — today the app has none. See the MVP
+[design spec](docs/superpowers/specs/2026-09-18-chat-settings-mvp-design.md) and
+[implementation plan](docs/superpowers/plans/2026-09-19-chat-settings-mvp.md), and the drawer and
+localization work in its
+[design spec](docs/superpowers/specs/2026-09-19-chatgpt-style-shell-and-i18n-design.md) and
+[implementation plan](docs/superpowers/plans/2026-09-19-chatgpt-style-shell-and-i18n.md).
 
 ## Requirements
 
@@ -80,10 +82,11 @@ catalog, a shipped language is untranslated or a placeholder differs from the En
 What the audit actually reads is limited, so prefer the forms it checks. It finds string literals passed to
 `Text`, `Label`, `Button`, `TextField`, `SecureField`, `Section`, `Picker`, `Toggle`, `ContentUnavailableView`,
 `.navigationTitle`, `.accessibilityLabel`/`.accessibilityHint`/`.accessibilityValue`, `.alert`,
-`String(localized:)` and `LocalizedStringResource`, plus CJK characters anywhere in Swift source and ternaries
-of two string literals. Other initializers are NOT checked — `Menu`, `NavigationLink`, `LabeledContent`, `Link`,
-`.confirmationDialog`, `.help`, `.badge` and `.searchable(prompt:)` among them — so a literal passed to one of
-those would ship untranslated without the audit noticing. Use a checked form, or extend the tool first.
+`String(localized:)` and `LocalizedStringResource`, plus CJK characters in Swift source outside comments, and
+ternaries of two string literals. Other initializers are NOT checked — `Menu`, `NavigationLink`,
+`LabeledContent`, `Link`, `.confirmationDialog`, `.help`, `.badge` and `.searchable(prompt:)` among them — so a
+literal passed to one of those would ship untranslated without the audit noticing. Use a checked form, or
+extend the tool first.
 
 Rules the audit enforces or relies on:
 
@@ -99,10 +102,11 @@ speakers have not reviewed them.
 ## Known limits
 
 The sidebar's search field is hand-built rather than `.searchable`, because `.searchable` was inert inside the
-drawer on the iOS 27.0 simulator. Translations other than English are machine-generated unless they were copied
-from the desktop, and no native speaker has reviewed them. There are no automated UI tests for the drawer: a
-committed test would need a stub server, so the drawer, the search flow and the ten languages were checked by
-hand in the Simulator with a temporary XCUITest target that is not part of this repository.
+drawer on the iOS 27.0 simulator. There are no automated UI tests for the drawer: a committed test would need a
+stub server, so the drawer, the search flow, German, French, Japanese and Traditional Chinese (Taiwan), plus the
+Simplified Chinese fallback to English, were checked by hand in the Simulator with a temporary XCUITest target
+that is not part of this repository. Korean, Spanish, Brazilian Portuguese, Italian and Hong Kong Chinese have
+not been looked at on screen.
 
 ## Security note
 
