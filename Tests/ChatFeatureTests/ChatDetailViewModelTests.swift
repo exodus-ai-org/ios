@@ -621,4 +621,27 @@ struct ChatDetailViewModelTests {
         harness.session.invalidateAndCancel()
         await send.value
     }
+
+    /// The test above cannot pin the `!isTurnInFlight` clause: `sendMessage` appends the user message
+    /// before the turn starts, so `messages` is never empty during it. Only the re-attach branch of
+    /// `onAppear` (in flight, `hasLoadedHistory` set, transcript not delivered yet) can be empty.
+    @Test(
+        "showsEmptyState is false when re-attached to a turn in flight whose transcript is still empty",
+        .timeLimit(.minutes(1)))
+    func noEmptyStateWhenReattachedToAnEmptyTurn() async throws {
+        serve(history: "[]", reply: "", holdReplyOpen: true, recorder: RequestRecorder())
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        // A turn already in flight for this chat, started with an empty transcript, as another observer would leave it.
+        _ = await harness.manager.send(chatId: "c1", messages: [], serverConfig: harness.config)
+        let vm = harness.makeViewModel()
+        let appear = Task { await vm.onAppear() }
+        // The status settles at `.submitted` (the held-open reply sends nothing), so wait on the flags, not on `.streaming`.
+        try await waitUntil("the view model to re-attach") { vm.hasLoadedHistory && vm.isTurnInFlight }
+        #expect(vm.messages.isEmpty)
+        #expect(vm.showsEmptyState == false)
+        harness.session.invalidateAndCancel()
+        await appear.value
+    }
 }
