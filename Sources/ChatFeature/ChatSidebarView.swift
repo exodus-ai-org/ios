@@ -2,6 +2,40 @@ import Models
 import NetworkingKit
 import SwiftUI
 
+/// Tighter than the system's 16 pt: a row is about 44 pt at the default text size instead of 52,
+/// which is still the 44 pt touch target and fits more chats on screen. With the separators hidden
+/// the list reads as one column of titles, like the ChatGPT app's sidebar.
+private let sidebarRowInsets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+
+/// One selectable sidebar row — a Recents chat or a search result.
+///
+/// The padding is part of the row's own hit area and the list row itself gets no insets, so the
+/// whole cell selects the chat; `listRowInsets` would pad *around* the content shape and leave the
+/// edges of the row to the list. `minHeight` keeps the shape at the 44 pt touch target even at a
+/// small text size, where the content alone would be shorter than the list's minimum row height.
+///
+/// Not a `Button`: one inside a `List` fires on touch-up wherever the finger ended up, so a left
+/// swipe over a row closed the drawer and opened that chat at the same time. A `TapGesture` fails as
+/// soon as the finger moves, which leaves the swipe to the drawer — and what the `Button` gave
+/// VoiceOver is spelled out instead, the trait plus an activation action.
+private struct SidebarRow: ViewModifier {
+    let isSelected: Bool
+    let select: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(sidebarRowInsets)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: select)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets())
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { select() }
+    }
+}
+
 /// The drawer's content: workspaces, Recents, and an inline search. It owns its `NavigationStack`, so
 /// the title and the search button are native; the bottom bar is a `safeAreaBar` of its own, because a
 /// bottom-bar toolbar item cannot show a labelled button. Rows have no swipe actions (a left swipe
@@ -22,13 +56,6 @@ public struct ChatSidebarView<Workspaces: View>: View {
 
     /// A brand name: a plain `String`, shown as is and never looked up in the catalog.
     private static var appName: String { "Exodus" }
-
-    /// Tighter than the system's 16 pt: a row is about 44 pt at the default text size instead of 52,
-    /// which is still the 44 pt touch target and fits more chats on screen. With the separators hidden
-    /// the list reads as one column of titles, like the ChatGPT app's sidebar.
-    private static var rowInsets: EdgeInsets {
-        EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
-    }
 
     public init(
         apiClient: APIClient,
@@ -65,7 +92,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
                         Section {
                             workspaces
                                 .listRowSeparator(.hidden)
-                                .listRowInsets(Self.rowInsets)
+                                .listRowInsets(sidebarRowInsets)
                         }
                     }
                     Section("Recents") {
@@ -80,6 +107,8 @@ public struct ChatSidebarView<Workspaces: View>: View {
             // The insets alone do not shrink a row below the list's own minimum, which is what held
             // the rows at 52 pt. 44 pt is the touch-target floor, never less.
             .environment(\.defaultMinListRowHeight, 44)
+            // The bottom bar is not a system `.bottomBar`, so it does not get this for free: without
+            // it the rows scroll out from under the pill and read through it.
             .overlay { searchStateOverlay }
             .navigationTitle(isSearching ? "" : Self.appName)
             .navigationBarTitleDisplayMode(isSearching ? .inline : .large)
@@ -128,18 +157,9 @@ public struct ChatSidebarView<Workspaces: View>: View {
     private func row(for chat: ChatSummary) -> some View {
         Text(chat.title.collapsedWhitespace)
             .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            // Not a `Button`: one inside a `List` fires on touch-up wherever the finger ended up, so a
-            // left swipe over a row closed the drawer and opened that chat at the same time. A
-            // `TapGesture` fails as soon as the finger moves, which leaves the swipe to the drawer.
-            .onTapGesture { onSelectChat(chat.id, chat.title) }
-            .listRowSeparator(.hidden)
-            .listRowInsets(Self.rowInsets)
+            .modifier(
+                SidebarRow(isSelected: chat.id == activeChatId) { onSelectChat(chat.id, chat.title) })
             .listRowBackground(chat.id == activeChatId ? Color.accentColor.opacity(0.12) : Color.clear)
-            // What the `Button` gave VoiceOver, spelled out: the trait and an activation action.
-            .accessibilityAddTraits(chat.id == activeChatId ? [.isButton, .isSelected] : .isButton)
-            .accessibilityAction { onSelectChat(chat.id, chat.title) }
             // Closes over this row's chat, so nothing indexes `list.chats` after a concurrent load.
             .contextMenu {
                 Button(role: .destructive) {
@@ -167,15 +187,9 @@ public struct ChatSidebarView<Workspaces: View>: View {
                             .lineLimit(2)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                // Same as the Recents rows: a tap selects, a swipe belongs to the drawer.
-                .onTapGesture { onSelectChat(result.id, result.title) }
-                .listRowSeparator(.hidden)
-                .listRowInsets(Self.rowInsets)
+                // Title and snippet are one element to VoiceOver, as the button's label used to be.
                 .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction { onSelectChat(result.id, result.title) }
+                .modifier(SidebarRow(isSelected: false) { onSelectChat(result.id, result.title) })
             }
         }
     }
@@ -271,7 +285,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 Label("New chat", systemImage: "square.and.pencil")
                     .labelStyle(.titleAndIcon)
                     // The longest translation ("Nouvelle conversation") must fit on one line next to
-                    // the gear, in a sidebar 0.78 of the screen wide.
+                    // the gear, in a sidebar that is a fraction of the screen wide.
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
             }
