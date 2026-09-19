@@ -17,6 +17,7 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
 
     @GestureState private var drag: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     private let maxDrawerWidth: CGFloat = 360
     private let edgeGrabWidth: CGFloat = 28
@@ -41,13 +42,21 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
 
                 content()
                     .frame(width: geo.size.width, height: geo.size.height)
-                    .background(Color(.systemBackground))
+                    .background(cardBackground(progress))
+                    // Dims the card's content toward the card's own background, never toward black:
+                    // in dark mode a plain `systemBackground` scrim would undo the lift below.
                     .overlay {
-                        Color(.systemBackground)
+                        cardBackground(progress)
                             .opacity(0.6 * progress)
                             .allowsHitTesting(false)
                     }
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius(progress), style: .continuous))
+                    // After the clip, so the outline survives it. `strokeBorder` draws inside the shape.
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius(progress), style: .continuous)
+                            .strokeBorder(Color.primary.opacity(borderOpacity(progress)), lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
                     .shadow(color: .black.opacity(0.15 * progress), radius: 24, x: -4)
                     .offset(x: offset)
                     .accessibilityHidden(isOpen)
@@ -74,6 +83,25 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
         .ignoresSafeArea(.container)
         .onChange(of: isOpen) { _, nowOpen in
             if nowOpen { dismissKeyboard() }
+        }
+    }
+
+    /// The hairline that separates the card from the sidebar, white and barely there. Dark mode only:
+    /// in light mode a white card over a white sidebar is already told apart by its shadow.
+    private func borderOpacity(_ progress: CGFloat) -> CGFloat {
+        colorScheme == .dark ? 0.15 * progress : 0
+    }
+
+    /// The card's own background. Closed it is exactly `systemBackground`, so the chat screen and its
+    /// bubbles look as they always did; as the drawer opens, dark mode lifts it toward
+    /// `secondarySystemBackground` so the card reads as a layer above the (still black) sidebar. Light
+    /// mode keeps its white card and its shadow.
+    private func cardBackground(_ progress: CGFloat) -> some View {
+        ZStack {
+            Color(.systemBackground)
+            if colorScheme == .dark {
+                Color(.secondarySystemBackground).opacity(progress)
+            }
         }
     }
 
