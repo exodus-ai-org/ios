@@ -4275,9 +4275,10 @@ Each item is something the automated tests could not reach because it depends on
 *Chat detail*
 - [ ] Right after tapping send, before the first token arrives, a pending "…" bubble is visible (not just a greyed send button).
 - [ ] While a reply is streaming the composer's button is a **Stop** button; tapping it ends the turn, the partial reply stays on screen, no error appears, and you can send again. (This is the escape from a stalled stream — with the Mac asleep or Wi-Fi dropped mid-reply the composer would otherwise stay locked for up to an hour.)
+- [ ] After a Stop, pull down to refresh or leave and re-enter the chat: the partial reply is GONE. This is expected — the desktop server saves an assistant reply only when the whole turn completes, and a Stop disconnects (which aborts generation on the desktop), so only your message was stored. Your next message then follows a transcript that ends with your previous message. Note whether that bothers you.
+- [ ] Lock the desktop app (its app lock), then load the list or send a message: the phone shows the server's message ("Application is locked"), not a raw error.
 - [ ] Ask for a multi-paragraph reply with **bold** and a bullet list: paragraphs and line breaks are preserved (list markers show as "- item").
 - [ ] With a reasoning model, the chain-of-thought text is NOT shown in the bubble, only the answer.
-- [ ] Between sending and the first token, note what the screen shows. (Known gap: nothing appears until the first assistant frame — only the disabled send button. File a follow-up if it feels dead.)
 - [ ] A long reply keeps scrolling to the bottom as it streams.
 - [ ] Open an existing chat: the title reads "Chat" (not "New Chat"); a brand-new chat reads "New Chat" until the generated title arrives.
 - [ ] Stop the desktop server, then send a message: the alert reads a human sentence such as "Could not connect to the server." — NOT `URLError(_nsError: …)`. The draft is not lost and the composer works again after you dismiss it.
