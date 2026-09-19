@@ -34,22 +34,16 @@ public struct APIClient: Sendable {
         body: Body?,
         decodeResponse: Bool = true
     ) async throws -> T {
-        guard let base = URL(string: serverConfig.baseURLString) else {
-            throw HTTPError(
-                statusCode: 0, code: "INVALID_BASE_URL",
-                message: String(localized: "Invalid server URL: \(serverConfig.baseURLString)"))
-        }
+        guard let base = URL(string: serverConfig.baseURLString) else { throw invalidBaseURL() }
         var url = base.appendingPathComponent(path)
         if !query.isEmpty {
-            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            components?.percentEncodedQuery = query
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+                throw invalidBaseURL()
+            }
+            components.percentEncodedQuery = query
                 .map { "\(Self.encodeQueryComponent($0.name))=\(Self.encodeQueryComponent($0.value ?? ""))" }
                 .joined(separator: "&")
-            guard let withQuery = components?.url else {
-                throw HTTPError(
-                    statusCode: 0, code: "INVALID_BASE_URL",
-                    message: String(localized: "Invalid server URL: \(serverConfig.baseURLString)"))
-            }
+            guard let withQuery = components.url else { throw invalidBaseURL() }
             url = withQuery
         }
         var request = URLRequest(url: url)
@@ -66,6 +60,13 @@ public struct APIClient: Sendable {
             return EmptyResponse() as! T
         }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// The error for a server address, or a URL built from it, that cannot be used.
+    private func invalidBaseURL() -> HTTPError {
+        HTTPError(
+            statusCode: 0, code: "INVALID_BASE_URL",
+            message: String(localized: "Invalid server URL: \(serverConfig.baseURLString)"))
     }
 
     /// Percent-encodes one query name or value. `+ & = # ? ;` are encoded too (unlike
