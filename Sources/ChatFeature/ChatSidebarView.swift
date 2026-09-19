@@ -22,6 +22,13 @@ public struct ChatSidebarView<Workspaces: View>: View {
     /// A brand name: a plain `String`, shown as is and never looked up in the catalog.
     private static var appName: String { "Exodus" }
 
+    /// Tighter than the system's 16 pt: a row is about 44 pt at the default text size instead of 52,
+    /// which is still the 44 pt touch target and fits more chats on screen. With the separators hidden
+    /// the list reads as one column of titles, like the ChatGPT app's sidebar.
+    private static var rowInsets: EdgeInsets {
+        EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+    }
+
     public init(
         apiClient: APIClient,
         activeChatId: String,
@@ -52,7 +59,13 @@ public struct ChatSidebarView<Workspaces: View>: View {
                     searchResultRows
                 } else {
                     if !isSearching {
-                        Section { workspaces }
+                        // On the rows, not on the `Section`: a section passes the hidden separator down
+                        // but keeps the insets to itself.
+                        Section {
+                            workspaces
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(Self.rowInsets)
+                        }
                     }
                     Section("Recents") {
                         ForEach(list.chats) { chat in
@@ -63,6 +76,9 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 }
             }
             .listStyle(.plain)
+            // The insets alone do not shrink a row below the list's own minimum, which is what held
+            // the rows at 52 pt. 44 pt is the touch-target floor, never less.
+            .environment(\.defaultMinListRowHeight, 44)
             .overlay { searchStateOverlay }
             .navigationTitle(isSearching ? "" : Self.appName)
             .navigationBarTitleDisplayMode(isSearching ? .inline : .large)
@@ -117,6 +133,8 @@ public struct ChatSidebarView<Workspaces: View>: View {
             // left swipe over a row closed the drawer and opened that chat at the same time. A
             // `TapGesture` fails as soon as the finger moves, which leaves the swipe to the drawer.
             .onTapGesture { onSelectChat(chat.id, chat.title) }
+            .listRowSeparator(.hidden)
+            .listRowInsets(Self.rowInsets)
             .listRowBackground(chat.id == activeChatId ? Color.accentColor.opacity(0.12) : Color.clear)
             // What the `Button` gave VoiceOver, spelled out: the trait and an activation action.
             .accessibilityAddTraits(chat.id == activeChatId ? [.isButton, .isSelected] : .isButton)
@@ -152,6 +170,8 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 .contentShape(Rectangle())
                 // Same as the Recents rows: a tap selects, a swipe belongs to the drawer.
                 .onTapGesture { onSelectChat(result.id, result.title) }
+                .listRowSeparator(.hidden)
+                .listRowInsets(Self.rowInsets)
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { onSelectChat(result.id, result.title) }
