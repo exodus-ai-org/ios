@@ -112,12 +112,12 @@ private func serve(
             recorder.record(try request.httpBodyStreamData(), for: path)
         }
         switch (request.httpMethod, path) {
-        case ("GET", "/api/settings"):
+        case ("GET", "/api/v1/settings"):
             return (settingsStatus, Data(settings.utf8))
-        case ("POST", "/api/settings/models"):
+        case ("POST", "/api/v1/settings/models"):
             modelsGate?.arriveAndWait()
             return (modelsStatus, Data(models.utf8))
-        case ("POST", "/api/settings"):
+        case ("POST", "/api/v1/settings"):
             return (postSettingsStatus, Data(postSettingsBody.utf8))
         default:
             return (404, Data(#"{"type":"error","error":{"code":"NOT_FOUND","message":"no route"}}"#.utf8))
@@ -192,7 +192,7 @@ struct SettingsViewModelTests {
         let bBody = Self.serverBJSON
         SettingsMockURLProtocol.handler = { request in
             let path = request.url?.path ?? ""
-            if request.httpMethod == "POST", path == "/api/settings" {
+            if request.httpMethod == "POST", path == "/api/v1/settings" {
                 recorder.record(try request.httpBodyStreamData(), for: path)
                 return (200, Data("{}".utf8))
             }
@@ -247,7 +247,7 @@ struct SettingsViewModelTests {
         #expect(vm.availableModels.count == 1)
         #expect(vm.availableModels[0].id == "claude-sonnet-5")
         #expect(vm.errorMessage == nil)
-        let body = try recorder.onlyJSONBody(for: "/api/settings/models")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings/models")
         #expect(body["provider"] as? String == "Anthropic Claude")
         #expect(body["apiKey"] as? String == "sk-ant-xyz")
     }
@@ -262,7 +262,7 @@ struct SettingsViewModelTests {
         vm.modelText = "claude-sonnet-5"
         let success = await vm.save()
         #expect(success)
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         #expect(Set(body.keys) == ["id", "providerConfig", "providers"])
         #expect(body["id"] as? String == "global")
         let providerConfig = try #require(body["providerConfig"] as? [String: Any])
@@ -280,7 +280,7 @@ struct SettingsViewModelTests {
         let (vm, _) = makeViewModel()
         await vm.loadSettings()
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         #expect(body["lastBackupAt"] as? String == "2026-09-18T12:00:00.000Z")
     }
 
@@ -291,7 +291,7 @@ struct SettingsViewModelTests {
         let (vm, _) = makeViewModel()
         await vm.loadSettings()
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         let providerConfig = try #require(body["providerConfig"] as? [String: Any])
         let snapshot = try #require(providerConfig["modelSnapshot"] as? [String: Any])
         #expect(snapshot["contextWindow"] as? Double == 200_000)
@@ -314,7 +314,7 @@ struct SettingsViewModelTests {
         await vm.fetchModels()
         vm.modelText = "claude-opus-5"
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         let providerConfig = try #require(body["providerConfig"] as? [String: Any])
         #expect(providerConfig["model"] as? String == "claude-opus-5")
         let snapshot = try #require(providerConfig["modelSnapshot"] as? [String: Any])
@@ -329,7 +329,7 @@ struct SettingsViewModelTests {
         await vm.loadSettings()
         vm.modelText = "some-custom-model"
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         let providerConfig = try #require(body["providerConfig"] as? [String: Any])
         #expect(providerConfig["model"] as? String == "some-custom-model")
         #expect(providerConfig.keys.contains("modelSnapshot") == false)
@@ -348,7 +348,7 @@ struct SettingsViewModelTests {
         vm.select(provider: .azureOpenAi)
         vm.modelText = "gpt-4o"  // the very model name the desktop saved for OpenAI
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         let providerConfig = try #require(body["providerConfig"] as? [String: Any])
         #expect(providerConfig["provider"] as? String == "Azure OpenAI")
         #expect(providerConfig["model"] as? String == "gpt-4o")
@@ -389,7 +389,7 @@ struct SettingsViewModelTests {
         #expect(vm.apiKeyText == "")
         vm.modelText = "gpt-x"
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         let providerConfig = try #require(body["providerConfig"] as? [String: Any])
         #expect(providerConfig["provider"] as? String == "OpenAI GPT")
         let providers = try #require(body["providers"] as? [String: Any])
@@ -405,7 +405,7 @@ struct SettingsViewModelTests {
         await vm.loadSettings()
         vm.apiKeyText = ""
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         let providers = try #require(body["providers"] as? [String: Any])
         #expect(providers.keys.contains("anthropicApiKey") == false)
         #expect(providers["openaiApiKey"] as? String == "sk-oai-2")
@@ -423,7 +423,7 @@ struct SettingsViewModelTests {
         #expect(vm.providerUsesApiKey == false)
         #expect(vm.canFetchModels)
         await vm.fetchModels()
-        let body = try recorder.onlyJSONBody(for: "/api/settings/models")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings/models")
         #expect(body["provider"] as? String == "Ollama")
         #expect(body.keys.contains("apiKey") == false)
     }
@@ -497,7 +497,7 @@ struct SettingsViewModelTests {
         vm.modelText = "claude-sonnet-5"
         #expect(await vm.save() == false)
         #expect(vm.errorMessage == Self.notLoadedMessage)
-        #expect(recorder.bodies(for: "/api/settings").isEmpty)
+        #expect(recorder.bodies(for: "/api/v1/settings").isEmpty)
     }
 
     @Test("save() is refused and posts nothing when settings were never loaded")
@@ -509,7 +509,7 @@ struct SettingsViewModelTests {
         vm.apiKeyText = "sk-ant-xyz"
         #expect(await vm.save() == false)
         #expect(vm.errorMessage == Self.notLoadedMessage)
-        #expect(recorder.bodies(for: "/api/settings").isEmpty)
+        #expect(recorder.bodies(for: "/api/v1/settings").isEmpty)
     }
 
     @Test("a failed reload clears the loaded state, so save() is refused again")
@@ -524,7 +524,7 @@ struct SettingsViewModelTests {
         await vm.loadSettings()
         #expect(vm.hasLoadedSettings == false)
         #expect(await vm.save() == false)
-        #expect(recorder.bodies(for: "/api/settings").isEmpty)
+        #expect(recorder.bodies(for: "/api/v1/settings").isEmpty)
     }
 
     @Test("a new server address has to be loaded before anything is saved to it")
@@ -540,12 +540,12 @@ struct SettingsViewModelTests {
         #expect(config.baseURLString == "http://192.168.1.10:60223")
         #expect(vm.hasLoadedSettings == false)
         #expect(await vm.save() == false)
-        #expect(recorder.bodies(for: "/api/settings").isEmpty)
+        #expect(recorder.bodies(for: "/api/v1/settings").isEmpty)
 
         await vm.loadSettings()  // "Connect": load the new server's settings
         #expect(vm.hasLoadedSettings)
         #expect(await vm.save())
-        _ = try recorder.onlyJSONBody(for: "/api/settings")  // exactly one POST: the save after the reload
+        _ = try recorder.onlyJSONBody(for: "/api/v1/settings")  // exactly one POST: the save after the reload
     }
 
     @Test("saving the address that is already stored leaves the loaded state alone")
@@ -576,7 +576,7 @@ struct SettingsViewModelTests {
             vm.select(provider: .openAiGpt)
         }
         // The request that was in flight was for Ollama ...
-        let body = try recorder.onlyJSONBody(for: "/api/settings/models")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings/models")
         #expect(body["provider"] as? String == "Ollama")
         // ... so its catalog must not appear under OpenAI, and nothing else about OpenAI changed.
         #expect(vm.selectedProvider == .openAiGpt)
@@ -592,7 +592,7 @@ struct SettingsViewModelTests {
         let (vm, recorder) = try await fetchModelsInterrupted { vm in
             vm.apiKeyText = "sk-ant-xyz-edited"
         }
-        let body = try recorder.onlyJSONBody(for: "/api/settings/models")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings/models")
         #expect(body["apiKey"] as? String == "sk-ant-xyz")
         #expect(vm.availableModels.isEmpty)
         #expect(vm.apiKeyText == "sk-ant-xyz-edited")
@@ -629,7 +629,7 @@ struct SettingsViewModelTests {
 
         // What ruling 8 exists for: saving now writes B's settings to B, never A's.
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         let providerConfig = try #require(body["providerConfig"] as? [String: Any])
         #expect(providerConfig["provider"] as? String == "OpenAI GPT")
         #expect(providerConfig["model"] as? String == "b-model")
@@ -659,7 +659,7 @@ struct SettingsViewModelTests {
         vm.select(provider: .openAiGpt)
         vm.apiKeyText = "sk-oai-typed"  // replaces the loaded OpenAI key
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/settings")
+        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         let providers = try #require(body["providers"] as? [String: Any])
         #expect(providers["anthropicApiKey"] as? String == "sk-ant-typed")
         #expect(providers["openaiApiKey"] as? String == "sk-oai-typed")

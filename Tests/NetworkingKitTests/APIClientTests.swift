@@ -27,14 +27,14 @@ struct APIClientTests {
     @Test("GET decodes a successful JSON response")
     func getDecodesSuccess() async throws {
         MockURLProtocol.handler = { request in
-            #expect(request.url?.path == "/api/history")
+            #expect(request.url?.path == "/api/v1/history")
             #expect(request.httpMethod == "GET")
             let json = """
                 [{"id":"c1","title":"Trip","createdAt":"2026-09-18T00:00:00.000Z"}]
                 """.data(using: .utf8)!
             return (200, json)
         }
-        let chats: [ChatSummary] = try await makeClient().get("/api/history")
+        let chats: [ChatSummary] = try await makeClient().get("/api/v1/history")
         #expect(chats.count == 1)
         #expect(chats[0].id == "c1")
     }
@@ -51,7 +51,7 @@ struct APIClientTests {
             return (200, json)
         }
         let request = ListModelsRequest(provider: "Anthropic Claude", apiKey: "k", baseUrl: nil, apiVersion: nil)
-        let response: ListModelsResponse = try await makeClient().post("/api/settings/models", body: request)
+        let response: ListModelsResponse = try await makeClient().post("/api/v1/settings/models", body: request)
         #expect(response.models.isEmpty)
     }
 
@@ -59,13 +59,13 @@ struct APIClientTests {
     func postWithoutDecoding() async throws {
         let recorder = stub(status: 200, body: "{}")
         let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
-        try await makeClient().post("/api/settings", body: patch)
+        try await makeClient().post("/api/v1/settings", body: patch)
 
         let requests = recorder.requests
         #expect(requests.count == 1)
         let request = try #require(requests.first)
         #expect(request.method == "POST")
-        #expect(request.path == "/api/settings")
+        #expect(request.path == "/api/v1/settings")
         let body = try JSONSerialization.jsonObject(with: request.body) as? [String: Any]
         #expect(body?["id"] as? String == "global")
     }
@@ -74,7 +74,7 @@ struct APIClientTests {
     func postWithoutDecodingAcceptsEmptyBody() async throws {
         let recorder = stub(status: 204)
         let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
-        try await makeClient().post("/api/settings", body: patch)
+        try await makeClient().post("/api/v1/settings", body: patch)
         #expect(recorder.requests.count == 1)
     }
 
@@ -82,7 +82,7 @@ struct APIClientTests {
     func postWithoutDecodingAcceptsNonJSONBody() async throws {
         let recorder = stub(status: 200, body: "OK")
         let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
-        try await makeClient().post("/api/settings", body: patch)
+        try await makeClient().post("/api/v1/settings", body: patch)
         #expect(recorder.requests.count == 1)
     }
 
@@ -95,7 +95,7 @@ struct APIClientTests {
         await #expect(
             throws: HTTPError(statusCode: 500, code: "INTERNAL_ERROR", message: "Could not save settings")
         ) {
-            try await makeClient().post("/api/settings", body: patch)
+            try await makeClient().post("/api/v1/settings", body: patch)
             return
         }
         #expect(recorder.requests.count == 1)
@@ -104,27 +104,27 @@ struct APIClientTests {
     @Test("DELETE sends the request and succeeds on 2xx")
     func deleteSucceeds() async throws {
         let recorder = stub(status: 200, body: #"{"success":true}"#)
-        try await makeClient().delete("/api/chat/c1")
+        try await makeClient().delete("/api/v1/chat/c1")
 
         let requests = recorder.requests
         #expect(requests.count == 1)
         let request = try #require(requests.first)
         #expect(request.method == "DELETE")
-        #expect(request.path == "/api/chat/c1")
+        #expect(request.path == "/api/v1/chat/c1")
         #expect(request.body.isEmpty)
     }
 
     @Test("DELETE accepts a 2xx with an empty body")
     func deleteAcceptsEmptyBody() async throws {
         let recorder = stub(status: 204)
-        try await makeClient().delete("/api/chat/c1")
+        try await makeClient().delete("/api/v1/chat/c1")
         #expect(recorder.requests.count == 1)
     }
 
     @Test("DELETE accepts a 2xx with a non-JSON body")
     func deleteAcceptsNonJSONBody() async throws {
         let recorder = stub(status: 200, body: "deleted")
-        try await makeClient().delete("/api/chat/c1")
+        try await makeClient().delete("/api/v1/chat/c1")
         #expect(recorder.requests.count == 1)
     }
 
@@ -136,7 +136,7 @@ struct APIClientTests {
         await #expect(
             throws: HTTPError(statusCode: 404, code: "NOT_FOUND", message: "Chat not found")
         ) {
-            try await makeClient().delete("/api/chat/c1")
+            try await makeClient().delete("/api/v1/chat/c1")
         }
         #expect(recorder.requests.count == 1)
     }
@@ -149,7 +149,7 @@ struct APIClientTests {
         await #expect(
             throws: HTTPError(statusCode: 502, code: "UNKNOWN_ERROR", message: "HTTP 502")
         ) {
-            try await makeClient().delete("/api/chat/c1")
+            try await makeClient().delete("/api/v1/chat/c1")
         }
         #expect(recorder.requests.count == 1)
     }
@@ -160,7 +160,7 @@ struct APIClientTests {
         await #expect(
             throws: HTTPError(statusCode: 502, code: "UNKNOWN_ERROR", message: "HTTP 502")
         ) {
-            let _: [ChatSummary] = try await makeClient().get("/api/history")
+            let _: [ChatSummary] = try await makeClient().get("/api/v1/history")
         }
         #expect(recorder.requests.count == 1)
     }
@@ -171,7 +171,7 @@ struct APIClientTests {
         await #expect(
             throws: HTTPError(statusCode: 502, code: "UNKNOWN_ERROR", message: "Bad Gateway")
         ) {
-            try await makeClient().delete("/api/chat/c1")
+            try await makeClient().delete("/api/v1/chat/c1")
         }
         #expect(recorder.requests.count == 1)
     }
@@ -198,11 +198,11 @@ struct APIClientTests {
         let recorder = stub(status: 200, body: "[]")
         try await withConfiguredClient(suite: "APIClientTests.configuredBaseURL", baseURL: "http://192.168.1.10:8080") {
             client, _ in
-            let _: [ChatSummary] = try await client.get("/api/history")
+            let _: [ChatSummary] = try await client.get("/api/v1/history")
         }
         let request = try #require(recorder.requests.first)
         #expect(recorder.requests.count == 1)
-        #expect(request.url?.absoluteString == "http://192.168.1.10:8080/api/history")
+        #expect(request.url?.absoluteString == "http://192.168.1.10:8080/api/v1/history")
         #expect(request.url?.host == "192.168.1.10")
         #expect(request.url?.port == 8080)
         #expect(request.url?.scheme == "http")
@@ -213,13 +213,13 @@ struct APIClientTests {
         let recorder = stub(status: 200, body: "[]")
         try await withConfiguredClient(suite: "APIClientTests.changingBaseURL", baseURL: "http://192.168.1.10:8080") {
             client, serverConfig in
-            let _: [ChatSummary] = try await client.get("/api/history")
+            let _: [ChatSummary] = try await client.get("/api/v1/history")
             serverConfig.baseURLString = "http://192.168.1.20:9090"
-            let _: [ChatSummary] = try await client.get("/api/history")
+            let _: [ChatSummary] = try await client.get("/api/v1/history")
         }
         #expect(
             recorder.requests.map { $0.url?.absoluteString } == [
-                "http://192.168.1.10:8080/api/history", "http://192.168.1.20:9090/api/history"
+                "http://192.168.1.10:8080/api/v1/history", "http://192.168.1.20:9090/api/v1/history"
             ])
     }
 
@@ -227,9 +227,9 @@ struct APIClientTests {
     func unconfiguredRequestGoesToTheDefaultAddress() async throws {
         let recorder = stub(status: 200, body: "[]")
         try await withConfiguredClient(suite: "APIClientTests.defaultBaseURL", baseURL: nil) { client, _ in
-            let _: [ChatSummary] = try await client.get("/api/history")
+            let _: [ChatSummary] = try await client.get("/api/v1/history")
         }
-        #expect(recorder.requests.first?.url?.absoluteString == "http://localhost:60223/api/history")
+        #expect(recorder.requests.first?.url?.absoluteString == "http://localhost:60223/api/v1/history")
     }
 
     @Test("a non-2xx Anthropic-style error body throws HTTPError with the server's message")
@@ -242,7 +242,7 @@ struct APIClientTests {
         }
         do {
             let _: ListModelsResponse = try await makeClient().post(
-                "/api/settings/models", body: ListModelsRequest(provider: "Ollama", apiKey: nil, baseUrl: nil, apiVersion: nil))
+                "/api/v1/settings/models", body: ListModelsRequest(provider: "Ollama", apiKey: nil, baseUrl: nil, apiVersion: nil))
             Issue.record("expected HTTPError to be thrown")
         } catch let error as HTTPError {
             #expect(error.statusCode == 400)

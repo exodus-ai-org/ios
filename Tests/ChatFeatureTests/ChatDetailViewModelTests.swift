@@ -8,7 +8,7 @@ import Testing
 
 private final class ChatDetailMockURLProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) throws -> (Int, Data))?
-    /// When true, a `POST /api/chat` answer is delivered but the connection is never finished,
+    /// When true, a `POST /api/v1/chat` answer is delivered but the connection is never finished,
     /// i.e. a turn that is still streaming.
     nonisolated(unsafe) static var holdsChatPostOpen = false
 
@@ -21,7 +21,7 @@ private final class ChatDetailMockURLProtocol: URLProtocol, @unchecked Sendable 
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
-        let isChatPost = request.httpMethod == "POST" && request.url?.path == "/api/chat"
+        let isChatPost = request.httpMethod == "POST" && request.url?.path == "/api/v1/chat"
         do {
             let (statusCode, data) = try handler(request)
             let response = HTTPURLResponse(
@@ -94,7 +94,7 @@ private let userOnlyHistoryJSON = #"""
 
 private let envelope404 = #"{"type":"error","error":{"code":"CHAT_NOT_FOUND","message":"Chat not found"}}"#
 
-/// Answers `GET /api/chat/<id>` with `history` and `POST /api/chat` with `reply`, recording every request.
+/// Answers `GET /api/v1/chat/<id>` with `history` and `POST /api/v1/chat` with `reply`, recording every request.
 private func serve(
     history: String = "[]",
     historyStatus: Int = 200,
@@ -109,8 +109,8 @@ private func serve(
         let path = request.url?.path ?? ""
         let body = method == "POST" ? try request.httpBodyStreamData() : Data()
         recorder.record(RecordedRequest(line: "\(method) \(path)", body: body))
-        if method == "GET", path.hasPrefix("/api/chat/") { return (historyStatus, Data(history.utf8)) }
-        if method == "POST", path == "/api/chat" { return (replyStatus, Data(reply.utf8)) }
+        if method == "GET", path.hasPrefix("/api/v1/chat/") { return (historyStatus, Data(history.utf8)) }
+        if method == "POST", path == "/api/v1/chat" { return (replyStatus, Data(reply.utf8)) }
         return (404, Data(envelope404.utf8))
     }
 }
@@ -175,7 +175,7 @@ struct ChatDetailViewModelTests {
         serve(history: historyRowsJSON, recorder: recorder)
         let vm = Harness().makeViewModel()
         await vm.loadHistory()
-        #expect(recorder.lines == ["GET /api/chat/c1"])
+        #expect(recorder.lines == ["GET /api/v1/chat/c1"])
         #expect(vm.messages.map(\.displayText) == ["hi", "hello"])
         #expect(vm.messages.allSatisfy { $0.raw.keys.contains("chatId") == false && $0.timestampMs != nil })
         #expect(vm.hasLoadedHistory)
@@ -204,7 +204,7 @@ struct ChatDetailViewModelTests {
         vm.composerText = "hello"
         #expect(vm.canSend == false)
         await vm.sendMessage()
-        #expect(recorder.lines == ["GET /api/chat/c1"])
+        #expect(recorder.lines == ["GET /api/v1/chat/c1"])
         #expect(vm.composerText == "hello")
         #expect(vm.messages.isEmpty)
     }
@@ -227,7 +227,7 @@ struct ChatDetailViewModelTests {
         vm.composerText = "hey"
         await vm.sendMessage()
 
-        let body = try recorder.onlyJSONBody(forPOST: "/api/chat")
+        let body = try recorder.onlyJSONBody(forPOST: "/api/v1/chat")
         #expect(Set(body.keys) == ["id", "messages", "advancedTools"])
         #expect(body["id"] as? String == "c1")
         #expect((body["advancedTools"] as? [Any])?.isEmpty == true)
@@ -255,7 +255,7 @@ struct ChatDetailViewModelTests {
         vm.composerText = "  hi there \n"
         await vm.sendMessage()
 
-        let body = try recorder.onlyJSONBody(forPOST: "/api/chat")
+        let body = try recorder.onlyJSONBody(forPOST: "/api/v1/chat")
         let messages = try #require(body["messages"] as? [[String: Any]])
         try #require(messages.count == 1)  // an empty history, so the new message is the whole transcript
         #expect(messages[0]["content"] as? String == "hi there")  // inner space kept, both ends trimmed
@@ -287,7 +287,7 @@ struct ChatDetailViewModelTests {
             #expect(vm.canSend == false)
             await vm.sendMessage()
         }
-        #expect(recorder.lines == ["GET /api/chat/c1"])
+        #expect(recorder.lines == ["GET /api/v1/chat/c1"])
         #expect(vm.messages.isEmpty)
     }
 
@@ -319,7 +319,7 @@ struct ChatDetailViewModelTests {
         vm.composerText = "second"
         #expect(vm.canSend == false)
         await vm.sendMessage()
-        #expect(recorder.lines.filter { $0 == "POST /api/chat" }.count == 1)
+        #expect(recorder.lines.filter { $0 == "POST /api/v1/chat" }.count == 1)
         #expect(vm.composerText == "second")
 
         harness.session.invalidateAndCancel()  // end the held-open connection so the first send returns
@@ -342,7 +342,7 @@ struct ChatDetailViewModelTests {
 
         await vm.loadHistory()  // what a pull-to-refresh does while the turn is still streaming
 
-        #expect(recorder.lines.filter { $0 == "GET /api/chat/c1" }.count == 1)  // only the setup load, no second fetch
+        #expect(recorder.lines.filter { $0 == "GET /api/v1/chat/c1" }.count == 1)  // only the setup load, no second fetch
         #expect(vm.messages == messagesBefore)
         #expect(vm.messages.last?.displayText == "Hel")
         #expect(vm.status == statusBefore)
@@ -373,7 +373,7 @@ struct ChatDetailViewModelTests {
         }
         #expect(second.hasLoadedHistory)
         #expect(second.status == .streaming)
-        #expect(recorder.lines.filter { $0 == "GET /api/chat/c1" }.count == 1)  // only the first view model's load
+        #expect(recorder.lines.filter { $0 == "GET /api/v1/chat/c1" }.count == 1)  // only the first view model's load
 
         harness.session.invalidateAndCancel()
         await firstSend.value
@@ -417,7 +417,7 @@ struct ChatDetailViewModelTests {
         await vm.loadHistory()
         vm.composerText = "hey"
         let send = Task { await vm.sendMessage() }
-        try await waitUntil("the chat POST to reach the server") { recorder.lines.contains("POST /api/chat") }
+        try await waitUntil("the chat POST to reach the server") { recorder.lines.contains("POST /api/v1/chat") }
 
         #expect(vm.isTurnInFlight)
         #expect(vm.messages.map(\.role) == ["user"])  // the last message is the user's: nothing else on screen yet
@@ -493,7 +493,7 @@ struct ChatDetailViewModelTests {
         #expect(vm.errorMessage == nil)  // a stop is not an error
         #expect(vm.showsPendingRow == false)
         #expect(await harness.manager.isStreaming("c1") == false)
-        #expect(recorder.lines.filter { $0 == "POST /api/chat" }.count == 1)
+        #expect(recorder.lines.filter { $0 == "POST /api/v1/chat" }.count == 1)
 
         vm.composerText = "again"
         #expect(vm.canSend)
@@ -512,7 +512,7 @@ struct ChatDetailViewModelTests {
         #expect(vm.status == .idle)
         #expect(vm.messages == before)
         #expect(vm.errorMessage == nil)
-        #expect(recorder.lines == ["GET /api/chat/c1"])
+        #expect(recorder.lines == ["GET /api/v1/chat/c1"])
     }
 
     @Test("stop() from a view model that is not in a turn does not cancel a turn another view model started", .timeLimit(.minutes(1)))

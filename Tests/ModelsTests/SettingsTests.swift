@@ -15,7 +15,7 @@ struct SettingsTests {
         #expect(AiProviders.ollama.rawValue == "Ollama")
     }
 
-    @Test("decodes GET /api/settings, ignoring fields this client doesn't model")
+    @Test("decodes GET /api/v1/settings, ignoring fields this client doesn't model")
     func decodesSettingsSnapshot() throws {
         let json = """
             {

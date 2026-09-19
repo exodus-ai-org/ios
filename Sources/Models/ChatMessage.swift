@@ -5,7 +5,7 @@ import Foundation
 /// (`messageSchema` in `schemas/chat.ts`) explains why: prior turns carry
 /// provider-specific fields (`details`, `toolCallId`, `toolName`, `isError`, `usage`,
 /// `cost`, …) that must round-trip unmodified when this message is echoed back
-/// inside the next `POST /api/chat` request body, or the server loses tool-call
+/// inside the next `POST /api/v1/chat` request body, or the server loses tool-call
 /// pairing information it needs to talk to the LLM provider.
 public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
     public var id: String

@@ -35,7 +35,7 @@ public final class ChatListViewModel {
         errorMessage = nil
         defer { isLoading = false }
         do {
-            let loaded: [ChatSummary] = try await apiClient.get("/api/history")
+            let loaded: [ChatSummary] = try await apiClient.get("/api/v1/history")
             chats = loaded.filter { !deletedIDs.contains($0.id) }
             loadFailed = false
             hasLoaded = true
@@ -50,7 +50,7 @@ public final class ChatListViewModel {
 
     public func delete(_ chat: ChatSummary) async {
         do {
-            try await apiClient.delete("/api/chat/\(chat.id)")
+            try await apiClient.delete("/api/v1/chat/\(chat.id)")
             deletedIDs.insert(chat.id)
             chats.removeAll { $0.id == chat.id }
         } catch {

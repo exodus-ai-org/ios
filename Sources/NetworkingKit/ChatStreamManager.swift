@@ -163,7 +163,7 @@ public actor ChatStreamManager {
         serverConfig: ServerConfigStore
     ) -> URLRequest? {
         guard let base = URL(string: serverConfig.baseURLString) else { return nil }
-        var request = URLRequest(url: base.appendingPathComponent("/api/chat"))
+        var request = URLRequest(url: base.appendingPathComponent("/api/v1/chat"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         // The server sends no keep-alive frames, and URLSession's default 60 s

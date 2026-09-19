@@ -54,7 +54,7 @@ private let twoChatsJSON = #"""
 private let serverErrorJSON =
     #"{"type":"error","error":{"code":"DB_QUERY_FAILED","message":"Failed to get chat history"}}"#
 
-/// Answers `GET /api/history` and `DELETE /api/chat/<id>`, recording "METHOD path" for every request.
+/// Answers `GET /api/v1/history` and `DELETE /api/v1/chat/<id>`, recording "METHOD path" for every request.
 private func serve(
     history: String = "[]",
     historyStatus: Int = 200,
@@ -66,10 +66,10 @@ private func serve(
         let method = request.httpMethod ?? "GET"
         let path = request.url?.path ?? ""
         recorder.record("\(method) \(path)")
-        if method == "GET", path == "/api/history" {
+        if method == "GET", path == "/api/v1/history" {
             return (historyStatus, Data(history.utf8))
         }
-        if method == "DELETE", path.hasPrefix("/api/chat/") {
+        if method == "DELETE", path.hasPrefix("/api/v1/chat/") {
             return (deleteStatus, Data(deleteBody.utf8))
         }
         return (404, Data(#"{"type":"error","error":{"code":"NOT_FOUND","message":"no route"}}"#.utf8))
@@ -87,7 +87,7 @@ struct ChatListViewModelTests {
         return ChatListViewModel(apiClient: client)
     }
 
-    @Test("load() fills the list from GET /api/history, in the server's order")
+    @Test("load() fills the list from GET /api/v1/history, in the server's order")
     func loadPopulatesChatsInServerOrder() async throws {
         let recorder = RequestRecorder()
         serve(history: twoChatsJSON, recorder: recorder)
@@ -96,12 +96,12 @@ struct ChatListViewModelTests {
         #expect(vm.chats.map(\.id) == ["c1", "c2"])
         let first = try #require(vm.chats.first)
         #expect(first.title == "Trip planning")
-        #expect(recorder.requests == ["GET /api/history"])
+        #expect(recorder.requests == ["GET /api/v1/history"])
         #expect(vm.errorMessage == nil)
         #expect(vm.loadFailed == false)
     }
 
-    @Test("delete(_:) sends DELETE /api/chat/<id> and removes only that chat after it succeeds")
+    @Test("delete(_:) sends DELETE /api/v1/chat/<id> and removes only that chat after it succeeds")
     func deleteRemovesChatAfterSuccessfulDelete() async throws {
         let recorder = RequestRecorder()
         serve(history: twoChatsJSON, recorder: recorder)
@@ -109,7 +109,7 @@ struct ChatListViewModelTests {
         await vm.load()
         let first = try #require(vm.chats.first)
         await vm.delete(first)
-        #expect(recorder.requests == ["GET /api/history", "DELETE /api/chat/c1"])
+        #expect(recorder.requests == ["GET /api/v1/history", "DELETE /api/v1/chat/c1"])
         #expect(vm.chats.map(\.id) == ["c2"])
         #expect(vm.errorMessage == nil)
     }
@@ -292,7 +292,7 @@ struct ChatListViewModelTests {
 
         await vm.load()  // the mock still answers [c1, c2], as a load that started before the delete would
         #expect(vm.chats.map(\.id) == ["c2"])
-        #expect(recorder.requests == ["GET /api/history", "DELETE /api/chat/c1", "GET /api/history"])
+        #expect(recorder.requests == ["GET /api/v1/history", "DELETE /api/v1/chat/c1", "GET /api/v1/history"])
     }
 
     @Test("a chat whose delete FAILED is not remembered as deleted, so a reload still shows it")

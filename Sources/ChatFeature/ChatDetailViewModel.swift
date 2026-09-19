@@ -55,7 +55,7 @@ public final class ChatDetailViewModel {
     public func loadHistory() async {
         guard !isTurnInFlight else { return }  // a reload would replace the reply that is being streamed
         do {
-            let rows: [ChatMessage] = try await apiClient.get("/api/chat/\(chatId)")
+            let rows: [ChatMessage] = try await apiClient.get("/api/v1/chat/\(chatId)")
             messages = ChatHistoryRows.uiMessages(from: rows)
             hasLoadedHistory = true
         } catch {

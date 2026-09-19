@@ -16,7 +16,7 @@ public final class SettingsViewModel {
     public var isLoadingModels = false
     public var errorMessage: String?
     public var didSave = false
-    /// True only after a successful `loadSettings()` for the stored server address. `POST /api/settings`
+    /// True only after a successful `loadSettings()` for the stored server address. `POST /api/v1/settings`
     /// replaces `providers` and `providerConfig` wholesale and nulls `lastBackupAt`, so `save()` refuses
     /// without it: a form that never loaded must not overwrite a server it has not seen.
     public private(set) var hasLoadedSettings = false
@@ -87,7 +87,7 @@ public final class SettingsViewModel {
         // loaded, the old server's settings under the new address, and a Save would write them there.
         let requestedAddress = serverConfig.baseURLString
         do {
-            let snapshot: SettingsSnapshot = try await apiClient.get("/api/settings")
+            let snapshot: SettingsSnapshot = try await apiClient.get("/api/v1/settings")
             guard isCurrent(address: requestedAddress) else { return }
             workingProviders = snapshot.providers ?? ProvidersConfig()
             loadedProviderConfig = snapshot.providerConfig
@@ -127,7 +127,7 @@ public final class SettingsViewModel {
                 baseUrl: nil,
                 apiVersion: nil
             )
-            let response: ListModelsResponse = try await apiClient.post("/api/settings/models", body: request)
+            let response: ListModelsResponse = try await apiClient.post("/api/v1/settings/models", body: request)
             guard isCurrent(provider: requestedProvider, apiKey: requestedKey) else { return }
             availableModels = response.models
         } catch {
@@ -142,7 +142,7 @@ public final class SettingsViewModel {
         selectedProvider == provider && apiKeyText == apiKey
     }
 
-    /// `POST /api/settings` replaces `providerConfig` wholesale and the desktop feeds
+    /// `POST /api/v1/settings` replaces `providerConfig` wholesale and the desktop feeds
     /// `providerConfig.modelSnapshot` (context window, max output, reasoning levels, cost) to
     /// its model resolver, so never send `nil` for a model the desktop already knows: prefer
     /// the picked catalog entry; else keep the loaded snapshot only if provider AND model are
@@ -176,7 +176,7 @@ public final class SettingsViewModel {
             // `lastBackupAt` is echoed because the server writes it unconditionally (see SettingsPatch).
             let patch = SettingsPatch(
                 id: "global", providerConfig: providerConfig, providers: providers, lastBackupAt: loadedLastBackupAt)
-            try await apiClient.post("/api/settings", body: patch)
+            try await apiClient.post("/api/v1/settings", body: patch)
             workingProviders = providers
             loadedProviderConfig = providerConfig
             didSave = true

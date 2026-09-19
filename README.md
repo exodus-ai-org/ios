@@ -1,6 +1,6 @@
 # Exodus iOS
 
-A native iPhone client for the desktop Exodus app (`universal-client`): it lists chats, sends messages,
+A native iPhone client for the desktop Exodus app (`exodus`): it lists chats, sends messages,
 streams the replies and edits the AI-provider settings, all through the desktop's local HTTP server.
 It stores nothing but the server address. Swift 6, SwiftUI, no third-party dependencies. See the
 [design spec](docs/superpowers/specs/2026-09-18-chat-settings-mvp-design.md) and the
@@ -43,8 +43,9 @@ matches nothing and still prints `** TEST SUCCEEDED **`, so look for a `Test run
 
 ## Connecting to the desktop
 
-Run `pnpm dev` in `../universal-client`; it serves the API on port 60223. The default address,
-`http://localhost:60223`, works from the Simulator on the same Mac. On a real iPhone open Settings (gear),
+Run the desktop app from `../exodus` (`bun start`); it serves the API on port 60223 under `/api/v1`, the
+versioned prefix this app addresses. The default address, `http://localhost:60223`, works from the Simulator
+on the same Mac. On a real iPhone open Settings (gear),
 then 连接, and enter the Mac's LAN IP or `<name>.local` with the port, e.g. `http://192.168.1.10:60223`.
 iOS asks once for local-network permission.
 

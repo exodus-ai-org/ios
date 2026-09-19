@@ -1,11 +1,11 @@
 import Foundation
 import Models
 
-/// Rows from `GET /api/chat/:id` are database rows (`createdAt`, `chatId`, `searchText`,
+/// Rows from `GET /api/v1/chat/:id` are database rows (`createdAt`, `chatId`, `searchText`,
 /// per-column `toolName` / `isError` / `details`, …), not the `ChatMessage` shape the SSE
 /// stream sends (`timestamp`, no row bookkeeping). The desktop converts them with
 /// `convertToUIMessages` (`src/renderer/lib/utils.ts`) before showing them or sending them
-/// back as the prior turns of the next `POST /api/chat`; this is the same conversion.
+/// back as the prior turns of the next `POST /api/v1/chat`; this is the same conversion.
 enum ChatHistoryRows {
     static func uiMessages(from rows: [ChatMessage]) -> [ChatMessage] {
         let withFraction = ISO8601DateFormatter()

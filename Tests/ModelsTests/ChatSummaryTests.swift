@@ -5,7 +5,7 @@ import Testing
 
 @Suite("ChatSummary")
 struct ChatSummaryTests {
-    @Test("decodes a chat row from GET /api/history")
+    @Test("decodes a chat row from GET /api/v1/history")
     func decodesChatSummary() throws {
         let json = """
             {"id":"c1","createdAt":"2026-09-18T12:34:56.789Z","title":"Trip planning","favorite":false,"projectId":null,"useProjectInstructions":true}

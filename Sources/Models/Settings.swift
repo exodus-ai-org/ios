@@ -144,7 +144,7 @@ public struct SettingsPatch: Encodable, Sendable {
     public var id: String
     public var providerConfig: ProviderConfig?
     public var providers: ProvidersConfig?
-    /// The server writes `lastBackupAt` unconditionally on every `POST /api/settings`
+    /// The server writes `lastBackupAt` unconditionally on every `POST /api/v1/settings`
     /// (`lastBackupAt ? new Date(lastBackupAt) : null`), so the value read from the
     /// `SettingsSnapshot` must be sent back or the desktop's "last backup" is nulled.
     public var lastBackupAt: String?
