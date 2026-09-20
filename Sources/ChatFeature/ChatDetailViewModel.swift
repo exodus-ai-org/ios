@@ -16,6 +16,15 @@ public final class ChatDetailViewModel {
     /// Nothing is sent before that — the prior turns of a POST are the LLM context when the
     /// server's LCM feature is off, and the desktop does not render a chat before its history.
     public private(set) var hasLoadedHistory = false
+    /// Whether this chat already had messages when it was first opened. A chat that was empty then
+    /// is a new chat and keeps "New chat" in the title bar until the server sends a generated
+    /// title; without this the title changed twice in one turn — to "Chat" the instant the first
+    /// message was sent, and to the generated title a few seconds later.
+    ///
+    /// Only the first `loadHistory` can know this. A view model that re-attached to a turn already
+    /// in flight never saw a history, and a chat you are in the middle of a turn in is one you just
+    /// started, so leaving it `false` is right there too.
+    private var openedWithMessages = false
 
     private let apiClient: APIClient
     private let streamManager: ChatStreamManager
@@ -48,8 +57,14 @@ public final class ChatDetailViewModel {
     /// before the history is known, so opening a chat does not flash the greeting.
     public var showsEmptyState: Bool { hasLoadedHistory && messages.isEmpty && !isTurnInFlight }
 
+    /// What the title bar shows: the chat's own title, cut to a length a title bar can carry, else
+    /// "New chat" for a chat that was empty when it was opened and "Chat" for one that was opened
+    /// with messages and has no title yet.
     public var displayTitle: String {
-        chatTitle ?? (messages.isEmpty ? String(localized: "New chat") : String(localized: "Chat"))
+        guard let chatTitle else {
+            return openedWithMessages ? String(localized: "Chat") : String(localized: "New chat")
+        }
+        return Self.shortened(chatTitle)
     }
 
     public func onAppear() async {
@@ -67,6 +82,9 @@ public final class ChatDetailViewModel {
         do {
             let rows: [ChatMessage] = try await apiClient.get("/api/v1/chat/\(chatId)")
             messages = ChatHistoryRows.uiMessages(from: rows)
+            // Only the first load says what this chat was; a later pull-to-refresh sees the turns
+            // that have happened since and must not turn a new chat into an old one.
+            if !hasLoadedHistory { openedWithMessages = !messages.isEmpty }
             hasLoadedHistory = true
         } catch {
             // SwiftUI cancels a view's `.task` when the view goes away; that is not a failure.
@@ -125,5 +143,16 @@ public final class ChatDetailViewModel {
     private static func oneLine(_ title: String?) -> String? {
         guard let collapsed = title?.collapsedWhitespace, !collapsed.isEmpty else { return nil }
         return collapsed
+    }
+
+    /// Generated titles are not bounded — the owner's history holds one of 1211 characters — while a
+    /// title bar shows about thirty. Handed the whole string, the bar stops centring the title and
+    /// stretches it across the toolbar buttons, so the displayed text is cut here. `chatTitle` keeps
+    /// the server's text as it came.
+    private static let displayTitleLimit = 80
+
+    private static func shortened(_ title: String) -> String {
+        guard title.count > displayTitleLimit else { return title }
+        return title.prefix(displayTitleLimit).trimmingCharacters(in: .whitespaces) + "…"
     }
 }

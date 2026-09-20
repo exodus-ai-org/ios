@@ -548,13 +548,80 @@ struct ChatDetailViewModelTests {
         await send.value
     }
 
-    @Test("the navigation title comes from the title event, else New chat for an empty transcript and Chat once there are messages")
+    @Test("the navigation title is New chat until a chat is known to have been opened with messages, and Chat after that")
     func displayTitle() async throws {
         serve(history: historyRowsJSON, recorder: RequestRecorder())
         let vm = Harness().makeViewModel()
         #expect(vm.displayTitle == "New chat")
         await vm.loadHistory()
         #expect(vm.displayTitle == "Chat")
+    }
+
+    /// The flicker the owner reported: the title used to flip to "Chat" the moment the first message
+    /// was sent and again to the generated title a few seconds later. A chat that started empty now
+    /// keeps "New chat" until a real title arrives.
+    @Test("a chat that started empty keeps New chat for the whole first turn", .timeLimit(.minutes(1)))
+    func aNewChatKeepsItsTitleUntilOneIsGenerated() async throws {
+        serve(history: "[]", reply: partialReply, holdReplyOpen: true, recorder: RequestRecorder())
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        #expect(vm.displayTitle == "New chat")
+
+        vm.composerText = "hey"
+        let send = Task { await vm.sendMessage() }
+        try await waitUntil("the partial reply to arrive") { vm.messages.last?.displayText == "Hel" }
+        // The transcript now holds the user's message and the reply so far, and still no title.
+        #expect(vm.messages.count == 2)
+        #expect(vm.displayTitle == "New chat")
+
+        harness.session.invalidateAndCancel()
+        await send.value
+    }
+
+    @Test("a chat that started empty shows the generated title as soon as the title event arrives")
+    func aNewChatShowsTheGeneratedTitle() async throws {
+        serve(history: "[]", reply: helloReply, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        #expect(vm.displayTitle == "Greeting")
+    }
+
+    /// A pull-to-refresh after the first turn must not turn the new chat into one "opened with
+    /// messages", which would change the title from "New chat" to "Chat" under the user.
+    @Test("reloading a new chat's history after its first turn keeps the New chat title")
+    func reloadingAfterTheFirstTurnKeepsNewChat() async throws {
+        serve(history: "[]", reply: partialReply, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        #expect(vm.status == .idle)
+
+        serve(history: historyRowsJSON, recorder: RequestRecorder())  // the server now has the turn
+        await vm.loadHistory()
+        #expect(vm.messages.isEmpty == false)
+        #expect(vm.displayTitle == "New chat")
+    }
+
+    @Test("a title too long for a title bar is cut for display, and the chat keeps the server's text")
+    func aLongTitleIsCutForDisplay() async throws {
+        serve(history: "[]", recorder: RequestRecorder())
+        let long = (1...40).map { "word\($0)" }.joined(separator: " ")  // 249 characters, no stray spaces
+        try #require(long.count > 80)
+        let vm = Harness().makeViewModel(title: long)
+        #expect(vm.chatTitle == long)  // the server's title is kept whole
+        #expect(vm.displayTitle.count == 81)  // 80 characters plus the ellipsis
+        #expect(vm.displayTitle.hasSuffix("…"))
+        #expect(long.hasPrefix(vm.displayTitle.dropLast()))  // the cut text is the start of the title
+
+        // A title that fits is shown exactly as it is.
+        let short = String(long.prefix(80))
+        #expect(Harness().makeViewModel(title: short).displayTitle == short)
     }
 
     // MARK: - Titles on one line, and the empty state
