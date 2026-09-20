@@ -101,10 +101,19 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
             .accessibilityAction(.escape) { setOpen(false) }
             // A cancelled gesture (a system interruption, a call banner) never calls `onEnded`, so
             // the drag would stay pending and the card would sit parked wherever the finger left it.
-            // `isDragging` resets either way; a drag still pending here is one `onEnded` never saw.
+            // `isDragging` resets either way, which is how such a drag still gets settled.
+            //
+            // `onEnded` decides every release, whichever order SwiftUI delivers the two events in:
+            // it is the only one with the velocity, and two settles with two different targets
+            // would be the very reversal this file exists to avoid. Hence the wait for one
+            // main-actor turn — by then `onEnded` has run if it was ever going to — and hence
+            // settling only a drag that is still the one seen here, never a newer one.
             .onChange(of: isDragging) { _, dragging in
                 guard !dragging, let pending = drag else { return }
-                settle(open: pending > drawerWidth / 2)
+                Task { @MainActor in
+                    guard drag == pending else { return }
+                    settle(open: pending > drawerWidth / 2)
+                }
             }
         }
         .ignoresSafeArea(.container)
