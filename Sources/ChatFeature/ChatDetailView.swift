@@ -12,6 +12,9 @@ public struct ChatDetailView: View {
     /// Stands in for the measurement during the first layout pass, so the composer is not drawn one
     /// line high for a frame and then grown.
     @ScaledMetric(relativeTo: .body) private var estimatedTurnButtonHeight: CGFloat = 32
+    /// Return inserts a newline in the multi-line composer, so the keyboard needs somewhere else to
+    /// go: the composer's hide-keyboard button and a tap on the transcript both clear this.
+    @FocusState private var isComposerFocused: Bool
 
     public init(
         chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
@@ -47,6 +50,10 @@ public struct ChatDetailView: View {
             // Pull down to retry a history load that failed (the composer stays disabled until it succeeds).
             .scrollBounceBehavior(.always)
             .scrollDismissesKeyboard(.interactively)
+            // Tapping the transcript puts the keyboard away. A tap gesture does not consume the
+            // drag that scrolling, the interactive keyboard dismissal above and pull-to-refresh
+            // all need, and no row here is tappable, so nothing else loses its taps.
+            .onTapGesture { isComposerFocused = false }
             .refreshable { await viewModel.loadHistory() }
             .onChange(of: viewModel.messages.count) {
                 scrollToBottom(proxy, animated: true)
@@ -93,8 +100,27 @@ public struct ChatDetailView: View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField("Ask Exodus", text: $viewModel.composerText, axis: .vertical)
                 .lineLimit(1...5)
+                .focused($isComposerFocused)
                 .frame(minHeight: turnButtonHeight > 0 ? turnButtonHeight : estimatedTurnButtonHeight)
                 .accessibilityIdentifier("composerField")
+            if isComposerFocused {
+                // Return inserts a newline in this multi-line field, so without a button the only
+                // ways out of the keyboard are gestures, which is what the owner could not find.
+                // It lives here rather than in a `.keyboard` toolbar placement: measured on iOS 27,
+                // such an item is drawn as a floating circle in the same band as this bar and lands
+                // on top of the send button.
+                Button {
+                    isComposerFocused = false
+                } label: {
+                    Label("Hide keyboard", systemImage: "keyboard.chevron.compact.down")
+                        .labelStyle(.iconOnly)
+                        // The keyboard symbol is wider and taller than the send arrow, and a circle
+                        // sized to fit it would be the bigger of the two buttons.
+                        .imageScale(.small)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+            }
             turnButton
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { turnButtonHeight = $0 }
         }
