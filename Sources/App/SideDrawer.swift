@@ -39,8 +39,11 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
             let progress = drawerWidth > 0 ? offset / drawerWidth : 0
             // This reader fills the display, so its concentric radii are the display's own. The
             // card keeps them even while closed: a full-screen card's corners sit under the
-            // physical corners of the screen, where they cannot be seen.
-            let cardRadius = max(geo.concentricCornerRadii?.bottomLeading ?? 0, minCornerRadius)
+            // physical corners of the screen, where they cannot be seen. A square-cornered
+            // display reports 0 and only then does the fallback apply — a small radius that was
+            // genuinely reported is the display's, and raising it would miss those corners.
+            let displayRadius = geo.concentricCornerRadii?.bottomLeading ?? 0
+            let cardRadius = displayRadius > 0 ? displayRadius : minCornerRadius
             // How far the sidebar has arrived, 0 … 1. It runs ahead of the card so the sidebar has
             // settled by the time the card lands, and it reaches exactly 1, never a dimmed open state.
             let reveal = min(1, progress * 1.5)
