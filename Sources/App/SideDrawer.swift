@@ -41,11 +41,19 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
             // card keeps them even while closed: a full-screen card's corners sit under the
             // physical corners of the screen, where they cannot be seen.
             let cardRadius = max(geo.concentricCornerRadii?.bottomLeading ?? 0, minCornerRadius)
+            // How far the sidebar has arrived, 0 … 1. It runs ahead of the card so the sidebar has
+            // settled by the time the card lands, and it reaches exactly 1, never a dimmed open state.
+            let reveal = min(1, progress * 1.5)
 
             ZStack(alignment: .leading) {
                 sidebar()
                     .frame(width: drawerWidth)
                     .frame(maxHeight: .infinity)
+                    // The content fades in and grows into place as the card uncovers it. Anchored at
+                    // the leading edge, so rows do not drift sideways while they are being revealed.
+                    .opacity(reveal)
+                    .scaleEffect(0.92 + 0.08 * reveal, anchor: .leading)
+                    // Behind the fade, so the strip the card has uncovered is always solid.
                     .background(Color(.systemBackground))
                     // Closed: invisible, inert and skipped by VoiceOver.
                     .opacity(progress > 0 ? 1 : 0)
