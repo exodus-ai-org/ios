@@ -15,7 +15,14 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
     @ViewBuilder var sidebar: () -> Sidebar
     @ViewBuilder var content: () -> Content
 
-    @GestureState private var drag: CGFloat = 0
+    /// The card's offset while a drag is in flight, in points from the closed position, or `nil`
+    /// when no drag is pending. Ordinary `@State`, deliberately not `@GestureState`: SwiftUI resets
+    /// a `@GestureState` *before* `onEnded` runs, so the card rendered one frame at the closed
+    /// offset — the release flash — before the new `isOpen` animated it back out.
+    @State private var drag: CGFloat?
+    /// `@GestureState` only as an "a drag is in flight" flag. A cancelled gesture never calls
+    /// `onEnded`, but this always resets, which is how a pending drag still gets settled.
+    @GestureState private var isDragging = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
@@ -27,7 +34,7 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
         GeometryReader { geo in
             let drawerWidth = min(geo.size.width * 0.78, maxDrawerWidth)
             let base: CGFloat = isOpen ? drawerWidth : 0
-            let offset = min(max(base + drag, 0), drawerWidth)
+            let offset = min(max(drag ?? base, 0), drawerWidth)
             let progress = drawerWidth > 0 ? offset / drawerWidth : 0
 
             ZStack(alignment: .leading) {
@@ -79,6 +86,13 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .simultaneousGesture(dragGesture(drawerWidth: drawerWidth, base: base))
             .accessibilityAction(.escape) { setOpen(false) }
+            // A cancelled gesture (a system interruption, a call banner) never calls `onEnded`, so
+            // the drag would stay pending and the card would sit parked wherever the finger left it.
+            // `isDragging` resets either way; a drag still pending here is one `onEnded` never saw.
+            .onChange(of: isDragging) { _, dragging in
+                guard !dragging, let pending = drag else { return }
+                settle(open: pending > drawerWidth / 2)
+            }
         }
         .ignoresSafeArea(.container)
         .onChange(of: isOpen) { _, nowOpen in
@@ -113,18 +127,22 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
     /// One horizontal-dominant drag. Closed, it only starts at the left edge; open, it starts anywhere.
     private func dragGesture(drawerWidth: CGFloat, base: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12)
-            .updating($drag) { value, state, _ in
-                // Reset, never return early: a drag that turns vertical after starting horizontal would
+            .updating($isDragging) { _, state, _ in state = true }
+            .onChanged { value in
+                // Clear, never return early: a drag that turns vertical after starting horizontal would
                 // otherwise leave the card parked at the offset of its last horizontal sample.
                 guard isHorizontal(value.translation), canStart(at: value.startLocation) else {
-                    state = 0
+                    drag = nil
                     return
                 }
-                state = value.translation.width
+                drag = base + value.translation.width
             }
             .onEnded { value in
-                guard isHorizontal(value.translation), canStart(at: value.startLocation) else { return }
-                setOpen(base + value.predictedEndTranslation.width > drawerWidth / 2)
+                guard isHorizontal(value.translation), canStart(at: value.startLocation) else {
+                    drag = nil
+                    return
+                }
+                settle(open: base + value.predictedEndTranslation.width > drawerWidth / 2)
             }
     }
 
@@ -138,6 +156,15 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
 
     private func setOpen(_ open: Bool) {
         withAnimation(drawerAnimation(reduceMotion: reduceMotion)) { isOpen = open }
+    }
+
+    /// Ends a drag: the new resting place and the end of the drag are one change, so the card
+    /// animates straight from the offset on screen to the target with no frame in between.
+    private func settle(open: Bool) {
+        withAnimation(drawerAnimation(reduceMotion: reduceMotion)) {
+            isOpen = open
+            drag = nil
+        }
     }
 
     private func dismissKeyboard() {
