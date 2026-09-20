@@ -28,7 +28,8 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
 
     private let maxDrawerWidth: CGFloat = 360
     private let edgeGrabWidth: CGFloat = 28
-    private let openCornerRadius: CGFloat = 40
+    /// What the card's corners fall back to on a display that reports square corners.
+    private let minCornerRadius: CGFloat = 24
 
     var body: some View {
         GeometryReader { geo in
@@ -36,6 +37,10 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
             let base: CGFloat = isOpen ? drawerWidth : 0
             let offset = min(max(drag ?? base, 0), drawerWidth)
             let progress = drawerWidth > 0 ? offset / drawerWidth : 0
+            // This reader fills the display, so its concentric radii are the display's own. The
+            // card keeps them even while closed: a full-screen card's corners sit under the
+            // physical corners of the screen, where they cannot be seen.
+            let cardRadius = max(geo.concentricCornerRadii?.bottomLeading ?? 0, minCornerRadius)
 
             ZStack(alignment: .leading) {
                 sidebar()
@@ -57,10 +62,10 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
                             .opacity(0.6 * progress)
                             .allowsHitTesting(false)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius(progress), style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
                     // After the clip, so the outline survives it. `strokeBorder` draws inside the shape.
                     .overlay {
-                        RoundedRectangle(cornerRadius: cornerRadius(progress), style: .continuous)
+                        RoundedRectangle(cornerRadius: cardRadius, style: .continuous)
                             .strokeBorder(Color.primary.opacity(borderOpacity(progress)), lineWidth: 1)
                             .allowsHitTesting(false)
                     }
@@ -117,11 +122,6 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
                 Color(.secondarySystemBackground).opacity(progress)
             }
         }
-    }
-
-    private func cornerRadius(_ progress: CGFloat) -> CGFloat {
-        if reduceMotion { return progress > 0 ? openCornerRadius : 0 }
-        return openCornerRadius * min(progress * 4, 1)
     }
 
     /// One horizontal-dominant drag. Closed, it only starts at the left edge; open, it starts anywhere.
