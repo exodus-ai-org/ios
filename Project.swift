@@ -58,6 +58,15 @@ let project = Project(
                 ]
             )
         ),
+        .target(
+            name: "AppTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "\(bundleIdRoot).AppTests",
+            deploymentTargets: deploymentTargets,
+            buildableFolders: ["Tests/AppTests"],
+            dependencies: [.target(name: "App")]
+        ),
         moduleTarget(name: "Models"),
         .target(
             name: "ModelsTests",

@@ -1,0 +1,146 @@
+import CoreGraphics
+import Testing
+
+// The app target ships as `Exodus`, so that — not `App` — is the module name to import.
+@testable import Exodus
+
+/// A phone-sized drawer: 402 pt wide screen × 0.78.
+private let width: CGFloat = 313
+
+@Suite("DrawerPhysics.project")
+struct DrawerPhysicsProjectionTests {
+    @Test("a still finger projects nowhere")
+    func zeroVelocityProjectsNothing() {
+        #expect(DrawerPhysics.project(velocity: 0) == 0)
+    }
+
+    @Test("the projection is Apple's exponential decay, not the textbook one")
+    func projectionMatchesTheDecayFormula() {
+        // (1000/1000) × 0.998 / 0.002 = 499 pt for one point per millisecond.
+        #expect(abs(DrawerPhysics.project(velocity: 1000) - 499) < 0.001)
+        #expect(abs(DrawerPhysics.project(velocity: -1000) + 499) < 0.001)
+    }
+
+    @Test("a slower deceleration rate throws further")
+    func decelerationRateOrdersTheProjection() {
+        #expect(DrawerPhysics.project(velocity: 800, decelerationRate: 0.998)
+            > DrawerPhysics.project(velocity: 800, decelerationRate: 0.99))
+    }
+}
+
+@Suite("DrawerPhysics.endsOpen")
+struct DrawerPhysicsReleaseTests {
+    @Test("a flick opens the drawer from a travel that would never reach the midpoint")
+    func aFlickOpensFromAShortTravel() {
+        // 30 pt of travel, a tenth of the way, but thrown at 1200 pt/s.
+        #expect(DrawerPhysics.endsOpen(offset: 30, velocity: 1200, drawerWidth: width))
+    }
+
+    @Test("a slow drag 40% of the way falls back closed")
+    func aSlowFortyPercentDragCloses() {
+        #expect(!DrawerPhysics.endsOpen(offset: width * 0.4, velocity: 0, drawerWidth: width))
+    }
+
+    @Test("a slow drag past the midpoint opens")
+    func aSlowDragPastTheMidpointOpens() {
+        #expect(DrawerPhysics.endsOpen(offset: width * 0.6, velocity: 0, drawerWidth: width))
+    }
+
+    @Test("a leftward flick closes even from past the midpoint")
+    func aLeftwardVelocityBeatsPosition() {
+        #expect(!DrawerPhysics.endsOpen(offset: width * 0.8, velocity: -900, drawerWidth: width))
+    }
+
+    @Test("a rightward flick opens even from short of the midpoint, closed or open")
+    func aRightwardVelocityBeatsPosition() {
+        #expect(DrawerPhysics.endsOpen(offset: width * 0.2, velocity: 900, drawerWidth: width))
+    }
+
+    @Test("a release at the open position stays open")
+    func aReleaseAtTheOpenPositionStaysOpen() {
+        #expect(DrawerPhysics.endsOpen(offset: width, velocity: 0, drawerWidth: width))
+    }
+}
+
+@Suite("DrawerPhysics.rubberBand and resistedOffset")
+struct DrawerPhysicsResistanceTests {
+    @Test("before the open edge the card is exactly where the finger is")
+    func theCardIsOneToOneBeforeTheEdge() {
+        for wanted in stride(from: CGFloat(0), through: width, by: 20) {
+            #expect(DrawerPhysics.resistedOffset(wanted, drawerWidth: width) == wanted)
+        }
+    }
+
+    @Test("the closed end is a hard wall: never a negative offset")
+    func theClosedEndDoesNotRubberBand() {
+        #expect(DrawerPhysics.resistedOffset(-1, drawerWidth: width) == 0)
+        #expect(DrawerPhysics.resistedOffset(-400, drawerWidth: width) == 0)
+    }
+
+    @Test("past the open edge the card keeps moving, but always less than the finger")
+    func pastTheEdgeTheCardResists() {
+        let past = DrawerPhysics.resistedOffset(width + 100, drawerWidth: width)
+        #expect(past > width)
+        #expect(past < width + 100)
+    }
+
+    @Test("resistance is monotonic: more finger is always more card")
+    func resistanceIsMonotonic() {
+        var previous = DrawerPhysics.resistedOffset(0, drawerWidth: width)
+        for wanted in stride(from: CGFloat(1), through: width * 3, by: 3) {
+            let next = DrawerPhysics.resistedOffset(wanted, drawerWidth: width)
+            #expect(next > previous)
+            previous = next
+        }
+    }
+
+    @Test("resistance is bounded: the card cannot be pulled a second drawer width out")
+    func resistanceIsBounded() {
+        // A thousand screens of pull still buys less than one more drawer width of card.
+        #expect(DrawerPhysics.resistedOffset(width * 1000, drawerWidth: width) < width * 2)
+        // The whole of a 402 pt screen is only ~90 pt past the open position: about 42 pt of card.
+        #expect(DrawerPhysics.resistedOffset(width + 90, drawerWidth: width) < width + 50)
+    }
+
+    @Test("the first point past the edge still follows the finger almost exactly")
+    func theResistanceStartsGently() {
+        let slack = DrawerPhysics.resistedOffset(width + 1, drawerWidth: width) - width
+        #expect(slack > 0.5)
+        #expect(slack < 1)
+    }
+
+    @Test("a zero-width drawer resists everything")
+    func aZeroWidthDrawerIsSafe() {
+        #expect(DrawerPhysics.resistedOffset(100, drawerWidth: 0) == 0)
+        #expect(DrawerPhysics.rubberBand(overshoot: 100, dimension: 0) == 0)
+    }
+}
+
+@Suite("DrawerPhysics.normalisedVelocity")
+struct DrawerPhysicsVelocityHandoffTests {
+    @Test("the velocity is measured in journeys per second")
+    func theVelocityIsAFractionOfTheDistanceLeft() {
+        #expect(DrawerPhysics.normalisedVelocity(600, from: 100, to: 400) == 2)
+    }
+
+    @Test("moving toward the target is positive whichever way the card is going")
+    func theSignFollowsTheDirectionOfTravel() {
+        // Opening: card at 100, target 313, finger moving right.
+        #expect(DrawerPhysics.normalisedVelocity(900, from: 100, to: width) > 0)
+        // Closing: card at 200, target 0, finger moving left — still travelling toward the target.
+        #expect(DrawerPhysics.normalisedVelocity(-900, from: 200, to: 0) > 0)
+    }
+
+    @Test("a velocity away from the target is negative")
+    func aVelocityAwayFromTheTargetIsNegative() {
+        // Released moving left, but the projection still put the drawer open.
+        #expect(DrawerPhysics.normalisedVelocity(-300, from: 200, to: width) < 0)
+    }
+
+    @Test("a distance under a point hands off no velocity at all")
+    func aTinyDistanceIsGuarded() {
+        #expect(DrawerPhysics.normalisedVelocity(2000, from: width, to: width) == 0)
+        #expect(DrawerPhysics.normalisedVelocity(2000, from: width - 0.4, to: width) == 0)
+        #expect(DrawerPhysics.normalisedVelocity(2000, from: width - 1, to: width) == 2000)
+    }
+}
