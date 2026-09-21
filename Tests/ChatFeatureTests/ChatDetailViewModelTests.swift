@@ -611,7 +611,7 @@ struct ChatDetailViewModelTests {
     @Test("a title too long for a title bar is cut for display, and the chat keeps the server's text")
     func aLongTitleIsCutForDisplay() async throws {
         serve(history: "[]", recorder: RequestRecorder())
-        let long = (1...40).map { "word\($0)" }.joined(separator: " ")  // 249 characters, no stray spaces
+        let long = (1...40).map { "word\($0)" }.joined(separator: " ")  // 270 characters, no stray spaces
         try #require(long.count > 80)
         let vm = Harness().makeViewModel(title: long)
         #expect(vm.chatTitle == long)  // the server's title is kept whole
@@ -622,6 +622,18 @@ struct ChatDetailViewModelTests {
         // A title that fits is shown exactly as it is.
         let short = String(long.prefix(80))
         #expect(Harness().makeViewModel(title: short).displayTitle == short)
+    }
+
+    /// The cut can land on a space, and a space left in front of the ellipsis would look like a typo.
+    @Test("a title cut in the middle of a space loses that space, not just the rest of the title")
+    func aTitleCutOnASpaceKeepsNoTrailingSpace() async throws {
+        serve(history: "[]", recorder: RequestRecorder())
+        let head = String(repeating: "x", count: 79)
+        let long = head + " and more text after the cut"
+        try #require(Array(long)[79] == " ")  // the 80th character, where the cut falls
+        let vm = Harness().makeViewModel(title: long)
+        #expect(vm.displayTitle == head + "…")
+        #expect(vm.displayTitle.count == 80)  // 79 characters plus the ellipsis, the space dropped
     }
 
     // MARK: - Titles on one line, and the empty state

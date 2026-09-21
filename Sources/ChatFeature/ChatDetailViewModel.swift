@@ -21,9 +21,10 @@ public final class ChatDetailViewModel {
     /// title; without this the title changed twice in one turn — to "Chat" the instant the first
     /// message was sent, and to the generated title a few seconds later.
     ///
-    /// Only the first `loadHistory` can know this. A view model that re-attached to a turn already
-    /// in flight never saw a history, and a chat you are in the middle of a turn in is one you just
-    /// started, so leaving it `false` is right there too.
+    /// Only the first `loadHistory` sets this. A view model that re-attached to a turn already in
+    /// flight never loaded a history, so it leaves this `false` and would call an old chat new —
+    /// which only shows when that chat has no title at all, and a chat opened from the sidebar
+    /// carries its title into `init`, so the re-attach path does not normally reach this fallback.
     private var openedWithMessages = false
 
     private let apiClient: APIClient
