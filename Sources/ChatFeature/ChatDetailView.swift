@@ -50,10 +50,13 @@ public struct ChatDetailView: View {
             // Pull down to retry a history load that failed (the composer stays disabled until it succeeds).
             .scrollBounceBehavior(.always)
             .scrollDismissesKeyboard(.interactively)
-            // Tapping the transcript puts the keyboard away. A tap gesture does not consume the
-            // drag that scrolling, the interactive keyboard dismissal above and pull-to-refresh
-            // all need, and no row here is tappable, so nothing else loses its taps.
-            .onTapGesture { isComposerFocused = false }
+            // Tapping the transcript puts the keyboard away. Rows are not inert — `MessageRow`
+            // renders inline Markdown, so an assistant bubble can hold tappable links — so this is
+            // attached *simultaneously*: it recognises alongside whatever the content does instead
+            // of competing with it, and a link inside a bubble still opens (measured with the
+            // keyboard both up and down). A tap gesture also does not consume the drag that
+            // scrolling, the interactive keyboard dismissal above and pull-to-refresh all need.
+            .simultaneousGesture(TapGesture().onEnded { isComposerFocused = false })
             .refreshable { await viewModel.loadHistory() }
             .onChange(of: viewModel.messages.count) {
                 scrollToBottom(proxy, animated: true)
