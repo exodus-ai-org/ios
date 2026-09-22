@@ -155,9 +155,10 @@ public struct ChatSidebarView<Workspaces: View>: View {
             .animation(.easeOut(duration: 0.15), value: list.chats.isEmpty)
             .animation(.easeOut(duration: 0.15), value: search.phase)
             .animation(.easeOut(duration: 0.15), value: search.isSearching)
-            .navigationTitle(isSearching ? "" : Self.appName)
-            // Always inline: "Exodus" sits on the same line as the search button rather than
-            // starting large and collapsing into it on the first scroll.
+            // Blank always: the system's own inline title centres itself and stays small, neither
+            // of which is what "Exodus" should do here. `sidebarToolbar`'s leading item draws it
+            // instead, left-aligned and a size up from that.
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaBar(edge: .top) {
                 if isSearching {
@@ -367,6 +368,14 @@ public struct ChatSidebarView<Workspaces: View>: View {
     @ToolbarContentBuilder
     private var sidebarToolbar: some ToolbarContent {
         if !isSearching {
+            ToolbarItem(placement: .topBarLeading) {
+                // A brand name: shown as is, never looked up in the catalog (see `appName` above).
+                // One size up from the system's own inline title (`.headline`), left-aligned
+                // instead of centred, on the same line as Search either way.
+                Text(Self.appName)
+                    .font(.title2.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     withAnimation(.snappy) { isSearching = true }
