@@ -27,6 +27,25 @@ public final class ChatDetailViewModel {
     /// carries its title into `init`, so the re-attach path does not normally reach this fallback.
     private var openedWithMessages = false
 
+    /// Bumped exactly once each time the user's own tap starts a turn — a plain counter so a
+    /// `sensoryFeedback` trigger changes on every send, including a second send in the same chat.
+    /// Never bumped by `loadHistory` or by `onAppear`'s re-attach to a turn already running (that
+    /// sets `status` directly, not through here), and never by a tap `canSend` rejects.
+    public private(set) var sendCount = 0
+    /// Bumped exactly once when a turn ends because the user pressed Stop, before the network
+    /// cancellation is awaited — so a view's `sensoryFeedback` trigger fires on the same actor turn
+    /// as the tap, not after the round trip. Does nothing (and does not bump) when there is no turn
+    /// in flight to stop.
+    public private(set) var stopCount = 0
+    /// Bumped exactly once when a turn's stream ends with the server's own `.finished` and the user
+    /// did not press Stop for it — a normal completion. Not bumped for a stopped turn, a failed
+    /// turn, or a re-attach whose `consume` never receives a `.finished` at all.
+    public private(set) var completedTurnCount = 0
+    /// True while the turn in flight was ended by `stop()`, so `consume`'s `.finished` (the manager
+    /// sends one for a stop too, see `ChatStreamManager.cancel`) is not counted as a normal
+    /// completion. Reset at the start of every new send.
+    private var turnWasStopped = false
+
     private let apiClient: APIClient
     private let streamManager: ChatStreamManager
     private let serverConfig: ServerConfigStore
@@ -102,6 +121,8 @@ public final class ChatDetailViewModel {
         let userMessage = ChatMessage.userMessage(
             id: UUID().uuidString.lowercased(), text: text, timestampMs: Date().timeIntervalSince1970 * 1000)
         messages.append(userMessage)
+        turnWasStopped = false
+        sendCount += 1
         status = .submitted  // disable the composer now, before the first stream update arrives
 
         let updates = await streamManager.send(chatId: chatId, messages: messages, serverConfig: serverConfig)
@@ -114,6 +135,8 @@ public final class ChatDetailViewModel {
     /// cancel a turn that belongs to someone else.
     public func stop() async {
         guard isTurnInFlight else { return }
+        turnWasStopped = true
+        stopCount += 1
         await streamManager.cancel(chatId)
     }
 
@@ -129,6 +152,7 @@ public final class ChatDetailViewModel {
             case .finished(let messages):
                 self.messages = messages
                 status = .idle
+                if !turnWasStopped { completedTurnCount += 1 }
             case .failed(let message):
                 errorMessage = message
                 status = .error

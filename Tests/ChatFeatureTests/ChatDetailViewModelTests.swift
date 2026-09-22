@@ -500,6 +500,8 @@ struct ChatDetailViewModelTests {
         #expect(vm.showsPendingRow == false)
         #expect(await harness.manager.isStreaming("c1") == false)
         #expect(recorder.lines.filter { $0 == "POST /api/v1/chat" }.count == 1)
+        #expect(vm.stopCount == 1)  // the Stop haptic's trigger
+        #expect(vm.completedTurnCount == 0)  // a stop is not a completion: no success haptic
 
         vm.composerText = "again"
         #expect(vm.canSend)
@@ -519,6 +521,110 @@ struct ChatDetailViewModelTests {
         #expect(vm.messages == before)
         #expect(vm.errorMessage == nil)
         #expect(recorder.lines == ["GET /api/v1/chat/c1"])
+        #expect(vm.stopCount == 0)  // nothing was in flight, so no stop haptic either
+    }
+
+    // MARK: - Haptic triggers (sendCount, completedTurnCount, stopCount)
+
+    @Test("a turn that completes normally bumps completedTurnCount once, and never stopCount")
+    func normalCompletionBumpsCompletedTurnCount() async throws {
+        serve(history: "[]", reply: helloReply, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        #expect(vm.completedTurnCount == 0)
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        #expect(vm.completedTurnCount == 1)
+        #expect(vm.stopCount == 0)
+    }
+
+    @Test("two turns that both complete normally bump completedTurnCount twice")
+    func twoTurnsBumpCompletedTurnCountTwice() async throws {
+        serve(history: "[]", reply: helloReply, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        #expect(vm.completedTurnCount == 1)
+
+        vm.composerText = "again"
+        await vm.sendMessage()
+        #expect(vm.completedTurnCount == 2)
+    }
+
+    @Test("a turn that ends in a server error frame does not bump completedTurnCount or stopCount")
+    func aFailedTurnDoesNotBumpCompletedTurnCount() async throws {
+        serve(history: "[]", reply: #"data: {"type":"error","error":"Invalid API key"}\#n\#n"#, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        #expect(vm.errorMessage == "Invalid API key")
+        #expect(vm.completedTurnCount == 0)
+        #expect(vm.stopCount == 0)
+    }
+
+    @Test("onAppear with nothing in flight loads history instead of consuming a stream, so completedTurnCount never moves")
+    func reattachWithNothingInFlightDoesNotBumpCompletedTurnCount() async throws {
+        serve(history: historyRowsJSON, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.onAppear()
+        #expect(vm.hasLoadedHistory)
+        #expect(vm.completedTurnCount == 0)
+    }
+
+    @Test("sendMessage bumps sendCount once per accepted send; a send canSend rejects does not")
+    func sendCountBumpsOnlyOnAcceptedSends() async throws {
+        serve(history: historyRowsJSON, reply: helloReply, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        #expect(vm.sendCount == 0)
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        #expect(vm.sendCount == 1)
+
+        vm.composerText = "   "  // blank: canSend is false
+        await vm.sendMessage()
+        #expect(vm.sendCount == 1)
+    }
+
+    @Test("loadHistory does not bump sendCount")
+    func loadHistoryDoesNotBumpSendCount() async throws {
+        serve(history: historyRowsJSON, recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        #expect(vm.sendCount == 0)
+    }
+
+    @Test(
+        "onAppear re-attaching to a turn already in flight does not bump sendCount or completedTurnCount",
+        .timeLimit(.minutes(1)))
+    func reattachToARunningTurnDoesNotBumpSendCount() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", reply: partialReply, holdReplyOpen: true, recorder: recorder)
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        let first = harness.makeViewModel()
+        await first.loadHistory()
+        first.composerText = "hey"
+        let firstSend = Task { await first.sendMessage() }
+        try await waitUntil("the partial reply to arrive") {
+            await harness.manager.isStreaming("c1") && first.messages.last?.displayText == "Hel"
+        }
+        #expect(first.sendCount == 1)
+
+        let second = harness.makeViewModel()
+        let appear = Task { await second.onAppear() }
+        try await waitUntil("the re-attached view model to show the partial reply") {
+            second.messages.last?.displayText == "Hel"
+        }
+        #expect(second.sendCount == 0)
+        #expect(second.completedTurnCount == 0)
+
+        harness.session.invalidateAndCancel()
+        await firstSend.value
+        await appear.value
     }
 
     @Test("stop() from a view model that is not in a turn does not cancel a turn another view model started", .timeLimit(.minutes(1)))
