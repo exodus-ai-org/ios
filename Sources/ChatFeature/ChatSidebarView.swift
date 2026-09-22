@@ -73,6 +73,11 @@ public struct ChatSidebarView<Workspaces: View>: View {
     /// counter so `sensoryFeedback` fires with the row's removal, not when the context menu opens
     /// and not for a failed delete (which raises `list.showsErrorAlert` instead).
     @State private var deletedTrigger = 0
+    /// The chat a rename alert is open for, and the text it is editing. `nil` closes the alert; a
+    /// non-nil `renamingChat` and the alert's own `isPresented` are two views of the same state, so
+    /// they cannot disagree about whether it is on screen.
+    @State private var renamingChat: ChatSummary?
+    @State private var renameText = ""
 
     private let activeChatId: String
     private let isOpen: Bool
@@ -81,6 +86,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
     private let onNewChat: () -> Void
     private let onOpenSettings: () -> Void
     private let onDeleteChat: (String) -> Void
+    private let onRenameChat: (String, String) -> Void
     private let workspaces: Workspaces
 
     /// A brand name: a plain `String`, shown as is and never looked up in the catalog.
@@ -95,6 +101,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
         onNewChat: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
         onDeleteChat: @escaping (String) -> Void,
+        onRenameChat: @escaping (String, String) -> Void,
         @ViewBuilder workspaces: () -> Workspaces
     ) {
         _list = State(initialValue: ChatListViewModel(apiClient: apiClient))
@@ -106,6 +113,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
         self.onNewChat = onNewChat
         self.onOpenSettings = onOpenSettings
         self.onDeleteChat = onDeleteChat
+        self.onRenameChat = onRenameChat
         self.workspaces = workspaces()
     }
 
@@ -188,6 +196,29 @@ public struct ChatSidebarView<Workspaces: View>: View {
             } message: {
                 Text(list.errorMessage ?? "")
             }
+            .alert(
+                "Rename chat",
+                isPresented: Binding(
+                    get: { renamingChat != nil },
+                    set: { if !$0 { renamingChat = nil } }
+                ),
+                presenting: renamingChat
+            ) { chat in
+                TextField("Rename chat", text: $renameText)
+                // Never a blank title: the row would have nothing left to show, and
+                // `list.rename` would reject it anyway. Disabling here keeps the person in the
+                // dialog to fix it instead of a tap that silently does nothing.
+                Button("Save") {
+                    let title = renameText
+                    Task {
+                        if await list.rename(chat, to: title) {
+                            onRenameChat(chat.id, title.trimmingCharacters(in: .whitespacesAndNewlines))
+                        }
+                    }
+                }
+                .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel", role: .cancel) {}
+            }
             // Haptics: the causal event only — the alert's own appearance, and a delete once the
             // row is actually gone (apple-design §13). Neither fires for the tap that opens the
             // context menu, and a failed delete gets only the error haptic above.
@@ -201,25 +232,42 @@ public struct ChatSidebarView<Workspaces: View>: View {
     // MARK: - Rows
 
     private func row(for chat: ChatSummary) -> some View {
-        Text(chat.title.collapsedWhitespace)
-            .lineLimit(1)
-            // The selected tint lives inside `SidebarRow` now, alongside the press tint: applying
-            // `.listRowBackground` again out here would simply replace whichever one it set.
-            .modifier(
-                SidebarRow(isSelected: chat.id == activeChatId) { onSelectChat(chat.id, chat.title) })
-            // Closes over this row's chat, so nothing indexes `list.chats` after a concurrent load.
-            .contextMenu {
-                Button(role: .destructive) {
-                    Task {
-                        if await list.delete(chat) {
-                            deletedTrigger += 1
-                            onDeleteChat(chat.id)
-                        }
-                    }
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
+        HStack(spacing: 8) {
+            Text(chat.title.collapsedWhitespace)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if let timestamp = RecentTimestamp.format(chat.createdAt) {
+                Text(timestamp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    // Keeps its own width; the title above truncates first.
+                    .layoutPriority(1)
             }
+        }
+        // The selected tint lives inside `SidebarRow` now, alongside the press tint: applying
+        // `.listRowBackground` again out here would simply replace whichever one it set.
+        .modifier(
+            SidebarRow(isSelected: chat.id == activeChatId) { onSelectChat(chat.id, chat.title) })
+        // Closes over this row's chat, so nothing indexes `list.chats` after a concurrent load.
+        .contextMenu {
+            Button {
+                renameText = chat.title.collapsedWhitespace
+                renamingChat = chat
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                Task {
+                    if await list.delete(chat) {
+                        deletedTrigger += 1
+                        onDeleteChat(chat.id)
+                    }
+                }
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 
     @ViewBuilder

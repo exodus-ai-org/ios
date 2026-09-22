@@ -40,6 +40,12 @@ struct AppShell: View {
                 onDeleteChat: { id in
                     // The deleted chat was the one on screen: leave it for a fresh one, drawer stays open.
                     if id == activeChat.id { activeChat = .new() }
+                },
+                onRenameChat: { id, title in
+                    // The renamed chat is the one on screen: `ChatDetailView` picks this up from
+                    // its own `title` argument changing, via `.onChange` (its `chatId` does not
+                    // change, so it is never recreated by this).
+                    if id == activeChat.id { activeChat.title = title }
                 }
             ) {
                 ForEach(AppWorkspace.allCases) { option in
