@@ -84,8 +84,8 @@ front: the sidebar (width `drawerWidth`, at the leading edge) and the content ca
 size) offset by `x = clamp(base + drag, 0 … drawerWidth)`, where `base` is `drawerWidth` when open.
 `progress = x / drawerWidth`. The card has the system background, a shadow at `0.15 × progress`
 opacity, and a scrim at `0.6 × progress` that catches taps. Its continuous rounded corners are the
-iPhone's own display corner radius, read from the full-screen container with
-`GeometryProxy.concentricCornerRadii(in:).bottomLeading`, with a 24 pt fallback only when the display
+iPhone's own display corner radius, read from the full-screen container with the no-argument
+`geo.concentricCornerRadii?.bottomLeading`, with a 24 pt fallback only when the display
 reports 0 (square corners). That radius is constant, not ramped by progress: a full-screen card's
 corners sit under the physical corners of the display while it is closed, where they cannot be seen,
 so nothing is lost by keeping them. In dark mode the card's background lifts from `systemBackground`
@@ -106,9 +106,11 @@ letting it fire.
 
 On release the finger's velocity is projected forward — `project(v) = (v / 1000) · 0.998 / (1 − 0.998)`,
 UIScrollView's own deceleration rate — and the drawer opens if the projected position passes the
-midpoint. Past either resting edge the card resists progressively (a rubber-band function) rather
-than stopping hard, except that a fast release still moving further outward past a boundary has its
-handoff velocity suppressed, so the card cannot fly off screen. A drag that catches the card
+midpoint. The two resting edges behave differently: the closed edge is a hard wall (there is nothing
+to the left of a full-screen card), while past the open edge the card resists progressively (a
+rubber-band function) rather than stopping hard, so pulling past the sidebar reads as "there is no
+more of this" rather than a seized mechanism. A fast release still moving further outward past
+either edge has its handoff velocity suppressed, so the card cannot fly off screen. A drag that catches the card
 mid-settle picks it up from its live on-screen position, not from the animation's target. The
 release hands its (possibly suppressed) velocity to the settle spring, so there is no seam between
 the finger letting go and the animation carrying on. These are pure functions in
