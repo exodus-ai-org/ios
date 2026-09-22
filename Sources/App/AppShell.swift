@@ -80,7 +80,9 @@ struct AppShell: View {
             SettingsView(apiClient: apiClient, serverConfig: serverConfig)
         }
         // The workspace actually changing, once (apple-design §13): `workspace` only changes when
-        // a row not already selected is tapped, so re-tapping the active row fires nothing.
+        // a row not already selected is tapped, so re-tapping the active row fires nothing. And
+        // today only `.chat` is selectable (`AppWorkspace.isAvailable`), so this fires for nobody
+        // until Philharmonic ships — verified in a disposable export with that gate lifted.
         .sensoryFeedback(.selection, trigger: workspace)
     }
 
