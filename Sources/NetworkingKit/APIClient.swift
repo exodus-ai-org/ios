@@ -42,44 +42,72 @@ public struct APIClient: Sendable {
         var unreachable: Error?
         for (index, base) in bases.enumerated() {
             let url = try makeURL(base: base, path: path, query: query)
-            var request = URLRequest(url: url)
-            request.httpMethod = method
-            if let authorization = serverConfig.authorization {
-                request.setValue(authorization, forHTTPHeaderField: "Authorization")
-            }
-            if let body {
-                request.httpBody = try JSONEncoder().encode(body)
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            }
-            // With somewhere else to try, don't wait the default minute for an
-            // address that is not on this network.
-            if bases.count > 1 { request.timeoutInterval = 15 }
-
-            let data: Data
-            let response: URLResponse
             do {
-                (data, response) = try await session.data(for: request)
+                return try await attempt(
+                    url: url, method: method, body: body, bases: bases, decodeResponse: decodeResponse)
             } catch let error as URLError where error.isUnreachableHost && index < bases.count - 1 {
                 unreachable = error
                 continue
+            } catch let error as HTTPError where error.code == "APP_LOCKED" {
+                // The computer's own lock, not ours: our token already proves who this device
+                // is, so no PIN is needed to lift it — see `POST /api/v1/lock/unlock` (exodus's
+                // `src/main/lib/server/routes/lock.ts`). One retry, on the same base that just
+                // answered (it is reachable, just locked); any failure along the way — no paired
+                // connection, Face ID declined, the unlock call itself failing — surfaces this
+                // original "locked" error, not a new one.
+                return try await unlockAndRetry(
+                    url: url, method: method, body: body, bases: bases, decodeResponse: decodeResponse,
+                    original: error)
             }
-            if let http = response as? HTTPURLResponse {
-                if http.statusCode == 401, request.value(forHTTPHeaderField: "Authorization") != nil {
-                    // Our token was refused: this device was revoked on the computer.
-                    // Forget the pairing so the app returns to the pairing screen.
-                    serverConfig.connection?.unpair()
-                } else if let host = url.host {
-                    serverConfig.connection?.noteReachable(host: host)
-                }
-            }
-            try Self.throwIfError(data: data, response: response)
-
-            if !decodeResponse {
-                return EmptyResponse() as! T
-            }
-            return try JSONDecoder().decode(T.self, from: data)
         }
         throw unreachable ?? invalidBaseURL()
+    }
+
+    private func attempt<Body: Encodable, T: Decodable>(
+        url: URL, method: String, body: Body?, bases: [String], decodeResponse: Bool
+    ) async throws -> T {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        if let authorization = serverConfig.authorization {
+            request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        }
+        if let body {
+            request.httpBody = try JSONEncoder().encode(body)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        // With somewhere else to try, don't wait the default minute for an
+        // address that is not on this network.
+        if bases.count > 1 { request.timeoutInterval = 15 }
+
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse {
+            if http.statusCode == 401, request.value(forHTTPHeaderField: "Authorization") != nil {
+                // Our token was refused: this device was revoked on the computer.
+                // Forget the pairing so the app returns to the pairing screen.
+                serverConfig.connection?.unpair()
+            } else if let host = url.host {
+                serverConfig.connection?.noteReachable(host: host)
+            }
+        }
+        try Self.throwIfError(data: data, response: response)
+
+        if !decodeResponse {
+            return EmptyResponse() as! T
+        }
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// `ServerConnection.unlockComputer()` does the work (and is `ChatStreamManager`'s way in
+    /// too, for the same 423 on `POST /api/v1/chat`): normally no fresh Face ID, since by the
+    /// time a request can even reach `lockGate` to be told "locked", it already carried the
+    /// token that released. One retry, on the same base that just answered (it is reachable,
+    /// just locked); any failure along the way surfaces this original error, not a new one.
+    private func unlockAndRetry<Body: Encodable, T: Decodable>(
+        url: URL, method: String, body: Body?, bases: [String], decodeResponse: Bool, original: HTTPError
+    ) async throws -> T {
+        guard let connection = serverConfig.connection, await connection.unlockComputer(session: session)
+        else { throw original }
+        return try await attempt(url: url, method: method, body: body, bases: bases, decodeResponse: decodeResponse)
     }
 
     private func makeURL(base: String, path: String, query: [URLQueryItem]) throws -> URL {

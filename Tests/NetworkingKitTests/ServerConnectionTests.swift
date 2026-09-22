@@ -64,6 +64,64 @@ struct ServerConnectionTests {
         #expect(connection.authorization == nil)
     }
 
+    @Test("unlockComputer() is a no-op on an unpaired connection — no request sent")
+    func unlockComputerUnpaired() async throws {
+        let connection = ServerConnection(store: InMemoryCredentialStore())
+        let seen = Mutex<Int>(0)
+        MockURLProtocol.handler = { _ in
+            seen.withLock { $0 += 1 }
+            return (200, Data())
+        }
+
+        let unlocked = await connection.unlockComputer(session: MockURLProtocol.makeSession())
+        #expect(!unlocked)
+        #expect(seen.withLock { $0 } == 0)
+    }
+
+    @Test("unlockComputer() posts the token to /api/v1/lock/unlock and reports success on 2xx")
+    func unlockComputerSucceeds() async throws {
+        let connection = ServerConnection(store: InMemoryCredentialStore(stored))
+        try await connection.unlock(reason: "test")
+        let seen = Mutex<(url: String, authorization: String?)?>(nil)
+        MockURLProtocol.handler = { request in
+            seen.withLock {
+                $0 = (
+                    request.url?.absoluteString ?? "",
+                    request.value(forHTTPHeaderField: "Authorization")
+                )
+            }
+            return (200, Data(#"{"locked":false}"#.utf8))
+        }
+
+        let unlocked = await connection.unlockComputer(session: MockURLProtocol.makeSession())
+        #expect(unlocked)
+        let request = try #require(seen.withLock { $0 })
+        #expect(request.url == "https://10.0.0.2:60224/api/v1/lock/unlock")
+        #expect(request.authorization == "Bearer TOKEN")
+    }
+
+    @Test("unlockComputer() reports failure on a non-2xx, and on a transport error")
+    func unlockComputerFails() async throws {
+        let connection = ServerConnection(store: InMemoryCredentialStore(stored))
+        try await connection.unlock(reason: "test")
+        MockURLProtocol.handler = { _ in (500, Data()) }
+        #expect(await connection.unlockComputer(session: MockURLProtocol.makeSession()) == false)
+
+        MockURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }
+        #expect(await connection.unlockComputer(session: MockURLProtocol.makeSession()) == false)
+    }
+
+    @Test("unlockComputer() reads the token first (Face ID) when it isn't already in memory")
+    func unlockComputerReadsTheTokenFirst() async throws {
+        let connection = ServerConnection(store: InMemoryCredentialStore(stored))
+        #expect(!connection.isUnlocked)
+        MockURLProtocol.handler = { _ in (200, Data(#"{"locked":false}"#.utf8)) }
+
+        let unlocked = await connection.unlockComputer(session: MockURLProtocol.makeSession())
+        #expect(unlocked)
+        #expect(connection.isUnlocked)
+    }
+
     @Test("remembers the address that answered, and tries it first from then on")
     func remembersReachableHost() async throws {
         let store = InMemoryCredentialStore(stored)
@@ -212,6 +270,120 @@ struct PairedAPIClientTests {
     }
 }
 
+/// The computer's own lock (a separate feature from `UnlockGate`'s: that one guards this
+/// device's own token, this one is the computer refusing all `/api/*` access — see
+/// exodus's `src/main/lib/server/middlewares/lock-gate.ts`). A paired, already-unlocked
+/// client answers it by calling the computer's `POST /api/v1/lock/unlock` and retrying —
+/// no fresh Face ID, because holding a valid token already proves who this device is.
+@Suite("APIClient: the paired computer's own lock", .serialized)
+struct AppLockedRetryTests {
+    private struct Empty: Decodable {}
+    private static let appLocked = #"{"type":"error","error":{"code":"APP_LOCKED","message":"Application is locked"}}"#
+
+    private func makePairedClient() async throws -> (APIClient, ServerConnection, InMemoryCredentialStore) {
+        let store = InMemoryCredentialStore(
+            PairedServer(
+                hosts: ["10.0.0.2"], port: 60224, fingerprint: "PIN", name: "Mac",
+                deviceId: "dev-1", token: "TOKEN"))
+        let connection = ServerConnection(store: store)
+        try await connection.unlock(reason: "test")
+        let config = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        config.connection = connection
+        return (APIClient(session: MockURLProtocol.makeSession(), serverConfig: config), connection, store)
+    }
+
+    @Test("a 423 unlocks the computer and retries the same request once, succeeding")
+    func unlocksAndRetries() async throws {
+        let (client, connection, _) = try await makePairedClient()
+        let seen = Mutex<[String]>([])  // "METHOD path"
+        MockURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            let method = request.httpMethod ?? ""
+            seen.withLock { $0.append("\(method) \(path)") }
+            if path == "/api/v1/history" {
+                let historyCalls = seen.withLock { $0.filter { $0.hasSuffix("/api/v1/history") }.count }
+                if historyCalls == 1 { return (423, Data(Self.appLocked.utf8)) }
+                return (200, Data("{}".utf8))
+            }
+            if path == "/api/v1/lock/unlock" {
+                return (200, Data(#"{"locked":false}"#.utf8))
+            }
+            return (404, Data())
+        }
+
+        let _: Empty = try await client.get("/api/v1/history")
+
+        #expect(seen.withLock { $0 } == [
+            "GET /api/v1/history",
+            "POST /api/v1/lock/unlock",
+            "GET /api/v1/history",
+        ])
+        // Already unlocked before the 423 (see `makePairedClient`), and still is: no re-prompt.
+        #expect(connection.isUnlocked)
+    }
+
+    @Test("already unlocked, it never prompts Face ID again — straight to the unlock call")
+    func doesNotRepromptWhenAlreadyUnlocked() async throws {
+        let store = CountingCredentialStore(
+            PairedServer(
+                hosts: ["10.0.0.2"], port: 60224, fingerprint: "PIN", name: "Mac",
+                deviceId: "dev-1", token: "TOKEN"))
+        let connection = ServerConnection(store: store)
+        try await connection.unlock(reason: "test")
+        let loadCallsAfterUnlock = store.loadCount
+        let config = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        config.connection = connection
+        let client = APIClient(session: MockURLProtocol.makeSession(), serverConfig: config)
+        let historyCalls = Mutex<Int>(0)
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/api/v1/history" {
+                let calls = historyCalls.withLock { $0 += 1; return $0 }
+                if calls == 1 { return (423, Data(Self.appLocked.utf8)) }
+                return (200, Data("{}".utf8))
+            }
+            return (200, Data(#"{"locked":false}"#.utf8))
+        }
+
+        let _: Empty = try await client.get("/api/v1/history")
+        // Reading the token again (a fresh `load(reason:)`) is the Face ID prompt; unchanged
+        // means the retry used the token `unlock(reason:)` already put in memory above.
+        #expect(store.loadCount == loadCallsAfterUnlock)
+    }
+
+    @Test("the unlock call failing surfaces the original locked error, not a new one")
+    func unlockFailureSurfacesTheOriginalError() async throws {
+        let (client, _, _) = try await makePairedClient()
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/api/v1/lock/unlock" {
+                return (500, Data(#"{"type":"error","error":{"code":"X","message":"boom"}}"#.utf8))
+            }
+            return (423, Data(Self.appLocked.utf8))
+        }
+
+        await #expect(throws: HTTPError(statusCode: 423, code: "APP_LOCKED", message: "Application is locked")) {
+            let _: Empty = try await client.get("/api/v1/history")
+        }
+    }
+
+    @Test("an unpaired client gets the original locked error, with no unlock attempt")
+    func unpairedGetsTheOriginalError() async throws {
+        let config = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        config.connection = ServerConnection(store: InMemoryCredentialStore())
+        let client = APIClient(session: MockURLProtocol.makeSession(), serverConfig: config)
+        let seen = Mutex<[String]>([])
+        MockURLProtocol.handler = { request in
+            seen.withLock { $0.append(request.url?.path ?? "") }
+            return (423, Data(Self.appLocked.utf8))
+        }
+
+        await #expect(throws: HTTPError.self) {
+            let _: Empty = try await client.get("/api/v1/history")
+        }
+        // The manual address (unpaired) was tried once; nothing under /api/v1/lock.
+        #expect(seen.withLock { $0 } == ["/api/v1/history"])
+    }
+}
+
 @Suite("APIClient host failover", .serialized)
 struct HostFailoverTests {
     private struct Empty: Decodable {}
@@ -274,4 +446,22 @@ struct HostFailoverTests {
             let _: Empty = try await client.get("/api/v1/history")
         }
     }
+}
+
+/// `InMemoryCredentialStore` with no way to see how many times it prompted — this counts
+/// `load(reason:)` calls, standing in for "how many times Face ID would have run."
+private final class CountingCredentialStore: CredentialStoring, @unchecked Sendable {
+    private let count = Mutex<Int>(0)
+    private let server: PairedServer?
+
+    init(_ server: PairedServer? = nil) { self.server = server }
+
+    var loadCount: Int { count.withLock { $0 } }
+    var exists: Bool { server != nil }
+    func load(reason: String) async throws -> PairedServer? {
+        count.withLock { $0 += 1 }
+        return server
+    }
+    func save(_ server: PairedServer) throws {}
+    func clear() throws {}
 }

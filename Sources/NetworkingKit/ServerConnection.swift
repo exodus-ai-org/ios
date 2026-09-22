@@ -61,6 +61,33 @@ public final class ServerConnection: @unchecked Sendable {
         state.withLock { server = nil }
     }
 
+    /// Lifts the computer's own lock — a separate thing from this device's token being locked
+    /// behind Face ID (see `UnlockGate`); this is the computer itself refusing all `/api/*`
+    /// access (exodus's `src/main/lib/server/middlewares/lock-gate.ts`). A paired device's
+    /// token is already proof enough, so this reads the token from memory (or, if it went
+    /// stale, with the same Face ID prompt `unlock(reason:)` always uses) and sends it — no PIN,
+    /// no second biometric prompt of its own. `APIClient` and `ChatStreamManager` both call this
+    /// on a 423 before retrying the request that hit it, each passing its own session (the same
+    /// pinned `session` above in the real app — see `ExodusApp.init` — a parameter only so a
+    /// test can substitute one); returns whether it actually unlocked.
+    @discardableResult
+    public func unlockComputer(session: URLSession? = nil) async -> Bool {
+        guard isPaired else { return false }
+        if !isUnlocked {
+            try? await unlock(reason: String(localized: "Unlock the connection to your computer"))
+        }
+        guard isUnlocked, let base = baseURLString,
+            let url = URL(string: base)?.appendingPathComponent("/api/v1/lock/unlock")
+        else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        if let authorization { request.setValue(authorization, forHTTPHeaderField: "Authorization") }
+        guard let (_, response) = try? await (session ?? self.session).data(for: request),
+            let http = response as? HTTPURLResponse
+        else { return false }
+        return (200..<300).contains(http.statusCode)
+    }
+
     /// Forget the computer: revoked there (a 401), or unpaired here.
     public func unpair() {
         try? store.clear()
