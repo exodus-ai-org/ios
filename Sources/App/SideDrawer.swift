@@ -65,8 +65,11 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
                     .frame(maxHeight: .infinity)
                     // The content fades in and grows into place as the card uncovers it. Anchored at
                     // the leading edge, so rows do not drift sideways while they are being revealed.
+                    // Reduce Motion keeps the fade and drops the growing: a zoom is the kind of
+                    // movement that setting exists to remove, and a cross-fade says the same thing
+                    // without it. The rows are full size from the first moment they can be seen.
                     .opacity(reveal)
-                    .scaleEffect(0.92 + 0.08 * reveal, anchor: .leading)
+                    .scaleEffect(reduceMotion ? 1 : 0.92 + 0.08 * reveal, anchor: .leading)
                     // Behind the fade, so the strip the card has uncovered is always solid.
                     .background(Color(.systemBackground))
                     // Closed: invisible, inert and skipped by VoiceOver.

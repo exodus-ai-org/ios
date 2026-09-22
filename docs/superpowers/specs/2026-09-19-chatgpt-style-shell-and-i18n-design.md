@@ -117,7 +117,8 @@ screen's toolbar button toggles it. Opening dismisses the keyboard
 (`UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), …)`).
 
 **Motion.** `.snappy`, written out as `Spring.snappy` so a release can hand it a velocity. With
-Reduce Motion on: `.easeInOut(duration: 0.2)` and no velocity handoff.
+Reduce Motion on: `.easeInOut(duration: 0.2)`, no velocity handoff, and the sidebar cross-fades in at
+its full size instead of growing into place.
 
 **Feedback.** A light impact haptic fires once when letting go of the card changes which state it is
 in. Not while dragging, where the card under the finger is the feedback; not on a snap-back to the
