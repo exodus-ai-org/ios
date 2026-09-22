@@ -120,15 +120,18 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
                     },
                     onRelease: { travel, velocity in
                         let landed = cardOffset(dragStart + travel, drawerWidth: drawerWidth)
+                        let open = DrawerPhysics.endsOpen(
+                            offset: landed, velocity: velocity, drawerWidth: drawerWidth)
                         settle(
-                            open: DrawerPhysics.endsOpen(
-                                offset: landed, velocity: velocity, drawerWidth: drawerWidth))
+                            open: open, from: landed, velocity: velocity, drawerWidth: drawerWidth)
                     },
                     // A cancelled gesture is not a release: there is no velocity to speak of and the
                     // user did not choose this moment, so the card settles by where it stands.
                     onCancel: {
                         guard let pending = drag else { return }
-                        settle(open: pending > drawerWidth / 2)
+                        settle(
+                            open: pending > drawerWidth / 2, from: pending, velocity: 0,
+                            drawerWidth: drawerWidth)
                     }
                 )
             )
@@ -141,9 +144,12 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
     }
 
     /// Where the card is drawn for the offset the finger is asking for. The closed end is a hard
-    /// wall — there is nothing to the left of a full-screen card — and so, for now, is the open one.
+    /// wall — there is nothing to the left of a full-screen card, and drawing one would show a gap
+    /// where the screen ends. The open end is soft: the finger may carry on and the card follows
+    /// with less and less of the travel, so pulling past the sidebar reads as "there is no more of
+    /// this", not as a seized mechanism.
     private func cardOffset(_ wanted: CGFloat, drawerWidth: CGFloat) -> CGFloat {
-        min(max(wanted, 0), drawerWidth)
+        DrawerPhysics.resistedOffset(wanted, drawerWidth: drawerWidth)
     }
 
     /// The hairline that separates the card from the sidebar, white and barely there. Dark mode only:
@@ -171,11 +177,26 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
 
     /// Ends a drag: the new resting place and the end of the drag are one change, so the card
     /// animates straight from the offset on screen to the target with no frame in between.
-    private func settle(open: Bool) {
-        withAnimation(drawerAnimation(reduceMotion: reduceMotion)) {
+    ///
+    /// The spring is handed the speed the finger was going, so there is no seam where the finger
+    /// stops driving the card and the animation takes over — the detail that separates a card that
+    /// was thrown from one that was merely let go of.
+    private func settle(open: Bool, from current: CGFloat, velocity: CGFloat, drawerWidth: CGFloat) {
+        let target = open ? drawerWidth : 0
+        withAnimation(settleAnimation(velocity: velocity, from: current, to: target)) {
             isOpen = open
             drag = nil
         }
+    }
+
+    /// The settle's animation: the shared spring, given the release velocity as a fraction of the
+    /// distance still to travel. Reduce Motion keeps its short ease and takes no velocity — the
+    /// point of it is that nothing flies across the screen.
+    private func settleAnimation(velocity: CGFloat, from current: CGFloat, to target: CGFloat) -> Animation {
+        guard !reduceMotion else { return drawerAnimation(reduceMotion: true) }
+        return .interpolatingSpring(
+            drawerSpring,
+            initialVelocity: DrawerPhysics.normalisedVelocity(velocity, from: current, to: target))
     }
 
     private func dismissKeyboard() {
@@ -289,12 +310,17 @@ private struct DrawerCardOffset: ViewModifier, Animatable {
         get { offset }
         set {
             offset = newValue
-            live.value = newValue
+            live.value = drawn
         }
     }
 
+    /// Never left of the closed position. The rubber band takes care of the open end, but the
+    /// spring's own bounce carries the value a fraction of a point past zero on the way home
+    /// (measured: −0.33 pt), and there is nothing to the left of a full-screen card to show for it.
+    nonisolated private var drawn: CGFloat { max(0, offset) }
+
     func body(content: Content) -> some View {
-        content.offset(x: offset)
+        content.offset(x: drawn)
     }
 }
 
