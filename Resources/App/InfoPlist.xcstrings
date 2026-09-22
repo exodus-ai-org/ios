@@ -14,6 +14,138 @@
       },
       "shouldTranslate" : false
     },
+    "NSCameraUsageDescription" : {
+      "comment" : "Camera permission prompt. Exodus is the app's name and stays as is.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus verwendet die Kamera, um den auf Ihrem Computer angezeigten Kopplungscode zu scannen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus uses the camera to scan the pairing code shown on your computer."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus usa la cámara para escanear el código de vinculación que aparece en tu ordenador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus utilise l’appareil photo pour scanner le code de jumelage affiché sur votre ordinateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus usa la fotocamera per scansionare il codice di abbinamento mostrato sul tuo computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus はコンピュータに表示されたペアリングコードをスキャンするためにカメラを使用します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus는 컴퓨터에 표시된 페어링 코드를 스캔하기 위해 카메라를 사용합니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Exodus usa a câmera para escanear o código de pareamento exibido no seu computador."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 使用相機掃描電腦上顯示的配對碼。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 使用相機掃描電腦上顯示的配對碼。"
+          }
+        }
+      }
+    },
+    "NSFaceIDUsageDescription" : {
+      "comment" : "Face ID permission prompt. Exodus is the app's name and stays as is.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus verwendet Face ID, um die Verbindung zu Ihrem Computer zu entsperren."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus uses Face ID to unlock the connection to your computer."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus usa Face ID para desbloquear la conexión con tu ordenador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus utilise Face ID pour déverrouiller la connexion à votre ordinateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus usa Face ID per sbloccare la connessione al tuo computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus はコンピュータとの接続のロックを解除するために Face ID を使用します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus는 컴퓨터와의 연결 잠금을 해제하기 위해 Face ID를 사용합니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Exodus usa o Face ID para desbloquear a conexão com o seu computador."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 使用 Face ID 解鎖與電腦的連接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 使用 Face ID 解鎖與電腦的連線。"
+          }
+        }
+      }
+    },
     "NSLocalNetworkUsageDescription" : {
       "comment" : "Local-network permission prompt. Exodus is the app's name and stays as is.",
       "extractionState" : "manual",

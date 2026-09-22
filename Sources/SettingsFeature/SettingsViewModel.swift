@@ -36,7 +36,9 @@ public final class SettingsViewModel {
     public init(apiClient: APIClient, serverConfig: ServerConfigStore) {
         self.apiClient = apiClient
         self.serverConfig = serverConfig
-        self.serverURLText = serverConfig.baseURLString
+        // The manual address, not the effective one: while paired, requests go to the
+        // computer over HTTPS and this field is only what the Simulator would use.
+        self.serverURLText = serverConfig.manualBaseURLString
     }
 
     /// Ollama runs unauthenticated: `ProvidersSchema` has only `ollamaBaseUrl`, no key.
@@ -62,8 +64,8 @@ public final class SettingsViewModel {
         errorMessage = nil
         serverURLText = text
         // Another address is another server: whatever was loaded belongs to the old one.
-        if text != serverConfig.baseURLString { hasLoadedSettings = false }
-        serverConfig.baseURLString = text
+        if text != serverConfig.manualBaseURLString { hasLoadedSettings = false }
+        serverConfig.manualBaseURLString = text
         return true
     }
 

@@ -5,28 +5,49 @@ import SwiftUI
 public struct SettingsView: View {
     @State private var viewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
+    private let connection: ServerConnection?
+    /// Bumped when pairing changes, to show or hide the manual address.
+    @State private var pairingRevision = 0
 
     public init(apiClient: APIClient, serverConfig: ServerConfigStore) {
         _viewModel = State(initialValue: SettingsViewModel(apiClient: apiClient, serverConfig: serverConfig))
+        connection = serverConfig.connection
+    }
+
+    /// Reads `pairingRevision` so that pairing or unpairing re-evaluates it.
+    private var showsManualAddress: Bool {
+        pairingRevision >= 0 && connection?.isPaired != true
     }
 
     public var body: some View {
         NavigationStack {
             Form {
-                Section("Connection") {
-                    TextField(
-                        text: $viewModel.serverURLText,
-                        prompt: Text(verbatim: "http://192.168.1.10:60223")
-                    ) {
-                        Text("Server address")
+                if let connection {
+                    PairingSection(connection: connection) {
+                        // A different server from here on: reload what it holds.
+                        pairingRevision += 1
+                        Task { await viewModel.loadSettings() }
                     }
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .onSubmit {
-                        // A new address means a different server: reload its provider settings.
-                        if viewModel.saveServerURL() {
-                            Task { await viewModel.loadSettings() }
+                }
+
+                // The manual address reaches the computer's plain loopback
+                // listener — the Simulator's way in. A paired device ignores it.
+                if showsManualAddress {
+                    Section("Connection") {
+                        TextField(
+                            text: $viewModel.serverURLText,
+                            prompt: Text(verbatim: "http://localhost:60223")
+                        ) {
+                            Text("Server address")
+                        }
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .onSubmit {
+                            // A new address means a different server: reload its provider settings.
+                            if viewModel.saveServerURL() {
+                                Task { await viewModel.loadSettings() }
+                            }
                         }
                     }
                 }

@@ -34,8 +34,53 @@ public struct APIClient: Sendable {
         body: Body?,
         decodeResponse: Bool = true
     ) async throws -> T {
-        guard let base = URL(string: serverConfig.baseURLString) else { throw invalidBaseURL() }
-        var url = base.appendingPathComponent(path)
+        let bases = serverConfig.baseURLCandidates
+        var unreachable: Error?
+        for (index, base) in bases.enumerated() {
+            let url = try makeURL(base: base, path: path, query: query)
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            if let authorization = serverConfig.authorization {
+                request.setValue(authorization, forHTTPHeaderField: "Authorization")
+            }
+            if let body {
+                request.httpBody = try JSONEncoder().encode(body)
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
+            // With somewhere else to try, don't wait the default minute for an
+            // address that is not on this network.
+            if bases.count > 1 { request.timeoutInterval = 15 }
+
+            let data: Data
+            let response: URLResponse
+            do {
+                (data, response) = try await session.data(for: request)
+            } catch let error as URLError where error.isUnreachableHost && index < bases.count - 1 {
+                unreachable = error
+                continue
+            }
+            if let http = response as? HTTPURLResponse {
+                if http.statusCode == 401, request.value(forHTTPHeaderField: "Authorization") != nil {
+                    // Our token was refused: this device was revoked on the computer.
+                    // Forget the pairing so the app returns to the pairing screen.
+                    serverConfig.connection?.unpair()
+                } else if let host = url.host {
+                    serverConfig.connection?.noteReachable(host: host)
+                }
+            }
+            try Self.throwIfError(data: data, response: response)
+
+            if !decodeResponse {
+                return EmptyResponse() as! T
+            }
+            return try JSONDecoder().decode(T.self, from: data)
+        }
+        throw unreachable ?? invalidBaseURL()
+    }
+
+    private func makeURL(base: String, path: String, query: [URLQueryItem]) throws -> URL {
+        guard let baseURL = URL(string: base) else { throw invalidBaseURL() }
+        var url = baseURL.appendingPathComponent(path)
         if !query.isEmpty {
             guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
                 throw invalidBaseURL()
@@ -46,20 +91,7 @@ public struct APIClient: Sendable {
             guard let withQuery = components.url else { throw invalidBaseURL() }
             url = withQuery
         }
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        if let body {
-            request.httpBody = try JSONEncoder().encode(body)
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
-
-        let (data, response) = try await session.data(for: request)
-        try Self.throwIfError(data: data, response: response)
-
-        if !decodeResponse {
-            return EmptyResponse() as! T
-        }
-        return try JSONDecoder().decode(T.self, from: data)
+        return url
     }
 
     /// The error for a server address, or a URL built from it, that cannot be used.
@@ -95,3 +127,16 @@ public struct APIClient: Sendable {
 }
 
 private struct EmptyResponse: Decodable {}
+
+extension URLError {
+    /// The address, not the request, is the problem: worth trying the next one.
+    var isUnreachableHost: Bool {
+        switch code {
+        case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .timedOut,
+            .networkConnectionLost, .notConnectedToInternet:
+            return true
+        default:
+            return false
+        }
+    }
+}

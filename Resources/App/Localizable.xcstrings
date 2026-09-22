@@ -121,6 +121,66 @@
         }
       }
     },
+    "Allow Exodus to use the camera in Settings, or paste the pairing link instead." : {
+      "comment" : "Alert message under 'Camera access is off'. Exodus is the app's name.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erlauben Sie Exodus in den Einstellungen den Kamerazugriff oder fügen Sie stattdessen den Kopplungslink ein."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permite que Exodus use la cámara en Ajustes o pega el enlace de vinculación."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autorisez Exodus à utiliser l’appareil photo dans les Réglages, ou collez le lien de jumelage."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Consenti a Exodus di usare la fotocamera nelle Impostazioni, oppure incolla il link di abbinamento."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「設定」で Exodus にカメラの使用を許可するか、代わりにペアリングリンクをペーストしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정에서 Exodus의 카메라 사용을 허용하거나, 대신 페어링 링크를 붙여넣으세요."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permita que o Exodus use a câmera nos Ajustes ou cole o link de pareamento."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在「設定」中允許 Exodus 使用相機，或改為貼上配對連結。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在「設定」中允許 Exodus 使用相機，或改為貼上配對連結。"
+          }
+        }
+      }
+    },
     "Ask Exodus" : {
       "comment" : "Placeholder of the message field. Exodus is the app's name and stays as is.",
       "extractionState" : "manual",
@@ -177,6 +237,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "詢問 Exodus"
+          }
+        }
+      }
+    },
+    "Camera access is off" : {
+      "comment" : "Alert title: the user has denied Exodus the camera, so the pairing code cannot be scanned.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamerazugriff ist deaktiviert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El acceso a la cámara está desactivado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’accès à l’appareil photo est désactivé"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’accesso alla fotocamera è disattivato"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラへのアクセスがオフです"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카메라 접근이 꺼져 있습니다"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O acesso à câmera está desativado"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相機權限已關閉"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相機權限已關閉"
           }
         }
       }
@@ -541,6 +661,66 @@
         }
       }
     },
+    "Computer" : {
+      "comment" : "Settings section: the computer this device is paired with.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computer"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ordenador"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ordinateur"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コンピュータ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computador"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "電腦"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "電腦"
+          }
+        }
+      }
+    },
     "Connect" : {
       "comment" : "Toolbar button in Settings before the server's settings are loaded.",
       "extractionState" : "manual",
@@ -721,6 +901,66 @@
         }
       }
     },
+    "Could not reach your computer. Make sure both devices are on the same network." : {
+      "comment" : "Error: none of the computer's addresses answered while pairing.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ihr Computer ist nicht erreichbar. Stellen Sie sicher, dass sich beide Geräte im selben Netzwerk befinden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se ha podido conectar con tu ordenador. Comprueba que ambos dispositivos están en la misma red."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de joindre votre ordinateur. Vérifiez que les deux appareils sont sur le même réseau."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile raggiungere il tuo computer. Assicurati che entrambi i dispositivi siano sulla stessa rete."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コンピュータに接続できませんでした。両方のデバイスが同じネットワーク上にあることを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터에 연결할 수 없습니다. 두 기기가 같은 네트워크에 있는지 확인하세요."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível alcançar o seu computador. Verifique se os dois dispositivos estão na mesma rede."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法連接到你的電腦。請確認兩部裝置在同一個網絡上。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法連線到你的電腦。請確認兩部裝置在同一個網路上。"
+          }
+        }
+      }
+    },
     "Delete" : {
       "comment" : "Context-menu action that deletes a conversation.",
       "extractionState" : "manual",
@@ -837,6 +1077,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "錯誤"
+          }
+        }
+      }
+    },
+    "Exodus is locked" : {
+      "comment" : "Shown full-screen while the pairing credential is locked behind Face ID. Exodus is the app's name.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus ist gesperrt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus está bloqueado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus est verrouillé"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus è bloccato"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus はロックされています"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus가 잠겨 있습니다"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Exodus está bloqueado"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 已鎖定"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 已鎖定"
           }
         }
       }
@@ -1501,6 +1801,66 @@
         }
       }
     },
+    "Open Settings" : {
+      "comment" : "Alert button: opens the iOS Settings app at Exodus's permissions.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen öffnen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir Ajustes"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir les Réglages"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apri Impostazioni"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定を開く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 열기"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir Ajustes"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟設定"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟設定"
+          }
+        }
+      }
+    },
     "Open sidebar" : {
       "comment" : "Accessibility label of the button that opens the sidebar.",
       "extractionState" : "manual",
@@ -1561,10 +1921,370 @@
         }
       }
     },
+    "Pair this iPhone with Exodus on your computer: open Settings → Devices there and choose Pair a device." : {
+      "comment" : "Settings → Computer, shown while unpaired. 'Settings → Devices' and 'Pair a device' are the desktop app's labels.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koppeln Sie dieses iPhone mit Exodus auf Ihrem Computer: Öffnen Sie dort Einstellungen → Geräte und wählen Sie „Gerät koppeln“."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vincula este iPhone con Exodus en tu ordenador: abre allí Ajustes → Dispositivos y elige Vincular un dispositivo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jumelez cet iPhone avec Exodus sur votre ordinateur : ouvrez-y Réglages → Appareils et choisissez Jumeler un appareil."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbina questo iPhone a Exodus sul tuo computer: apri lì Impostazioni → Dispositivi e scegli Abbina un dispositivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この iPhone をコンピュータの Exodus とペアリングします。コンピュータ側で「設定 → デバイス」を開き、「デバイスをペアリング」を選んでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 iPhone을 컴퓨터의 Exodus와 페어링하세요. 컴퓨터에서 ‘설정 → 기기’를 열고 ‘기기 페어링’을 선택하면 됩니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pareie este iPhone com o Exodus no seu computador: abra lá Ajustes → Dispositivos e escolha Parear um dispositivo."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將這部 iPhone 與電腦上的 Exodus 配對：在電腦上開啟「設定 → 裝置」，然後選擇「配對裝置」。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將這部 iPhone 與電腦上的 Exodus 配對：在電腦上開啟「設定 → 裝置」，然後選擇「配對裝置」。"
+          }
+        }
+      }
+    },
+    "Paired with %@" : {
+      "comment" : "Settings → Computer. %@ is the computer's name.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gekoppelt mit %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vinculado con %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jumelé avec %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbinato a %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」とペアリング済み"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘%@’와(과) 페어링됨"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pareado com %@"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已與「%@」配對"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已與「%@」配對"
+          }
+        }
+      }
+    },
+    "Pairing failed" : {
+      "comment" : "Alert title when pairing with the computer did not succeed.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopplung fehlgeschlagen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error de vinculación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec du jumelage"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbinamento non riuscito"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ペアリングに失敗しました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페어링 실패"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falha no pareamento"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配對失敗"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配對失敗"
+          }
+        }
+      }
+    },
+    "Pairing…" : {
+      "comment" : "Settings → Computer, shown while the pairing request is in flight.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopplung läuft…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vinculando…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jumelage…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbinamento…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ペアリング中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페어링 중…"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pareando…"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配對中…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配對中…"
+          }
+        }
+      }
+    },
+    "Paste pairing link" : {
+      "comment" : "Button: pairs using a pairing link copied from the computer (used in the Simulator, which has no camera).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopplungslink einfügen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pegar enlace de vinculación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coller le lien de jumelage"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Incolla il link di abbinamento"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ペアリングリンクをペースト"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페어링 링크 붙여넣기"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Colar link de pareamento"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "貼上配對連結"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "貼上配對連結"
+          }
+        }
+      }
+    },
     "Philharmonic" : {
       "comment" : "Product name of the multi-agent workspace; never translated.",
       "extractionState" : "manual",
       "shouldTranslate" : false
+    },
+    "Point the camera at the code on your computer's screen." : {
+      "comment" : "Hint at the bottom of the scanning screen.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Richten Sie die Kamera auf den Code auf dem Bildschirm Ihres Computers."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apunta la cámara al código que aparece en la pantalla de tu ordenador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pointez l’appareil photo vers le code affiché sur l’écran de votre ordinateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inquadra il codice sullo schermo del computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コンピュータの画面に表示されたコードにカメラを向けてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터 화면의 코드에 카메라를 맞추세요."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aponte a câmera para o código na tela do seu computador."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將相機對準電腦螢幕上的 QR Code。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將相機對準電腦螢幕上的 QR Code。"
+          }
+        }
+      }
     },
     "Provider" : {
       "comment" : "Picker label: which AI provider to use.",
@@ -1922,6 +2642,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "儲存"
+          }
+        }
+      }
+    },
+    "Scan pairing code" : {
+      "comment" : "Button: opens the camera to scan the QR code shown on the computer.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopplungscode scannen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escanear código de vinculación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scanner le code de jumelage"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scansiona il codice di abbinamento"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ペアリングコードをスキャン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페어링 코드 스캔"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escanear código de pareamento"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "掃描配對碼"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "掃描配對碼"
           }
         }
       }
@@ -2346,6 +3126,66 @@
         }
       }
     },
+    "Set a passcode on this device to pair with your computer." : {
+      "comment" : "Error: pairing stores a credential that iOS only allows on a device with a passcode.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legen Sie auf diesem Gerät einen Code fest, um es mit Ihrem Computer zu koppeln."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configura un código en este dispositivo para vincularlo con tu ordenador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Définissez un code sur cet appareil pour le jumeler avec votre ordinateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imposta un codice su questo dispositivo per abbinarlo al tuo computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コンピュータとペアリングするには、このデバイスにパスコードを設定してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터와 페어링하려면 이 기기에 암호를 설정하세요."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Defina um código neste dispositivo para pareá-lo com o seu computador."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請先為這部裝置設定密碼，才能與電腦配對。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請先為這部裝置設定密碼，才能與電腦配對。"
+          }
+        }
+      }
+    },
     "Settings" : {
       "comment" : "Title of the Settings screen and accessibility label of the gear button.",
       "extractionState" : "manual",
@@ -2466,6 +3306,66 @@
         }
       }
     },
+    "That is not an Exodus pairing code." : {
+      "comment" : "Error: the scanned or pasted text is not a pairing link from the Exodus desktop app. Exodus is the app's name.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das ist kein Exodus-Kopplungscode."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eso no es un código de vinculación de Exodus."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce n’est pas un code de jumelage Exodus."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo non è un codice di abbinamento di Exodus."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これは Exodus のペアリングコードではありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 페어링 코드가 아닙니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Isso não é um código de pareamento do Exodus."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這不是 Exodus 的配對碼。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這不是 Exodus 的配對碼。"
+          }
+        }
+      }
+    },
     "The Philharmonic multi-agent workspace hasn't been ported to iOS yet." : {
       "comment" : "Placeholder screen body. Philharmonic is a product name and stays untranslated.",
       "extractionState" : "manual",
@@ -2522,6 +3422,366 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Philharmonic 多代理人工作區尚未移植到 iOS。"
+          }
+        }
+      }
+    },
+    "The camera is not available" : {
+      "comment" : "Shown on the scanning screen when the camera could not be started; the technical reason follows beneath it.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Kamera ist nicht verfügbar"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La cámara no está disponible"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’appareil photo n’est pas disponible"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La fotocamera non è disponibile"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラを使用できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카메라를 사용할 수 없습니다"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A câmera não está disponível"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法使用相機"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法使用相機"
+          }
+        }
+      }
+    },
+    "This pairing code is no longer valid. Show a new one on your computer." : {
+      "comment" : "Error: the computer refused the pairing code (used, expired or wrong).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Kopplungscode ist nicht mehr gültig. Zeigen Sie auf Ihrem Computer einen neuen an."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este código de vinculación ya no es válido. Muestra uno nuevo en tu ordenador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce code de jumelage n’est plus valide. Affichez-en un nouveau sur votre ordinateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo codice di abbinamento non è più valido. Mostrane uno nuovo sul tuo computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このペアリングコードは無効になりました。コンピュータで新しいコードを表示してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 페어링 코드는 더 이상 유효하지 않습니다. 컴퓨터에서 새 코드를 표시하세요."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este código de pareamento não é mais válido. Mostre um novo no seu computador."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個配對碼已失效。請在電腦上顯示新的配對碼。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個配對碼已失效。請在電腦上顯示新的配對碼。"
+          }
+        }
+      }
+    },
+    "Unlock" : {
+      "comment" : "Button on the lock screen: prompts Face ID.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entsperren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desbloquear"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déverrouiller"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sblocca"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ロック解除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잠금 해제"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desbloquear"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解鎖"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解鎖"
+          }
+        }
+      }
+    },
+    "Unlock the connection to your computer" : {
+      "comment" : "The reason shown in the Face ID / passcode prompt.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung zu Ihrem Computer entsperren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desbloquear la conexión con tu ordenador"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déverrouiller la connexion à votre ordinateur"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sblocca la connessione al tuo computer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コンピュータとの接続のロックを解除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터와의 연결 잠금 해제"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desbloquear a conexão com o seu computador"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解鎖與電腦的連接"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解鎖與電腦的連線"
+          }
+        }
+      }
+    },
+    "Unpair" : {
+      "comment" : "Button, and its confirmation: forget the paired computer.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entkoppeln"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desvincular"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dissocier"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annulla abbinamento"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ペアリングを解除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페어링 해제"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desparear"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消配對"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消配對"
+          }
+        }
+      }
+    },
+    "Unpair from this computer?" : {
+      "comment" : "Alert title confirming Unpair.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von diesem Computer entkoppeln?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Desvincular de este ordenador?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dissocier cet ordinateur ?"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annullare l’abbinamento con questo computer?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このコンピュータとのペアリングを解除しますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 컴퓨터와의 페어링을 해제할까요?"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desparear deste computador?"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要取消與這部電腦的配對嗎？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要取消與這部電腦的配對嗎？"
           }
         }
       }
@@ -2702,6 +3962,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "有什麼可以幫你的嗎？"
+          }
+        }
+      }
+    },
+    "You will need to scan a new pairing code to connect again." : {
+      "comment" : "Alert message under 'Unpair from this computer?'.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sie müssen einen neuen Kopplungscode scannen, um sich wieder zu verbinden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tendrás que escanear un nuevo código de vinculación para volver a conectarte."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous devrez scanner un nouveau code de jumelage pour vous reconnecter."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dovrai scansionare un nuovo codice di abbinamento per riconnetterti."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再び接続するには、新しいペアリングコードをスキャンする必要があります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 연결하려면 새 페어링 코드를 스캔해야 합니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você precisará escanear um novo código de pareamento para se conectar de novo."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "之後需要重新掃描配對碼才能再次連接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "之後需要重新掃描配對碼才能再次連線。"
           }
         }
       }

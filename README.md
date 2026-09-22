@@ -55,6 +55,34 @@ on the same Mac. On a real iPhone open Settings (gear),
 then Connection, and enter the Mac's LAN IP or `<name>.local` with the port, e.g. `http://192.168.1.10:60223`.
 iOS asks once for local-network permission.
 
+## Connecting to the computer
+
+A device reaches Exodus only after it has been **paired**. On the computer, Settings → Devices → Pair a device
+shows a QR code: `exodus://pair?h=<hosts>&p=60224&c=<one-time code>&f=<certificate fingerprint>&n=<name>`
+(`PairingLink`). Settings → Computer here scans it (`QRScannerView`, VisionKit) — or pastes the link, which is
+what the Simulator does — and `ServerConnection.pair` trades the code for a per-device token over HTTPS.
+
+- **Trust is the pin.** The computer's certificate is self-signed; `PinnedSessionDelegate` accepts exactly the
+  certificate whose SHA-256 came with the QR code, checks no CA and no host name (so an IP, a `.local` name or a
+  tailnet name all work), and does so during the TLS handshake — before a byte of any request is sent. With no
+  pin, no TLS server is trusted at all. `ServerConnection.session` is the one `URLSession` that carries it;
+  `APIClient` and `SSEClient` both use it.
+- **The token is behind Face ID.** `KeychainCredentialStore` keeps it in one Keychain item with access control
+  `biometryCurrentSet` or device passcode, this device only, never synced — a device without a passcode cannot
+  pair. `UnlockGate` reads it on a cold start and again after more than five minutes in the background
+  (`ServerConnection.backgroundGrace`); in between it lives in memory only.
+- **Every address in the QR code is kept.** The desktop lists each of its addresses (the LAN IP, the
+  Tailscale IP, its `.local` name); `APIClient` tries them in turn when one is unreachable and remembers the one
+  that answered (`PairedServer.lastGoodHost`), so the same pairing works on the home Wi-Fi and, over Tailscale,
+  from anywhere. The certificate pin does not depend on the address.
+- **Revoked means unpaired.** A `401` to a request that carried our token clears the credential, and the app is
+  back at pairing.
+- **The Simulator needs none of it.** Unpaired, requests go to the manual address (`http://localhost:60223`),
+  the computer's plaintext listener — which is bound to loopback, so a real device cannot use it.
+
+The desktop side is `src/main/lib/lan/` in the exodus repo; its design is
+`docs/superpowers/specs/2026-09-20-lan-pairing-sandbox-isolation-design.md` there.
+
 ## Localization
 
 Every user-visible string lives in `Resources/App/Localizable.xcstrings`, and the permission prompt in

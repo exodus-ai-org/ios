@@ -176,6 +176,9 @@ public actor ChatStreamManager {
         var request = URLRequest(url: base.appendingPathComponent("/api/v1/chat"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let authorization = serverConfig.authorization {
+            request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        }
         // The server sends no keep-alive frames, and URLSession's default 60 s
         // *inactivity* timeout would kill a turn during a long silent stretch (a
         // reasoning model thinking before its first token, a slow tool call) that
