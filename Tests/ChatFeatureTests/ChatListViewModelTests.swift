@@ -54,12 +54,15 @@ private let twoChatsJSON = #"""
 private let serverErrorJSON =
     #"{"type":"error","error":{"code":"DB_QUERY_FAILED","message":"Failed to get chat history"}}"#
 
-/// Answers `GET /api/v1/history` and `DELETE /api/v1/chat/<id>`, recording "METHOD path" for every request.
+/// Answers `GET /api/v1/history`, `DELETE /api/v1/chat/<id>` and `PUT /api/v1/chat`, recording
+/// "METHOD path" for every request.
 private func serve(
     history: String = "[]",
     historyStatus: Int = 200,
     deleteStatus: Int = 200,
     deleteBody: String = #"{"success":true}"#,
+    putStatus: Int = 200,
+    putBody: String = #"{"success":true}"#,
     recorder: RequestRecorder
 ) {
     ChatListMockURLProtocol.handler = { request in
@@ -71,6 +74,9 @@ private func serve(
         }
         if method == "DELETE", path.hasPrefix("/api/v1/chat/") {
             return (deleteStatus, Data(deleteBody.utf8))
+        }
+        if method == "PUT", path == "/api/v1/chat" {
+            return (putStatus, Data(putBody.utf8))
         }
         return (404, Data(#"{"type":"error","error":{"code":"NOT_FOUND","message":"no route"}}"#.utf8))
     }
@@ -387,5 +393,50 @@ struct ChatListViewModelTests {
         // dump form (`String(describing:)`) contains "Domain=" and must not reach the user.
         #expect(message.contains("Domain=") == false)
         #expect(vm.loadFailed)
+    }
+
+    // MARK: - Rename
+
+    @Test("rename(_:to:) sends PUT /api/v1/chat with the trimmed title and updates only that chat")
+    func renameUpdatesTheChatAfterSuccess() async throws {
+        let recorder = RequestRecorder()
+        serve(history: twoChatsJSON, recorder: recorder)
+        let vm = makeViewModel()
+        await vm.load()
+        let first = try #require(vm.chats.first)
+        let renamed = await vm.rename(first, to: "  Trip to Kyoto  ")
+        #expect(renamed)
+        #expect(recorder.requests == ["GET /api/v1/history", "PUT /api/v1/chat"])
+        #expect(vm.chats.map(\.title) == ["Trip to Kyoto", "New chat"])
+        #expect(vm.errorMessage == nil)
+    }
+
+    @Test("rename(_:to:) never calls the server for a blank or whitespace-only title")
+    func renameRejectsABlankTitleWithoutARequest() async throws {
+        let recorder = RequestRecorder()
+        serve(history: twoChatsJSON, recorder: recorder)
+        let vm = makeViewModel()
+        await vm.load()
+        let first = try #require(vm.chats.first)
+        let renamed = await vm.rename(first, to: "   ")
+        #expect(renamed == false)
+        #expect(recorder.requests == ["GET /api/v1/history"])
+        #expect(vm.chats.map(\.title) == ["Trip planning", "New chat"])
+    }
+
+    @Test("a failed rename keeps the old title and shows the server's message")
+    func failedRenameKeepsTheOldTitle() async throws {
+        serve(
+            history: twoChatsJSON,
+            putStatus: 500,
+            putBody: #"{"type":"error","error":{"code":"DB_QUERY_FAILED","message":"Failed to update chat"}}"#,
+            recorder: RequestRecorder())
+        let vm = makeViewModel()
+        await vm.load()
+        let first = try #require(vm.chats.first)
+        let renamed = await vm.rename(first, to: "New title")
+        #expect(renamed == false)
+        #expect(vm.chats.map(\.title) == ["Trip planning", "New chat"])
+        #expect(vm.errorMessage == "Failed to update chat")
     }
 }

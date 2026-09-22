@@ -75,4 +75,31 @@ public final class ChatListViewModel {
             return false
         }
     }
+
+    /// True only when the server confirmed the rename (a blank title never reaches it: it would
+    /// leave the row with nothing to show). Updates the local copy on success so the row reflects
+    /// the new title without a reload.
+    @discardableResult
+    public func rename(_ chat: ChatSummary, to title: String) async -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        do {
+            try await apiClient.put("/api/v1/chat", body: RenameChatPayload(id: chat.id, title: trimmed))
+            if let index = chats.firstIndex(where: { $0.id == chat.id }) {
+                chats[index].title = trimmed
+            }
+            return true
+        } catch {
+            guard !isCancellation(error) else { return false }
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+}
+
+/// The desktop's `PUT /api/v1/chat` takes a partial `Chat` row; sending only `id` and `title`
+/// updates just that column (Drizzle's `.set()` writes only the keys it is given).
+private struct RenameChatPayload: Encodable {
+    let id: String
+    let title: String
 }
