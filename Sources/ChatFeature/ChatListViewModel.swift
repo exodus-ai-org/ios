@@ -41,7 +41,7 @@ public final class ChatListViewModel {
             hasLoaded = true
         } catch {
             // SwiftUI cancels a view's `.task` when the view goes away; that is not a failure.
-            guard !Self.isCancellation(error) else { return }
+            guard !isCancellation(error) else { return }
             loadFailed = true
             hasLoaded = true
             errorMessage = error.localizedDescription
@@ -70,13 +70,9 @@ public final class ChatListViewModel {
             chats.removeAll { $0.id == chat.id }
             return true
         } catch {
-            guard !Self.isCancellation(error) else { return false }
+            guard !isCancellation(error) else { return false }
             errorMessage = error.localizedDescription
             return false
         }
-    }
-
-    private static func isCancellation(_ error: Error) -> Bool {
-        error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 }

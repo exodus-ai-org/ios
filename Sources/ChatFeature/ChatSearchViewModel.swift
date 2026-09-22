@@ -118,7 +118,7 @@ public final class ChatSearchViewModel {
         } catch {
             guard generation == self.generation else { return }
             isSearching = false
-            if Self.isCancellation(error) { return }
+            if isCancellation(error) { return }
             phase = .failed(error.localizedDescription)
         }
     }
@@ -136,9 +136,5 @@ public final class ChatSearchViewModel {
             if results.count == maxResults { break }
         }
         return results
-    }
-
-    private static func isCancellation(_ error: Error) -> Bool {
-        error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 }

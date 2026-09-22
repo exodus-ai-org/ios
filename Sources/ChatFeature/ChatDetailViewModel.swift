@@ -114,7 +114,7 @@ public final class ChatDetailViewModel {
             hasLoadedHistory = true
         } catch {
             // SwiftUI cancels a view's `.task` when the view goes away; that is not a failure.
-            guard !Self.isCancellation(error) else { return }
+            guard !isCancellation(error) else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -171,10 +171,6 @@ public final class ChatDetailViewModel {
                 status = .error
             }
         }
-    }
-
-    private static func isCancellation(_ error: Error) -> Bool {
-        error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 
     /// A chat title on one line; nil when there is nothing to show. Real titles can be long and multi-line.
