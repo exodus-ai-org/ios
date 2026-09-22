@@ -1,3 +1,4 @@
+import Synchronization
 import SwiftUI
 import UIKit
 
@@ -26,6 +27,11 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
     /// a `@GestureState` *before* the release is handled, so the card rendered one frame at the
     /// closed offset — the release flash — before the new `isOpen` animated it back out.
     @State private var drag: CGFloat?
+    /// Where the card was when the finger landed. Read from `liveOffset`, not from the model, so a
+    /// drag that catches the card mid-settle picks it up where the eye last saw it.
+    @State private var dragStart: CGFloat = 0
+    /// The card's position on screen, updated every frame it moves.
+    @State private var liveOffset = DrawerLiveOffset()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
@@ -83,7 +89,7 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
                             .allowsHitTesting(false)
                     }
                     .shadow(color: .black.opacity(0.15 * progress), radius: 24, x: -4)
-                    .offset(x: offset)
+                    .modifier(DrawerCardOffset(offset: offset, live: liveOffset))
                     .accessibilityHidden(isOpen)
 
                 if isOpen {
@@ -105,11 +111,15 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
             .gesture(
                 DrawerPan(
                     isOpen: isOpen,
+                    // The card is picked up where it is on screen, never where the model says it
+                    // is heading: grabbing one in mid-flight used to jump it by whatever was left
+                    // of the settle.
+                    onBegin: { dragStart = liveOffset.value },
                     onChange: { travel in
-                        drag = cardOffset(base + travel, drawerWidth: drawerWidth)
+                        drag = cardOffset(dragStart + travel, drawerWidth: drawerWidth)
                     },
                     onRelease: { travel, velocity in
-                        let landed = cardOffset(base + travel, drawerWidth: drawerWidth)
+                        let landed = cardOffset(dragStart + travel, drawerWidth: drawerWidth)
                         settle(
                             open: DrawerPhysics.endsOpen(
                                 offset: landed, velocity: velocity, drawerWidth: drawerWidth))
@@ -197,6 +207,7 @@ private struct DrawerPan: UIGestureRecognizerRepresentable {
     /// Which way a drag has to go to be ours. Refreshed on the recognizer's coordinator at every
     /// update, because `gestureRecognizerShouldBegin` runs on the delegate, not on this struct.
     let isOpen: Bool
+    let onBegin: () -> Void
     let onChange: (CGFloat) -> Void
     let onRelease: (CGFloat, CGFloat) -> Void
     let onCancel: () -> Void
@@ -244,7 +255,10 @@ private struct DrawerPan: UIGestureRecognizerRepresentable {
         // or a scroll from nudging the card. It never jumps to catch the finger up.
         let travel = recognizer.translation(in: recognizer.view).x
         switch recognizer.state {
-        case .began, .changed:
+        case .began:
+            onBegin()
+            onChange(travel)
+        case .changed:
             onChange(travel)
         case .ended:
             onRelease(travel, recognizer.velocity(in: recognizer.view).x)
@@ -253,6 +267,50 @@ private struct DrawerPan: UIGestureRecognizerRepresentable {
         default:
             break
         }
+    }
+}
+
+/// Slides the card, and writes down where it is actually drawn while it does.
+///
+/// The obvious way to read the card's live position — `onGeometryChange` on the offset view — never
+/// sees it move: `frame(in:)` reports layout, and `.offset` is a draw-time transform, so the card's
+/// reported frame sits at the closed position for the whole of a settle. (Measured: one sample, of
+/// zero, across two full open/close animations.) `Animatable` does see it. SwiftUI drives
+/// `animatableData` once per frame with the interpolated value, which is by definition the number
+/// on screen, and applying the offset here means the value written down and the value drawn can
+/// never drift apart.
+private struct DrawerCardOffset: ViewModifier, Animatable {
+    var offset: CGFloat
+    let live: DrawerLiveOffset
+
+    /// `nonisolated` because `Animatable` is: SwiftUI drives this from its own update pass, not from
+    /// a main-actor call, and `DrawerLiveOffset` is built to be written from there.
+    nonisolated var animatableData: CGFloat {
+        get { offset }
+        set {
+            offset = newValue
+            live.value = newValue
+        }
+    }
+
+    func body(content: Content) -> some View {
+        content.offset(x: offset)
+    }
+}
+
+/// Where the card is on screen, as opposed to where the model says it belongs.
+///
+/// Deliberately not observable: it changes on every frame of a settle, and a view that watched it
+/// would re-render the whole drawer sixty times a second for a number only the start of the next
+/// gesture ever reads. Deliberately not actor-isolated either, because `Animatable` is not: the
+/// mutex is what makes the one `CGFloat` safe to write from SwiftUI's update pass and read from the
+/// gesture, and it costs an uncontended lock per frame.
+final class DrawerLiveOffset: Sendable {
+    private let storage = Mutex<CGFloat>(0)
+
+    var value: CGFloat {
+        get { storage.withLock { $0 } }
+        set { storage.withLock { $0 = newValue } }
     }
 }
 
