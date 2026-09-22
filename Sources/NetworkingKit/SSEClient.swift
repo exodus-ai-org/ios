@@ -2,7 +2,10 @@ import Foundation
 import Models
 
 public struct SSEClient: Sendable {
-    private let session: URLSession
+    /// Not private: `ChatStreamManager` reads it to pass along to
+    /// `ServerConnection.unlockComputer(session:)` on a 423, so the retry uses the same session
+    /// (and so the same pin) this client's events came from.
+    let session: URLSession
 
     public init(session: URLSession = .shared) {
         self.session = session

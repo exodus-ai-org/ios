@@ -79,7 +79,7 @@ public actor ChatStreamManager {
                 return
             }
             do {
-                for try await event in sseClient.events(for: request) {
+                try await Self.stream(request: request, sseClient: sseClient, serverConfig: serverConfig) { event in
                     await self?.apply(chatId: chatId, generation: generation, event: event)
                 }
                 await self?.finish(chatId: chatId, generation: generation)
@@ -165,6 +165,28 @@ public actor ChatStreamManager {
         stream.continuation?.yield(.failed(message))
         stream.continuation?.finish()
         streams[chatId] = nil
+    }
+
+    /// Runs the SSE request; on the computer's own lock (423, not this device's — see
+    /// `ServerConnection.unlockComputer`) unlocks it and tries the same request once more. The
+    /// status check inside `SSEClient.events` happens before it yields anything, so this can
+    /// never retry mid-stream — only ever before the first event, real or not.
+    private static func stream(
+        request: URLRequest, sseClient: SSEClient, serverConfig: ServerConfigStore,
+        onEvent: (ChatSseEvent) async -> Void
+    ) async throws {
+        do {
+            for try await event in sseClient.events(for: request) {
+                await onEvent(event)
+            }
+        } catch let error as HTTPError where error.code == "APP_LOCKED" {
+            guard let connection = serverConfig.connection,
+                await connection.unlockComputer(session: sseClient.session)
+            else { throw error }
+            for try await event in sseClient.events(for: request) {
+                await onEvent(event)
+            }
+        }
     }
 
     private static func makeRequest(

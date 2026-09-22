@@ -525,3 +525,134 @@ struct ChatStreamManagerTests {
         await drain.value
     }
 }
+
+/// A per-path handler, unlike `StreamingMockURLProtocol`'s shared statics: the unlock-retry
+/// tests need `/api/v1/chat` and `/api/v1/lock/unlock` to answer independently, and the first
+/// call to `/api/v1/chat` to answer differently from the second (the retry).
+private final class RoutedMockURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var handler: (@Sendable (URLRequest) -> (Int, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let (status, body) = Self.handler?(request) ?? (404, Data())
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: status, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "text/event-stream"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+
+    static func makeSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RoutedMockURLProtocol.self]
+        return URLSession(configuration: config)
+    }
+}
+
+@Suite("ChatStreamManager: the paired computer's own lock", .serialized)
+struct ChatStreamManagerLockedTests {
+    private static let appLocked = #"{"type":"error","error":{"code":"APP_LOCKED","message":"Application is locked"}}"#
+
+    private func makePairedConfig(_ suite: String) -> ServerConfigStore {
+        let store = InMemoryCredentialStore(
+            PairedServer(
+                hosts: ["10.0.0.2"], port: 60224, fingerprint: "PIN", name: "Mac",
+                deviceId: "dev-1", token: "TOKEN"))
+        let connection = ServerConnection(store: store)
+        let config = ServerConfigStore(userDefaults: UserDefaults(suiteName: suite)!)
+        config.connection = connection
+        return config
+    }
+
+    @Test("a 423 on the chat request unlocks the computer and retries, streaming normally")
+    func unlocksAndRetries() async throws {
+        let serverConfig = makePairedConfig(#function)
+        try await serverConfig.connection?.unlock(reason: "test")
+        let chatCalls = Mutex<Int>(0)
+        let session = RoutedMockURLProtocol.makeSession()
+        defer { session.invalidateAndCancel() }
+        RoutedMockURLProtocol.handler = { request in
+            switch request.url?.path {
+            case "/api/v1/lock/unlock":
+                return (200, Data(#"{"locked":false}"#.utf8))
+            case "/api/v1/chat":
+                let calls = chatCalls.withLock { $0 += 1; return $0 }
+                if calls == 1 { return (423, Data(Self.appLocked.utf8)) }
+                let sse = """
+                    data: {"type":"done","messages":[{"id":"u1","role":"user","content":"hi"},\
+                    {"id":"a1","role":"assistant","content":"Hello"}]}\n\n
+                    """
+                return (200, Data(sse.utf8))
+            default:
+                return (404, Data())
+            }
+        }
+
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+        var finalMessages: [ChatMessage] = []
+        var failure: String?
+        for await update in await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig) {
+            switch update {
+            case .finished(let messages): finalMessages = messages
+            case .failed(let message): failure = message
+            default: break
+            }
+        }
+
+        #expect(failure == nil)
+        #expect(finalMessages.last?.displayText == "Hello")
+        #expect(chatCalls.withLock { $0 } == 2)
+    }
+
+    @Test("the unlock call failing surfaces the original locked message as .failed, not a new one")
+    func unlockFailureSurfacesTheOriginalError() async throws {
+        let serverConfig = makePairedConfig(#function)
+        try await serverConfig.connection?.unlock(reason: "test")
+        let session = RoutedMockURLProtocol.makeSession()
+        defer { session.invalidateAndCancel() }
+        RoutedMockURLProtocol.handler = { request in
+            if request.url?.path == "/api/v1/lock/unlock" {
+                return (500, Data(#"{"type":"error","error":{"code":"X","message":"boom"}}"#.utf8))
+            }
+            return (423, Data(Self.appLocked.utf8))
+        }
+
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+        var failure: String?
+        for await update in await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig) {
+            if case .failed(let message) = update { failure = message }
+        }
+
+        #expect(failure == "Application is locked")
+    }
+
+    @Test("an unpaired connection gets the original locked message, with no unlock attempt")
+    func unpairedGetsTheOriginalError() async throws {
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        serverConfig.connection = ServerConnection(store: InMemoryCredentialStore())
+        let session = RoutedMockURLProtocol.makeSession()
+        defer { session.invalidateAndCancel() }
+        let seen = Mutex<[String]>([])
+        RoutedMockURLProtocol.handler = { request in
+            seen.withLock { $0.append(request.url?.path ?? "") }
+            return (423, Data(Self.appLocked.utf8))
+        }
+
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+        var failure: String?
+        for await update in await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig) {
+            if case .failed(let message) = update { failure = message }
+        }
+
+        #expect(failure == "Application is locked")
+        #expect(seen.withLock { $0 } == ["/api/v1/chat"])
+    }
+}
