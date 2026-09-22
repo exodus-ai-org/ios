@@ -15,6 +15,7 @@ public struct ChatDetailView: View {
     /// Return inserts a newline in the multi-line composer, so the keyboard needs somewhere else to
     /// go: the composer's hide-keyboard button and a tap on the transcript both clear this.
     @FocusState private var isComposerFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
@@ -71,8 +72,14 @@ public struct ChatDetailView: View {
             }
         }
         .overlay {
-            if viewModel.showsEmptyState { emptyState }
+            if viewModel.showsEmptyState {
+                // The literal first and last thing every new chat shows, so it earns a beat rather
+                // than a hard cut (apple-design: preventing a jarring change). Pure opacity is
+                // already Reduce-Motion-safe as written.
+                emptyState.transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: viewModel.showsEmptyState)
         .safeAreaBar(edge: .bottom) { composer }
         .navigationTitle(viewModel.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -133,6 +140,10 @@ public struct ChatDetailView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
+                // Appearing next to Send would otherwise shove it sideways in one frame; entering
+                // and leaving the way it would if it grew from nothing turns that into a slide
+                // (apple-design: preventing a jarring change, not a showy one).
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
             turnButton
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { turnButtonHeight = $0 }
@@ -143,34 +154,43 @@ public struct ChatDetailView: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
+        // Extends `.snappy`, the curve this app already uses for every other toggle (search mode,
+        // the drawer), rather than inventing a new one.
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: isComposerFocused)
     }
 
-    @ViewBuilder
+    /// One button whose icon and action both switch on the same state, not two buttons swapped by
+    /// an `if`: only a stable identity lets the icon morph (`.contentTransition`) instead of being
+    /// destroyed and recreated with a hard cut. Stop is the way out of a turn that will not finish
+    /// (a half-open connection can otherwise keep the composer locked for up to an hour).
     private var turnButton: some View {
-        if viewModel.isTurnInFlight {
-            // The way out of a turn that will not finish (a half-open connection can otherwise
-            // keep the composer locked for up to an hour).
-            Button {
+        Button {
+            if viewModel.isTurnInFlight {
                 Task { await viewModel.stop() }
-            } label: {
-                Label("Stop", systemImage: "stop.fill")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.circle)
-            .accessibilityIdentifier("stopButton")
-        } else {
-            Button {
+            } else {
                 Task { await viewModel.sendMessage() }
-            } label: {
-                Label("Send", systemImage: "arrow.up")
-                    .labelStyle(.iconOnly)
             }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.circle)
-            .disabled(!viewModel.canSend)
-            .accessibilityIdentifier("sendButton")
+        } label: {
+            Label {
+                // One literal per branch, never a ternary of the two (scripts/l10n.py audit bans
+                // it: it can quietly resolve to the non-localizing `String` overload).
+                if viewModel.isTurnInFlight {
+                    Text("Stop")
+                } else {
+                    Text("Send")
+                }
+            } icon: {
+                Image(systemName: viewModel.isTurnInFlight ? "stop.fill" : "arrow.up") // l10n:ignore: SF Symbol names
+            }
+            .labelStyle(.iconOnly)
+            // The single most-tapped control in the app (apple-design §13: state indication, tens
+            // of times a day, so the motion stays fast and subtle, never a showy morph).
+            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
         }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .disabled(!viewModel.isTurnInFlight && !viewModel.canSend)
+        .accessibilityIdentifier(viewModel.isTurnInFlight ? "stopButton" : "sendButton") // l10n:ignore: a testing identifier, never shown to the user
     }
 
     /// Stable id of the pending "…" row, so the scroll view can be pointed at it.
