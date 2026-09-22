@@ -88,6 +88,16 @@ public struct ChatDetailView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+        // Haptics: one per user action, firing on the causal event, never on a re-render or a
+        // streamed token (apple-design §13 — causality, harmony, utility). Each trigger below is a
+        // plain value the view model changes exactly once per real occurrence.
+        .sensoryFeedback(.impact(weight: .light), trigger: viewModel.sendCount)
+        .sensoryFeedback(.success, trigger: viewModel.completedTurnCount)
+        .sensoryFeedback(.impact(weight: .light), trigger: viewModel.stopCount)
+        .sensoryFeedback(trigger: viewModel.errorMessage) { old, new in
+            // Only the alert's own appearance (nil -> non-nil), never its dismissal.
+            old == nil && new != nil ? .error : nil
+        }
     }
 
     private var emptyState: some View {
