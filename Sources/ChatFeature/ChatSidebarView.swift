@@ -21,6 +21,9 @@ private let sidebarRowInsets = EdgeInsets(top: 12, leading: 16, bottom: 12, trai
 private struct SidebarRow: ViewModifier {
     let isSelected: Bool
     let select: () -> Void
+    /// A finger down on the row, tracked purely for the background tint below — it never wins the
+    /// touch itself.
+    @State private var isPressed = false
 
     func body(content: Content) -> some View {
         content
@@ -29,8 +32,22 @@ private struct SidebarRow: ViewModifier {
             .frame(minHeight: 44)
             .contentShape(Rectangle())
             .onTapGesture(perform: select)
+            // A same-priority, zero-distance drag purely for visual state: `.simultaneously` means
+            // it never competes with `onTapGesture` above or the drawer's own pan for the touch, it
+            // only reports when a finger is down. The only acknowledgment a row not built as a
+            // `Button` (see the note above) would otherwise give at all.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in isPressed = true }
+                    .onEnded { _ in isPressed = false }
+            )
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets())
+            .listRowBackground(
+                isPressed ? Color.primary.opacity(0.06)
+                    : isSelected ? Color.accentColor.opacity(0.12) : Color.clear
+            )
+            .animation(.easeOut(duration: 0.1), value: isPressed)
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction { select() }
     }
@@ -116,6 +133,12 @@ public struct ChatSidebarView<Workspaces: View>: View {
             // an accessibility text size a title is chopped mid-word by them.
             .scrollEdgeEffectStyle(.hard, for: .bottom)
             .overlay { searchStateOverlay }
+            // Spinner, empty state, failure and results all cross-fade instead of cutting — the
+            // Recents block only when a load finishes, search on every phase it can be in while a
+            // query is live (apple-design: preventing a jarring change).
+            .animation(.easeOut(duration: 0.15), value: list.chats.isEmpty)
+            .animation(.easeOut(duration: 0.15), value: search.phase)
+            .animation(.easeOut(duration: 0.15), value: search.isSearching)
             .navigationTitle(isSearching ? "" : Self.appName)
             .navigationBarTitleDisplayMode(isSearching ? .inline : .large)
             .safeAreaBar(edge: .top) {
@@ -170,9 +193,10 @@ public struct ChatSidebarView<Workspaces: View>: View {
     private func row(for chat: ChatSummary) -> some View {
         Text(chat.title.collapsedWhitespace)
             .lineLimit(1)
+            // The selected tint lives inside `SidebarRow` now, alongside the press tint: applying
+            // `.listRowBackground` again out here would simply replace whichever one it set.
             .modifier(
                 SidebarRow(isSelected: chat.id == activeChatId) { onSelectChat(chat.id, chat.title) })
-            .listRowBackground(chat.id == activeChatId ? Color.accentColor.opacity(0.12) : Color.clear)
             // Closes over this row's chat, so nothing indexes `list.chats` after a concurrent load.
             .contextMenu {
                 Button(role: .destructive) {
@@ -244,6 +268,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
                     ContentUnavailableView("No chats yet", systemImage: "message")
                 }
             }
+            .transition(.opacity)
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
         }
@@ -260,6 +285,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
             case .idle where search.isSearching, .failed where search.isSearching:
                 ProgressView()
                     .accessibilityLabel("Searching")
+                    .transition(.opacity)
             case .failed(let message):
                 ContentUnavailableView {
                     Label("Search failed", systemImage: "exclamationmark.triangle")
@@ -268,8 +294,10 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 } actions: {
                     Button("Retry") { search.retry() }
                 }
+                .transition(.opacity)
             case .empty:
                 ContentUnavailableView("No results", systemImage: "magnifyingglass")
+                    .transition(.opacity)
             case .idle, .results:
                 EmptyView()
             }
