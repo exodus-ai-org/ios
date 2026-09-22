@@ -374,8 +374,15 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 // instead of centred, on the same line as Search either way.
                 Text(Self.appName)
                     .font(.title2.weight(.semibold))
+                    // The toolbar proposes this item a width tighter than "Exodus" needs (it
+                    // truncated to "Ex…" with room to spare) — this is six fixed characters,
+                    // never user content, so laying out at its own ideal size is safe.
+                    .fixedSize()
                     .accessibilityAddTraits(.isHeader)
             }
+            // Without this, Liquid Glass gives a plain `Text` toolbar item the same circular
+            // glass background a button gets — it read as a tappable "E…" bubble, not a title.
+            .sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     withAnimation(.snappy) { isSearching = true }
