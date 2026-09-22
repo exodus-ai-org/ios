@@ -524,6 +524,70 @@ struct ChatDetailViewModelTests {
         #expect(vm.stopCount == 0)  // nothing was in flight, so no stop haptic either
     }
 
+    /// The race a review round found: `isTurnInFlight` is only a local mirror of the manager's
+    /// state, current up to the last update this view model has drained. A turn can finish (or
+    /// fail) on the manager side, removing its entry, before that drain catches up — the update
+    /// is sitting in the stream, not yet processed. A `stop()` landing in that exact window must
+    /// not mark the turn as stopped, because `cancel(_:)` finds nothing left to cancel there.
+    ///
+    /// The precise interleaving is a suspend-point race between two concurrently scheduled
+    /// MainActor tasks (the manager's background task finishing and removing its entry, versus
+    /// this view model's own `consume` loop draining the buffered result) and cannot be
+    /// constructed deterministically from test code — Swift's Task scheduler gives no seam to
+    /// pin that ordering, and any attempt would be flaky (sometimes reproducing, sometimes not).
+    /// What follows instead is a DETERMINISTIC construction of the identical code path and the
+    /// identical bug class — `isTurnInFlight` reading stale-true locally while `cancel(_:)`
+    /// legitimately has nothing left to cancel — using the re-attach machinery's own documented
+    /// "single observer, latest wins" rule: a superseded view model's `consume` loop exits
+    /// quietly (its continuation is finished by `attach`, not fed a final `.finished`/`.failed`),
+    /// so its `status` freezes at whatever it last was and never updates again, same as a stale
+    /// read would. See `ChatStreamManagerTests` for `cancel(_:)`'s own true/false coverage.
+    @Test(
+        "stop() does not mark a turn as stopped when cancel(_:) finds nothing to cancel, even though isTurnInFlight still reads stale-true",
+        .timeLimit(.minutes(1)))
+    func stopDoesNotMislabelATurnCancelCouldNotFind() async throws {
+        serve(history: "[]", reply: partialReply, holdReplyOpen: true, recorder: RequestRecorder())
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+
+        let stale = harness.makeViewModel()
+        await stale.loadHistory()
+        stale.composerText = "hey"
+        let staleSend = Task { await stale.sendMessage() }
+        try await waitUntil("the partial reply to arrive") { stale.messages.last?.displayText == "Hel" }
+        #expect(stale.isTurnInFlight)
+
+        // A second view model re-attaches to the same turn: `attach` ends `stale`'s own observer
+        // stream (single observer, latest wins), so `stale`'s `consume` loop exits quietly and
+        // nothing will ever update its `status` again — frozen mid-flight, exactly like a stale
+        // read caught between the manager finishing and this view model draining that news.
+        let current = harness.makeViewModel()
+        let appear = Task { await current.onAppear() }
+        try await waitUntil("the re-attached view model to show the partial reply") {
+            current.messages.last?.displayText == "Hel"
+        }
+        await staleSend.value  // `stale`'s own sendMessage() returns once its stream ends
+        #expect(stale.isTurnInFlight)  // frozen true: superseded, but never told the turn moved on
+
+        // The re-attached (current) view model legitimately stops the real turn.
+        await current.stop()
+        try await waitUntil("the stopped turn to end") { current.status == .idle }
+        await appear.value
+        #expect(current.stopCount == 1)
+        #expect(await harness.manager.isStreaming("c1") == false)
+
+        // The stale view model, still believing a turn is in flight, is asked to stop it too.
+        // cancel(_:) finds nothing (already cancelled by `current`) and returns false, so this
+        // must NOT be counted as a stop.
+        await stale.stop()
+        #expect(stale.stopCount == 0)
+        #expect(stale.completedTurnCount == 0)
+        #expect(stale.errorMessage == nil)
+
+        harness.session.invalidateAndCancel()
+    }
+
     // MARK: - Haptic triggers (sendCount, completedTurnCount, stopCount)
 
     @Test("a turn that completes normally bumps completedTurnCount once, and never stopCount")
@@ -552,6 +616,37 @@ struct ChatDetailViewModelTests {
         #expect(vm.completedTurnCount == 2)
     }
 
+    @Test(
+        "a normal completion after an earlier stop is not suppressed: turnWasStopped does not leak across turns",
+        .timeLimit(.minutes(1)))
+    func aNormalCompletionAfterAnEarlierStopIsNotSuppressed() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", reply: partialReply, holdReplyOpen: true, recorder: recorder)
+        defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
+        let harness = Harness()
+        defer { harness.session.invalidateAndCancel() }
+        let vm = harness.makeViewModel()
+        await vm.loadHistory()
+        vm.composerText = "first"
+        let firstSend = Task { await vm.sendMessage() }
+        try await waitUntil("the partial reply to arrive") { vm.messages.last?.displayText == "Hel" }
+
+        await vm.stop()
+        try await waitUntil("the stopped turn to end") { vm.status == .idle }
+        await firstSend.value
+        #expect(vm.stopCount == 1)
+        #expect(vm.completedTurnCount == 0)
+
+        // A second, fresh turn on the SAME view model — this one completes normally.
+        serve(history: "[]", reply: helloReply, recorder: RequestRecorder())
+        vm.composerText = "second"
+        await vm.sendMessage()
+
+        #expect(vm.status == .idle)
+        #expect(vm.completedTurnCount == 1)  // the second turn's own success, not swallowed by the first's stop
+        #expect(vm.stopCount == 1)  // unchanged: no second stop happened
+    }
+
     @Test("a turn that ends in a server error frame does not bump completedTurnCount or stopCount")
     func aFailedTurnDoesNotBumpCompletedTurnCount() async throws {
         serve(history: "[]", reply: #"data: {"type":"error","error":"Invalid API key"}\#n\#n"#, recorder: RequestRecorder())
@@ -562,6 +657,9 @@ struct ChatDetailViewModelTests {
         #expect(vm.errorMessage == "Invalid API key")
         #expect(vm.completedTurnCount == 0)
         #expect(vm.stopCount == 0)
+        // Send still fires at tap-time regardless of the eventual outcome — it is never
+        // retroactively suppressed once the turn goes on to fail.
+        #expect(vm.sendCount == 1)
     }
 
     @Test("onAppear with nothing in flight loads history instead of consuming a stream, so completedTurnCount never moves")

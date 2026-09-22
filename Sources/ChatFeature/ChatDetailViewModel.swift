@@ -32,10 +32,16 @@ public final class ChatDetailViewModel {
     /// Never bumped by `loadHistory` or by `onAppear`'s re-attach to a turn already running (that
     /// sets `status` directly, not through here), and never by a tap `canSend` rejects.
     public private(set) var sendCount = 0
-    /// Bumped exactly once when a turn ends because the user pressed Stop, before the network
-    /// cancellation is awaited — so a view's `sensoryFeedback` trigger fires on the same actor turn
-    /// as the tap, not after the round trip. Does nothing (and does not bump) when there is no turn
-    /// in flight to stop.
+    /// Bumped exactly once when `stop()` actually cancelled a live turn — that is, when
+    /// `ChatStreamManager.cancel(_:)` itself reports it found and stopped something. Not bumped
+    /// merely because this view model *thought* a turn was in flight: `isTurnInFlight` mirrors the
+    /// manager's state only up to the last update this view model has drained, and a turn can
+    /// finish or fail on the manager side (removing its entry) before that drain catches up, since
+    /// the manager's own update is only buffered until the `for await` loop in `consume` gets to
+    /// it. Trusting the local flag alone here would occasionally mislabel a turn that had already
+    /// finished normally as "stopped" — see `ChatStreamManagerTests` for `cancel`'s own coverage of
+    /// this. Waiting for the manager's answer, rather than deciding synchronously on the tap, is
+    /// the price of that correctness.
     public private(set) var stopCount = 0
     /// Bumped exactly once when a turn's stream ends with the server's own `.finished` and the user
     /// did not press Stop for it — a normal completion. Not bumped for a stopped turn, a failed
@@ -133,11 +139,18 @@ public final class ChatDetailViewModel {
     /// `consume` receives the manager's `.status(.idle)` and `.finished` and ends by itself.
     /// Does nothing when this view model has no turn in flight, so an idle view model can never
     /// cancel a turn that belongs to someone else.
+    ///
+    /// `isTurnInFlight` is only a locally cached mirror of the manager's state, so it can still
+    /// read `true` for a moment after the turn has already finished or failed on the manager side
+    /// (that update is sitting in the stream, not drained by `consume` yet). `cancel(_:)`'s own
+    /// `Bool` is the one atomic answer for whether this call actually stopped anything; only then
+    /// is this counted as a stop, so a turn that in truth already ended normally cannot be
+    /// mislabeled here and have its real `.finished` wrongly excluded from `completedTurnCount`.
     public func stop() async {
         guard isTurnInFlight else { return }
+        guard await streamManager.cancel(chatId) else { return }
         turnWasStopped = true
         stopCount += 1
-        await streamManager.cancel(chatId)
     }
 
     private func consume(_ updates: AsyncStream<ChatStreamUpdate>) async {
