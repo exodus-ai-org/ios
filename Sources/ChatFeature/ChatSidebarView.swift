@@ -44,6 +44,10 @@ public struct ChatSidebarView<Workspaces: View>: View {
     @State private var list: ChatListViewModel
     @State private var search: ChatSearchViewModel
     @State private var isSearching = false
+    /// Bumped exactly once when a chat's delete succeeds and its row leaves the list — a plain
+    /// counter so `sensoryFeedback` fires with the row's removal, not when the context menu opens
+    /// and not for a failed delete (which raises `list.showsErrorAlert` instead).
+    @State private var deletedTrigger = 0
 
     private let activeChatId: String
     private let isOpen: Bool
@@ -153,6 +157,13 @@ public struct ChatSidebarView<Workspaces: View>: View {
             } message: {
                 Text(list.errorMessage ?? "")
             }
+            // Haptics: the causal event only — the alert's own appearance, and a delete once the
+            // row is actually gone (apple-design §13). Neither fires for the tap that opens the
+            // context menu, and a failed delete gets only the error haptic above.
+            .sensoryFeedback(trigger: list.showsErrorAlert) { old, new in
+                !old && new ? .error : nil
+            }
+            .sensoryFeedback(.impact(weight: .medium), trigger: deletedTrigger)
         }
     }
 
@@ -168,7 +179,10 @@ public struct ChatSidebarView<Workspaces: View>: View {
             .contextMenu {
                 Button(role: .destructive) {
                     Task {
-                        if await list.delete(chat) { onDeleteChat(chat.id) }
+                        if await list.delete(chat) {
+                            deletedTrigger += 1
+                            onDeleteChat(chat.id)
+                        }
                     }
                 } label: {
                     Label("Delete", systemImage: "trash")

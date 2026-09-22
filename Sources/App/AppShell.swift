@@ -79,6 +79,9 @@ struct AppShell: View {
         .sheet(isPresented: $showSettings, onDismiss: { recentsReloadToken += 1 }) {
             SettingsView(apiClient: apiClient, serverConfig: serverConfig)
         }
+        // The workspace actually changing, once (apple-design §13): `workspace` only changes when
+        // a row not already selected is tapped, so re-tapping the active row fires nothing.
+        .sensoryFeedback(.selection, trigger: workspace)
     }
 
     @ViewBuilder
