@@ -32,8 +32,8 @@ Regenerate after adding or removing files. `DEVELOPMENT_TEAM` in `Project.swift`
 xcodebuild test -workspace ExodusIos.xcworkspace -scheme Models -destination "platform=iOS Simulator,name=iPhone 17"
 ```
 
-The schemes are `Models`, `NetworkingKit`, `ChatFeature` and `SettingsFeature`. There is no `ModelsTests`
-scheme: each module's scheme runs its test target. `-only-testing:` takes the Swift type name
+The schemes are `Models`, `NetworkingKit`, `ChatFeature`, `SettingsFeature` and `App`. There is no
+`ModelsTests` scheme: each module's scheme runs its test target. `-only-testing:` takes the Swift type name
 (`-only-testing:ChatFeatureTests/ChatListViewModelTests`), not the `@Suite` display string; a wrong name
 matches nothing and still prints `** TEST SUCCEEDED **`, so look for a `Test run with N tests` line.
 
@@ -44,7 +44,8 @@ matches nothing and still prints `** TEST SUCCEEDED **`, so look for a `Test run
 - `ChatFeature`: chat sidebar (Recents, search) and chat detail (history, streaming send, Stop).
 - `SettingsFeature`: server address and AI-provider settings.
 - `PhilharmonicFeature`: placeholder for a later phase.
-- `App`: composition root, the drawer shell (`SideDrawer`, `AppShell`) and the workspace list.
+- `App`: composition root, the drawer shell (`SideDrawer`, `AppShell`, and `DrawerPhysics` — the
+  drawer's gesture, spring and rubber-band math, tested on its own) and the workspace list.
 
 ## Connecting to the desktop
 
@@ -106,7 +107,9 @@ drawer on the iOS 27.0 simulator. There are no automated UI tests for the drawer
 stub server, so the drawer, the search flow, German, French, Japanese and Traditional Chinese (Taiwan), plus the
 Simplified Chinese fallback to English, were checked by hand in the Simulator with a temporary XCUITest target
 that is not part of this repository. Korean, Spanish, Brazilian Portuguese, Italian and Hong Kong Chinese have
-not been looked at on screen.
+not been looked at on screen. Opening a chat whose last message is very tall under-scrolls: the transcript
+parks part-way up that message instead of at the bottom, so the end of the newest reply has to be
+scrolled down to. Reproduced in the Simulator and left as it is.
 
 ## Security note
 
