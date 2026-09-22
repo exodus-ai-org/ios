@@ -82,18 +82,47 @@ Dependency direction is unchanged: App → features → NetworkingKit → Models
 **Geometry and visuals.** `drawerWidth = min(0.78 × container width, 360 pt)`. Layers, back to
 front: the sidebar (width `drawerWidth`, at the leading edge) and the content card (full container
 size) offset by `x = clamp(base + drag, 0 … drawerWidth)`, where `base` is `drawerWidth` when open.
-`progress = x / drawerWidth`. The card has the system background, continuous rounded corners of
-`40 × min(progress × 4, 1)`, a shadow at `0.15 × progress` opacity, and a scrim (`systemBackground`
-at `0.6 × progress`) that catches taps. The container uses `.ignoresSafeArea(.container)`.
+`progress = x / drawerWidth`. The card has the system background, a shadow at `0.15 × progress`
+opacity, and a scrim at `0.6 × progress` that catches taps. Its continuous rounded corners are the
+iPhone's own display corner radius, read from the full-screen container with
+`GeometryProxy.concentricCornerRadii(in:).bottomLeading`, with a 24 pt fallback only when the display
+reports 0 (square corners). That radius is constant, not ramped by progress: a full-screen card's
+corners sit under the physical corners of the display while it is closed, where they cannot be seen,
+so nothing is lost by keeping them. In dark mode the card's background lifts from `systemBackground`
+toward `secondarySystemBackground` by `progress` and a 1 pt `Color.primary` border is drawn at up to
+~0.15 opacity, so the card reads as a layer above the (still black) sidebar; the scrim dims the card
+toward the card's own current background colour, never toward black. The container uses
+`.ignoresSafeArea(.container)`.
 
-**Gestures.** One `DragGesture(minimumDistance: 12)` attached with `simultaneousGesture` and
-considered only when the drag is horizontal-dominant. When closed it starts only from
-`startLocation.x < 28 pt`; when open it starts anywhere. On release the drawer opens if
-`base + predictedEndTranslation.width > drawerWidth / 2`, animated. Tapping the scrim closes it.
-The main screen's toolbar button toggles it. Opening dismisses the keyboard
+**Gestures.** A `UIGestureRecognizerRepresentable` (`DrawerPan`, in `Sources/App/SideDrawer.swift`)
+wrapping a `UIPanGestureRecognizer` subclass. Its delegate's `gestureRecognizerShouldBegin` decides
+intent ONCE, from the movement accumulated since touch-down (not `translation`, which has UIKit's
+~10 pt of hysteresis already taken out of it): closed, a rightward-dominant drag from ANYWHERE on
+screen is the drawer's; open, a leftward-dominant one from anywhere. There is no edge zone. Nothing
+else is implemented on the delegate, and that is the point: UIKit's own recognizer exclusivity is
+what lets a scroll view, a text selection or a button under the finger keep a touch it legitimately
+owns, and `cancelsTouchesInView` (UIKit's default) cancels a button under the finger rather than
+letting it fire.
+
+On release the finger's velocity is projected forward — `project(v) = (v / 1000) · 0.998 / (1 − 0.998)`,
+UIScrollView's own deceleration rate — and the drawer opens if the projected position passes the
+midpoint. Past either resting edge the card resists progressively (a rubber-band function) rather
+than stopping hard, except that a fast release still moving further outward past a boundary has its
+handoff velocity suppressed, so the card cannot fly off screen. A drag that catches the card
+mid-settle picks it up from its live on-screen position, not from the animation's target. The
+release hands its (possibly suppressed) velocity to the settle spring, so there is no seam between
+the finger letting go and the animation carrying on. These are pure functions in
+`Sources/App/DrawerPhysics.swift`, tested on their own. Tapping the scrim closes the drawer. The main
+screen's toolbar button toggles it. Opening dismisses the keyboard
 (`UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), …)`).
 
-**Motion.** `.snappy`. With Reduce Motion on: `.easeInOut(duration: 0.2)` and a fixed corner radius.
+**Motion.** `.snappy`, written out as `Spring.snappy` so a release can hand it a velocity. With
+Reduce Motion on: `.easeInOut(duration: 0.2)` and no velocity handoff.
+
+**Feedback.** A light impact haptic fires once when letting go of the card changes which state it is
+in. Not while dragging, where the card under the finger is the feedback; not on a snap-back to the
+state it was already in; and not on the toolbar button or the scrim tap, because system buttons are
+silent.
 
 **Accessibility.** Closed: the sidebar layer has opacity 0, no hit testing and is hidden from
 accessibility (this also removes the see-through artifact from §3). Open: the content card is
@@ -151,10 +180,12 @@ have a long-press `contextMenu` with a destructive "Delete" (no swipe actions). 
 prominent glass "New chat" pill (leading) and a glass gear button (trailing) via `ToolbarSpacer`.
 Loading, empty and failure states are the MVP's (spinner only before the first load, "No chats
 yet", "Can't load chats" with Retry, pull to refresh, one error surface), rewritten to fit the
-narrow column. Reloads the user did not ask for (the drawer opening, Settings closing) use a new
+narrow column. The one reload the user did not ask for — the drawer opening — uses a new
 `ChatListViewModel.refresh()`: it replaces the list silently and, while a list is on screen, drops
 a failure instead of raising an alert (a stale list is still useful, and an alert on every drawer
-open while offline would be noise); pull to refresh still uses `load()`. Titles can be long and
+open while offline would be noise). Settings closing is a full `load()`, not a refresh, because
+Settings can change the server address and a silent refresh could leave the previous server's chats
+on screen; pull to refresh uses `load()` too. Titles can be long and
 multi-line (real data: up to 1211 characters), so a row collapses whitespace and shows one line. Deletion keeps the MVP's `deletedIDs` guard so a chat does not reappear from a
 concurrent reload; the view calls `onDeleteChat` only when `delete(_:)` returned `true`.
 
