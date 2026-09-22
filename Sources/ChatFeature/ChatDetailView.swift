@@ -16,11 +16,17 @@ public struct ChatDetailView: View {
     /// go: the composer's hide-keyboard button and a tap on the transcript both clear this.
     @FocusState private var isComposerFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Kept alongside the view model, not just handed to its `init`: a rename from the sidebar
+    /// while this chat is the one on screen changes this on a re-render, which `.onChange` below
+    /// turns into a push into the already-running view model (its own `@State` only reads `init`'s
+    /// value once, so a new `title:` argument alone would otherwise be silently ignored).
+    private let title: String?
 
     public init(
         chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
         serverConfig: ServerConfigStore
     ) {
+        self.title = title
         _viewModel = State(
             initialValue: ChatDetailViewModel(
                 chatId: chatId, title: title, apiClient: apiClient, streamManager: streamManager,
@@ -84,6 +90,11 @@ public struct ChatDetailView: View {
         .navigationTitle(viewModel.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.onAppear() }
+        // A rename from the sidebar while this chat is the one open: `title` changing is that
+        // signal, since renaming never changes `chatId` and so never recreates this view.
+        .onChange(of: title) { _, newTitle in
+            viewModel.applyExternalRename(newTitle)
+        }
         .alert(
             "Error",
             isPresented: Binding(

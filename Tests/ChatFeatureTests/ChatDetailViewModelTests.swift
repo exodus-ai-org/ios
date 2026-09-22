@@ -862,6 +862,24 @@ struct ChatDetailViewModelTests {
         #expect(vm.chatTitle == "First line Second line")
     }
 
+    @Test("applyExternalRename sets the title, collapsed to one line, overriding what was there")
+    func applyExternalRenameSetsTheTitle() async throws {
+        serve(history: "[]", recorder: RequestRecorder())
+        let vm = Harness().makeViewModel(title: "Old title")
+        vm.applyExternalRename("New\n\ntitle")
+        #expect(vm.displayTitle == "New title")
+    }
+
+    @Test("applyExternalRename on a blank string does nothing, never clearing a real title")
+    func applyExternalRenameIgnoresABlankTitle() async throws {
+        serve(history: "[]", recorder: RequestRecorder())
+        let vm = Harness().makeViewModel(title: "Trip planning")
+        vm.applyExternalRename("   ")
+        #expect(vm.displayTitle == "Trip planning")
+        vm.applyExternalRename(nil)
+        #expect(vm.displayTitle == "Trip planning")
+    }
+
     @Test("showsEmptyState is true only for a loaded, empty, idle chat")
     func emptyStateOnlyForALoadedEmptyChat() async throws {
         serve(history: "[]", recorder: RequestRecorder())

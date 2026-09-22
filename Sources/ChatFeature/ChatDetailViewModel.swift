@@ -93,6 +93,15 @@ public final class ChatDetailViewModel {
         return Self.shortened(chatTitle)
     }
 
+    /// Applies a title set from outside this chat's own turn/streaming lifecycle — the sidebar's
+    /// long-press rename, while this chat happens to be the one on screen. Same normalisation as a
+    /// generated title (one line, never blank); a blank rename is rejected before it gets here, but
+    /// `nil` (no rename in flight) does nothing rather than clearing a real title.
+    public func applyExternalRename(_ title: String?) {
+        guard let normalised = Self.oneLine(title) else { return }
+        chatTitle = normalised
+    }
+
     public func onAppear() async {
         if await streamManager.isStreaming(chatId), let updates = await streamManager.attach(chatId) {
             hasLoadedHistory = true
