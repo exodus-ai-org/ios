@@ -426,10 +426,10 @@ struct ChatStreamManagerTests {
         try await waitUntil("the partial reply to arrive") { log.tags.contains("messages") }
         #expect(await manager.isStreaming("c1"))
 
-        await manager.cancel("c1")
+        #expect(await manager.cancel("c1"))  // found and cancelled a real, active stream
         // Removed by `cancel` itself, not later by the cancelled task unwinding.
         #expect(await manager.isStreaming("c1") == false)
-        await manager.cancel("c1")  // a second cancel finds nothing and must not double-finish anything
+        #expect(await manager.cancel("c1") == false)  // a second cancel finds nothing and must not double-finish anything
 
         try await waitUntil("the observer's stream to end") { log.ended }
         await drain.value
@@ -463,7 +463,7 @@ struct ChatStreamManagerTests {
         let first = await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig)
         let firstDrain = Task { await firstLog.drain(first) }
         try await waitUntil("the partial reply to arrive") { firstLog.tags.contains("messages") }
-        await manager.cancel("c1")
+        #expect(await manager.cancel("c1"))
         try await waitUntil("the first observer's stream to end") { firstLog.ended }
         await firstDrain.value
 
@@ -506,7 +506,7 @@ struct ChatStreamManagerTests {
         let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
         let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
 
-        await manager.cancel("c1")  // nothing at all has been sent yet
+        #expect(await manager.cancel("c1") == false)  // nothing at all has been sent yet
         #expect(await manager.isStreaming("c1") == false)
 
         let log = UpdateLog()
@@ -514,13 +514,13 @@ struct ChatStreamManagerTests {
         let drain = Task { await log.drain(updates) }
         try await waitUntil("the partial reply to arrive") { log.tags.contains("messages") }
 
-        await manager.cancel("some-other-chat")
+        #expect(await manager.cancel("some-other-chat") == false)
         #expect(await manager.isStreaming("some-other-chat") == false)
         #expect(await manager.isStreaming("c1"))  // c1's turn is untouched
         #expect(log.ended == false)
         #expect(log.tags == ["status:submitted", "messages"])
 
-        await manager.cancel("c1")  // clean up the held-open turn
+        #expect(await manager.cancel("c1"))  // clean up the held-open turn
         try await waitUntil("the observer's stream to end") { log.ended }
         await drain.value
     }

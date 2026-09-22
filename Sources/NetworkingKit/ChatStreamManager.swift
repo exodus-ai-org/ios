@@ -102,13 +102,23 @@ public actor ChatStreamManager {
     /// `finish`/`fail` no-ops (their generation no longer matches anything): there is deliberately
     /// no second cleanup path that could finish the continuation twice. Does nothing when no
     /// turn is in flight for this chat.
-    public func cancel(_ chatId: String) {
-        guard let stream = streams[chatId] else { return }
+    ///
+    /// Returns `true` only when an active stream was actually found and cancelled here, `false`
+    /// when there was nothing to do. This matters to a caller that wants to know it truly stopped
+    /// something: a turn's own `finish()`/`fail()` can run and remove this entry before the
+    /// caller's `await` on this very method resumes (its update is only buffered, not yet drained
+    /// by whatever `for await` loop owns the observer), so `isStreaming`/a locally cached "in
+    /// flight" flag can be stale by the time this call actually lands. The `Bool` return is the
+    /// only way to learn, atomically, whether this call itself did anything.
+    @discardableResult
+    public func cancel(_ chatId: String) -> Bool {
+        guard let stream = streams[chatId] else { return false }
         stream.task?.cancel()
         stream.continuation?.yield(.status(.idle))
         stream.continuation?.yield(.finished(stream.messages))
         stream.continuation?.finish()
         streams[chatId] = nil
+        return true
     }
 
     private func apply(chatId: String, generation: UUID, event: ChatSseEvent) {
