@@ -43,6 +43,26 @@ enum DrawerPhysics {
         offset + project(velocity: velocity) > drawerWidth / 2
     }
 
+    /// The velocity to hand the settle's spring, which is not always the velocity the finger had.
+    ///
+    /// Past a boundary the card is only there because the rubber band let it be: the band is already
+    /// stretched and already pulling back, so a finger that lets go while still dragging outward
+    /// hands over no outward momentum — it hands over a band that snaps home, which is what a
+    /// stretched thing does. Without this the spring is told to keep going the way the finger was:
+    /// a release 27 pt past the open position at 1200 pt/s asks it to travel that 27 pt backwards
+    /// forty-three times a second, and the card is thrown most of a screen further out before it
+    /// comes back.
+    ///
+    /// Only that direction is suppressed. A release *inside* the travel moving away from where the
+    /// projection says it is going — let go drifting left, but fast enough earlier that the drawer
+    /// still opens — is a real handoff and keeps working; it is negative too, which is why the sign
+    /// alone cannot be the test.
+    static func handoffVelocity(_ velocity: CGFloat, at offset: CGFloat, drawerWidth: CGFloat) -> CGFloat {
+        if offset > drawerWidth, velocity > 0 { return 0 }
+        if offset < 0, velocity < 0 { return 0 }
+        return velocity
+    }
+
     /// `Animation.interpolatingSpring(_:initialVelocity:)` wants the release velocity as a fraction
     /// of the distance left to travel, so that handing it 1 means "one journey per second". Dividing
     /// by the distance also gets the sign right for free: a velocity pointing at the target is

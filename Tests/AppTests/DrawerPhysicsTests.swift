@@ -62,6 +62,56 @@ struct DrawerPhysicsReleaseTests {
     }
 }
 
+@Suite("DrawerPhysics.handoffVelocity")
+struct DrawerPhysicsHandoffTests {
+    @Test("inside the travel the finger's velocity is handed over untouched")
+    func insideTheTravelNothingIsSuppressed() {
+        #expect(DrawerPhysics.handoffVelocity(1200, at: 100, drawerWidth: width) == 1200)
+        #expect(DrawerPhysics.handoffVelocity(-1200, at: 100, drawerWidth: width) == -1200)
+        #expect(DrawerPhysics.handoffVelocity(1200, at: 0, drawerWidth: width) == 1200)
+        #expect(DrawerPhysics.handoffVelocity(1200, at: width, drawerWidth: width) == 1200)
+    }
+
+    @Test("past the open edge, still moving outward, hands over nothing")
+    func pastTheOpenEdgeMovingOutIsSuppressed() {
+        #expect(DrawerPhysics.handoffVelocity(1200, at: width + 27, drawerWidth: width) == 0)
+        #expect(DrawerPhysics.handoffVelocity(2000, at: width + 1, drawerWidth: width) == 0)
+    }
+
+    @Test("past the open edge, coming back, keeps its velocity")
+    func pastTheOpenEdgeComingBackIsKept() {
+        #expect(DrawerPhysics.handoffVelocity(-900, at: width + 27, drawerWidth: width) == -900)
+    }
+
+    @Test("the closed end is mirrored")
+    func theClosedEndIsMirrored() {
+        #expect(DrawerPhysics.handoffVelocity(-1200, at: -5, drawerWidth: width) == 0)
+        #expect(DrawerPhysics.handoffVelocity(900, at: -5, drawerWidth: width) == 900)
+    }
+
+    @Test("the case the suppression must not eat: let go drifting back, but the drawer still opens")
+    func aReleaseDriftingAwayInsideTheTravelKeepsItsHandoff() {
+        // 280 pt along, moving left at 200 pt/s: the projection lands at 180, still past the
+        // midpoint, so the drawer opens — and the card really is drifting the other way as it does.
+        let offset: CGFloat = 280
+        let velocity: CGFloat = -200
+        #expect(DrawerPhysics.endsOpen(offset: offset, velocity: velocity, drawerWidth: width))
+        let handoff = DrawerPhysics.handoffVelocity(velocity, at: offset, drawerWidth: width)
+        #expect(handoff == velocity)
+        #expect(DrawerPhysics.normalisedVelocity(handoff, from: offset, to: width) < 0)
+    }
+
+    @Test("a fast release past the open edge asks the spring for no motion at all")
+    func theWholeChainIsSafePastTheOpenEdge() {
+        // What used to happen: 27 pt past open at 1200 pt/s normalised to -43.8, which is "cross
+        // the remaining gap backwards forty-three times a second".
+        let offset = width + 27
+        #expect(DrawerPhysics.normalisedVelocity(1200, from: offset, to: width) < -40)
+        let handoff = DrawerPhysics.handoffVelocity(1200, at: offset, drawerWidth: width)
+        #expect(DrawerPhysics.normalisedVelocity(handoff, from: offset, to: width) == 0)
+    }
+}
+
 @Suite("DrawerPhysics.rubberBand and resistedOffset")
 struct DrawerPhysicsResistanceTests {
     @Test("before the open edge the card is exactly where the finger is")

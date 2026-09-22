@@ -195,7 +195,9 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
     /// was thrown from one that was merely let go of.
     private func settle(open: Bool, from current: CGFloat, velocity: CGFloat, drawerWidth: CGFloat) {
         let target = open ? drawerWidth : 0
-        withAnimation(settleAnimation(velocity: velocity, from: current, to: target)) {
+        withAnimation(
+            settleAnimation(velocity: velocity, from: current, to: target, drawerWidth: drawerWidth)
+        ) {
             isOpen = open
             drag = nil
         }
@@ -204,11 +206,14 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
     /// The settle's animation: the shared spring, given the release velocity as a fraction of the
     /// distance still to travel. Reduce Motion keeps its short ease and takes no velocity — the
     /// point of it is that nothing flies across the screen.
-    private func settleAnimation(velocity: CGFloat, from current: CGFloat, to target: CGFloat) -> Animation {
+    private func settleAnimation(
+        velocity: CGFloat, from current: CGFloat, to target: CGFloat, drawerWidth: CGFloat
+    ) -> Animation {
         guard !reduceMotion else { return drawerAnimation(reduceMotion: true) }
+        let handoff = DrawerPhysics.handoffVelocity(velocity, at: current, drawerWidth: drawerWidth)
         return .interpolatingSpring(
             drawerSpring,
-            initialVelocity: DrawerPhysics.normalisedVelocity(velocity, from: current, to: target))
+            initialVelocity: DrawerPhysics.normalisedVelocity(handoff, from: current, to: target))
     }
 
     private func dismissKeyboard() {
@@ -360,7 +365,7 @@ final class DrawerLiveOffset: Sendable {
 /// points is a direction, not a wobble.
 private final class DrawerPanRecognizer: UIPanGestureRecognizer {
     private var touchDown: CGPoint?
-    private var lastMovement: CFTimeInterval = 0
+    private var lastEvent: CFTimeInterval = 0
 
     /// Everything the finger has done since it landed, hysteresis included.
     var movementSinceTouchDown: CGPoint {
@@ -377,7 +382,7 @@ private final class DrawerPanRecognizer: UIPanGestureRecognizer {
     /// open that the user had deliberately stopped short of the midpoint and then let go of. A
     /// finger that has not moved for a tenth of a second is not moving.
     var releaseVelocity: CGPoint {
-        guard CACurrentMediaTime() - lastMovement < 0.1 else { return .zero }
+        guard CACurrentMediaTime() - lastEvent < 0.1 else { return .zero }
         return velocity(in: view)
     }
 
@@ -389,13 +394,13 @@ private final class DrawerPanRecognizer: UIPanGestureRecognizer {
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
-        lastMovement = CACurrentMediaTime()
+        lastEvent = CACurrentMediaTime()
         super.touchesMoved(touches, with: event)
     }
 
     override func reset() {
         super.reset()
         touchDown = nil
-        lastMovement = 0
+        lastEvent = 0
     }
 }
