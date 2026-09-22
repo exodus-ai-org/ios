@@ -60,6 +60,14 @@ struct DrawerPhysicsReleaseTests {
     func aReleaseAtTheOpenPositionStaysOpen() {
         #expect(DrawerPhysics.endsOpen(offset: width, velocity: 0, drawerWidth: width))
     }
+
+    @Test("exactly on the midpoint, at rest, the drawer falls closed")
+    func theMidpointItselfBelongsToClosed() {
+        // The rule is strictly past the midpoint, not at it: a card let go of at dead centre has
+        // not been taken half-way *and* a bit, so it goes back.
+        #expect(!DrawerPhysics.endsOpen(offset: width / 2, velocity: 0, drawerWidth: width))
+        #expect(DrawerPhysics.endsOpen(offset: width / 2 + 0.01, velocity: 0, drawerWidth: width))
+    }
 }
 
 @Suite("DrawerPhysics.handoffVelocity")
@@ -109,6 +117,31 @@ struct DrawerPhysicsHandoffTests {
         #expect(DrawerPhysics.normalisedVelocity(1200, from: offset, to: width) < -40)
         let handoff = DrawerPhysics.handoffVelocity(1200, at: offset, drawerWidth: width)
         #expect(DrawerPhysics.normalisedVelocity(handoff, from: offset, to: width) == 0)
+    }
+}
+
+@Suite("DrawerPhysics.velocityIsFresh")
+struct DrawerPhysicsStalenessTests {
+    @Test("a release in the same breath as the last touch event keeps its velocity")
+    func aPromptReleaseIsFresh() {
+        #expect(DrawerPhysics.velocityIsFresh(lastEvent: 10, release: 10))
+        #expect(DrawerPhysics.velocityIsFresh(lastEvent: 10, release: 10.05))
+    }
+
+    @Test("a release after a pause does not")
+    func aPausedReleaseIsStale() {
+        #expect(!DrawerPhysics.velocityIsFresh(lastEvent: 10, release: 10.2))
+        // The 599 ms that opened a drawer nobody had thrown.
+        #expect(!DrawerPhysics.velocityIsFresh(lastEvent: 10, release: 10.599))
+    }
+
+    @Test("the window is the named constant, either side of it")
+    func theWindowIsTheNamedConstant() {
+        // Not asserted at the boundary itself: 10 + 0.1 - 10 is 0.09999999999999964 in binary
+        // floating point, so the exact edge is a fact about doubles, not about the drawer.
+        let window = DrawerPhysics.velocityStaleAfter
+        #expect(DrawerPhysics.velocityIsFresh(lastEvent: 10, release: 10 + window - 0.001))
+        #expect(!DrawerPhysics.velocityIsFresh(lastEvent: 10, release: 10 + window + 0.001))
     }
 }
 

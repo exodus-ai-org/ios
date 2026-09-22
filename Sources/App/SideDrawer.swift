@@ -111,6 +111,12 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            // A rotation moves the card without animating it, and an offset that is never
+            // interpolated is never sampled: measured on an open drawer turned to landscape, the
+            // card went to 360 while the sampler stayed at the portrait width of 313.6, and the
+            // next drag picked it up 46 pt from where it was. The width changing is the one moment
+            // the card can move behind the sampler's back.
+            .onChange(of: drawerWidth) { _, _ in liveOffset.value = offset }
             .gesture(
                 DrawerPan(
                     isOpen: isOpen,
@@ -348,7 +354,7 @@ private struct DrawerCardOffset: ViewModifier, Animatable {
 /// gesture ever reads. Deliberately not actor-isolated either, because `Animatable` is not: the
 /// mutex is what makes the one `CGFloat` safe to write from SwiftUI's update pass and read from the
 /// gesture, and it costs an uncontended lock per frame.
-final class DrawerLiveOffset: Sendable {
+private final class DrawerLiveOffset: Sendable {
     private let storage = Mutex<CGFloat>(0)
 
     var value: CGFloat {
@@ -377,12 +383,13 @@ private final class DrawerPanRecognizer: UIPanGestureRecognizer {
     /// The speed to release at — which is not always the speed `velocity(in:)` reports.
     ///
     /// A finger that has stopped moving sends no more events, and the recognizer goes on reporting
-    /// the last speed it managed to compute. Measured: a release 599 ms after the last movement
+    /// the last speed it managed to compute. Measured: a release 599 ms after the last touch event
     /// still claimed 184 pt/s, which projects 92 pt forward — enough, on its own, to throw a drawer
-    /// open that the user had deliberately stopped short of the midpoint and then let go of. A
-    /// finger that has not moved for a tenth of a second is not moving.
+    /// open that the user had deliberately stopped short of the midpoint and then let go of.
+    /// `DrawerPhysics.velocityIsFresh` is the window, and says honestly what it can and cannot see.
     var releaseVelocity: CGPoint {
-        guard CACurrentMediaTime() - lastEvent < 0.1 else { return .zero }
+        guard DrawerPhysics.velocityIsFresh(lastEvent: lastEvent, release: CACurrentMediaTime())
+        else { return .zero }
         return velocity(in: view)
     }
 

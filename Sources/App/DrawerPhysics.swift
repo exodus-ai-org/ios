@@ -20,8 +20,8 @@ enum DrawerPhysics {
         (velocity / 1000) * rate / (1 - rate)
     }
 
-    /// How far past a boundary something follows the finger: all of the first point, less and less
-    /// after that, never more than `dimension` in total however hard the finger pulls.
+    /// How far past a boundary something follows the finger: a little over half of the first point,
+    /// less and less after that, never more than `dimension` in total however hard the finger pulls.
     static func rubberBand(overshoot: CGFloat, dimension: CGFloat, constant: CGFloat = 0.55) -> CGFloat {
         guard dimension > 0 else { return 0 }
         return (overshoot * dimension * constant) / (dimension + constant * abs(overshoot))
@@ -61,6 +61,23 @@ enum DrawerPhysics {
         if offset > drawerWidth, velocity > 0 { return 0 }
         if offset < 0, velocity < 0 { return 0 }
         return velocity
+    }
+
+    /// How long after the last touch event a release still counts as moving, in seconds.
+    ///
+    /// Six frames at 60 Hz, twelve at 120: long enough that no real drag is read as still, short
+    /// enough that a deliberate pause is. Honestly, it measures the time since the last touch
+    /// *event*, not since the last actual movement, because that is all a gesture recognizer is
+    /// told. A finger held perfectly still sends nothing and is correctly read as stopped, which is
+    /// the simulator's case and the deliberate-pause case; a finger resting on glass but jittering
+    /// keeps sending events and keeps its stale velocity, so on real hardware this fires less often
+    /// than it does here. It is a floor on the problem, not a cure for it.
+    static let velocityStaleAfter: Double = 0.1
+
+    /// Whether a release should still be credited with the velocity last measured, given when the
+    /// last touch event arrived. Both times are on the same monotonic clock, in seconds.
+    static func velocityIsFresh(lastEvent: Double, release: Double) -> Bool {
+        release - lastEvent < velocityStaleAfter
     }
 
     /// `Animation.interpolatingSpring(_:initialVelocity:)` wants the release velocity as a fraction
