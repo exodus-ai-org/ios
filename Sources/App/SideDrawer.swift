@@ -32,6 +32,9 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
     @State private var dragStart: CGFloat = 0
     /// The card's position on screen, updated every frame it moves.
     @State private var liveOffset = DrawerLiveOffset()
+    /// Bumped once each time letting go of the card changes which state it is in. Only the change
+    /// matters, never the number.
+    @State private var releases = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
@@ -122,6 +125,9 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
                         let landed = cardOffset(dragStart + travel, drawerWidth: drawerWidth)
                         let open = DrawerPhysics.endsOpen(
                             offset: landed, velocity: velocity, drawerWidth: drawerWidth)
+                        // In the same update as the settle, so the tap on the wrist and the card
+                        // starting to move are one event, not two.
+                        if open != isOpen { releases += 1 }
                         settle(
                             open: open, from: landed, velocity: velocity, drawerWidth: drawerWidth)
                     },
@@ -137,6 +143,12 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
             )
             .accessibilityAction(.escape) { setOpen(false) }
         }
+        // The one piece of feedback the drawer gives beyond moving: a light tap when letting go of
+        // the card is what changed its state. Not while dragging, where the card under the finger
+        // is the feedback; not when it snaps back to where it already was, which is nothing
+        // happening; and not on the toolbar button or the scrim, because system buttons are silent.
+        // Whether it fires at all is the phone's business, and the drawer reads the same without it.
+        .sensoryFeedback(.impact(weight: .light), trigger: releases)
         .ignoresSafeArea(.container)
         .onChange(of: isOpen) { _, nowOpen in
             if nowOpen { dismissKeyboard() }
