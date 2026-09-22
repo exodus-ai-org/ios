@@ -43,9 +43,17 @@ private struct SidebarRow: ViewModifier {
             )
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets())
+            // A shape, not a plain colour: `listRowBackground` otherwise fills the row's full,
+            // square-cornered bounds edge to edge. Padding the shape itself insets it into a pill
+            // within that space instead.
             .listRowBackground(
-                isPressed ? Color.primary.opacity(0.06)
-                    : isSelected ? Color.accentColor.opacity(0.12) : Color.clear
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        isPressed ? Color.primary.opacity(0.06)
+                            : isSelected ? Color.accentColor.opacity(0.12) : Color.clear
+                    )
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
             )
             .animation(.easeOut(duration: 0.1), value: isPressed)
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -140,7 +148,9 @@ public struct ChatSidebarView<Workspaces: View>: View {
             .animation(.easeOut(duration: 0.15), value: search.phase)
             .animation(.easeOut(duration: 0.15), value: search.isSearching)
             .navigationTitle(isSearching ? "" : Self.appName)
-            .navigationBarTitleDisplayMode(isSearching ? .inline : .large)
+            // Always inline: "Exodus" sits on the same line as the search button rather than
+            // starting large and collapsing into it on the first scroll.
+            .navigationBarTitleDisplayMode(.inline)
             .safeAreaBar(edge: .top) {
                 if isSearching {
                     SidebarSearchBar(
