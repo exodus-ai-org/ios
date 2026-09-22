@@ -294,7 +294,7 @@ private struct DrawerPan: UIGestureRecognizerRepresentable {
         case .changed:
             onChange(travel)
         case .ended:
-            onRelease(travel, recognizer.velocity(in: recognizer.view).x)
+            onRelease(travel, recognizer.releaseVelocity.x)
         case .cancelled, .failed:
             onCancel()
         default:
@@ -360,12 +360,25 @@ final class DrawerLiveOffset: Sendable {
 /// points is a direction, not a wobble.
 private final class DrawerPanRecognizer: UIPanGestureRecognizer {
     private var touchDown: CGPoint?
+    private var lastMovement: CFTimeInterval = 0
 
     /// Everything the finger has done since it landed, hysteresis included.
     var movementSinceTouchDown: CGPoint {
         guard let touchDown, let view else { return .zero }
         let now = location(in: view)
         return CGPoint(x: now.x - touchDown.x, y: now.y - touchDown.y)
+    }
+
+    /// The speed to release at — which is not always the speed `velocity(in:)` reports.
+    ///
+    /// A finger that has stopped moving sends no more events, and the recognizer goes on reporting
+    /// the last speed it managed to compute. Measured: a release 599 ms after the last movement
+    /// still claimed 184 pt/s, which projects 92 pt forward — enough, on its own, to throw a drawer
+    /// open that the user had deliberately stopped short of the midpoint and then let go of. A
+    /// finger that has not moved for a tenth of a second is not moving.
+    var releaseVelocity: CGPoint {
+        guard CACurrentMediaTime() - lastMovement < 0.1 else { return .zero }
+        return velocity(in: view)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
@@ -375,8 +388,14 @@ private final class DrawerPanRecognizer: UIPanGestureRecognizer {
         super.touchesBegan(touches, with: event)
     }
 
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        lastMovement = CACurrentMediaTime()
+        super.touchesMoved(touches, with: event)
+    }
+
     override func reset() {
         super.reset()
         touchDown = nil
+        lastMovement = 0
     }
 }
