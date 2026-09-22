@@ -22,6 +22,10 @@ public struct APIClient: Sendable {
         let _: EmptyResponse = try await send(path: path, method: "POST", body: body, decodeResponse: false)
     }
 
+    public func put<Body: Encodable>(_ path: String, body: Body) async throws {
+        let _: EmptyResponse = try await send(path: path, method: "PUT", body: body, decodeResponse: false)
+    }
+
     public func delete(_ path: String) async throws {
         let _: EmptyResponse = try await send(
             path: path, method: "DELETE", body: Optional<String>.none, decodeResponse: false)

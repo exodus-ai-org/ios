@@ -86,6 +86,21 @@ struct APIClientTests {
         #expect(recorder.requests.count == 1)
     }
 
+    @Test("PUT encodes the body and sends the method, sharing POST's no-decode path")
+    func putWithoutDecoding() async throws {
+        let recorder = stub(status: 200, body: "{}")
+        let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
+        try await makeClient().put("/api/v1/settings", body: patch)
+
+        let requests = recorder.requests
+        #expect(requests.count == 1)
+        let request = try #require(requests.first)
+        #expect(request.method == "PUT")
+        #expect(request.path == "/api/v1/settings")
+        let body = try JSONSerialization.jsonObject(with: request.body) as? [String: Any]
+        #expect(body?["id"] as? String == "global")
+    }
+
     @Test("POST with no expected response body throws HTTPError on a non-2xx status")
     func postWithoutDecodingThrowsHTTPErrorOnFailure() async throws {
         let recorder = stub(
