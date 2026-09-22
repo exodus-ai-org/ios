@@ -44,7 +44,7 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
 
     var body: some View {
         GeometryReader { geo in
-            let drawerWidth = min(geo.size.width * 0.78, maxDrawerWidth)
+            let drawerWidth = min(geo.size.width * 0.75, maxDrawerWidth)
             let base: CGFloat = isOpen ? drawerWidth : 0
             let offset = drag ?? base
             let progress = drawerWidth > 0 ? min(max(offset / drawerWidth, 0), 1) : 0
