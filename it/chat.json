@@ -267,5 +267,36 @@
   "run": {
     "error": "Questa risposta si è interrotta con un errore: {{message}}"
   },
-  "renderFailed": "Impossibile mostrare {{what}}."
+  "memoryStrip": {
+    "updating": "Aggiornamento della memoria…",
+    "updated": "Memoria aggiornata · {{keys}}",
+    "partlyUpdated": "Memoria aggiornata in parte · {{keys}}",
+    "undo": "Annulla",
+    "undone": "Annullato",
+    "partial": "{{undone}} annullate · {{skipped}} modificate nel frattempo e mantenute",
+    "stale": "Annullato o modificato nel frattempo",
+    "failed": "Impossibile aggiornare la memoria",
+    "undoFailed": "Impossibile annullare",
+    "new": "Nuova",
+    "deleted": "Eliminata"
+  },
+  "usedMemories": {
+    "label_one": "Usata {{count}} memoria · {{keys}}",
+    "label_other": "Usate {{count}} memorie · {{keys}}",
+    "wrong": "È sbagliato",
+    "openSettings": "Apri nelle Impostazioni",
+    "deleted": "Eliminata",
+    "prefill": "La memoria su '{{key}}' è sbagliata: "
+  },
+  "renderFailed": "Impossibile mostrare {{what}}.",
+  "findInPage": {
+    "placeholder": "Trova nella pagina…",
+    "noResults": "Nessun risultato",
+    "previous": "Risultato precedente (Shift+Enter)",
+    "next": "Risultato successivo (Enter)",
+    "close": "Chiudi (Esc)"
+  },
+  "quickChat": {
+    "placeholder": "Come posso aiutarti oggi?"
+  }
 }

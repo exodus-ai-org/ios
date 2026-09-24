@@ -93,7 +93,7 @@
       "title": "Keyboard Shortcuts"
     },
     "about": {
-      "title": "About Exodus"
+      "title": "About"
     },
     "devices": {
       "title": "Devices"
@@ -186,6 +186,8 @@
       "available": "Update available",
       "availableVersion": "Version {{version}}",
       "download": "Download",
+      "downloadPage": "Open download page",
+      "manualHint": "This build can't update itself. Download the new version and replace the app.",
       "downloading": "Downloading update…",
       "ready": "Update ready to install",
       "readyDescription": "Restart to apply the update",
@@ -391,6 +393,10 @@
       "searchKnowledgeBase": {
         "label": "Knowledge Base",
         "description": "Retrieve context from your knowledge base (requires a configured LightRAG URL)"
+      },
+      "updateMemory": {
+        "label": "Update Memory",
+        "description": "Lets the assistant correct, add or remove memories when you tell it something about you is wrong."
       },
       "mapItinerary": {
         "label": "Map Itinerary",
@@ -740,8 +746,7 @@
       "updateFailed": "Failed to update server",
       "registerFailed": "Failed to register",
       "removeFailed": "Failed to remove server",
-      "toggleFailed": "Failed to toggle server",
-      "operationFailed": "Operation failed"
+      "toggleFailed": "Failed to toggle server"
     }
   },
   "memory": {
@@ -812,9 +817,10 @@
       "newButton": "New",
       "emptyTitle": "No memories yet",
       "emptyHint": "They are added automatically after conversations — or tell the assistant what to remember below.",
+      "loadFailedTitle": "Couldn’t load your memories",
+      "loadFailedHint": "Your memories are still saved — try again.",
       "disabledHeading": "Disabled · {{count}}",
       "toast": {
-        "loadFailedTitle": "Failed to load memories",
         "createFailedTitle": "Failed to create"
       }
     }

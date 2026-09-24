@@ -93,7 +93,7 @@
       "title": "Tastenkombinationen"
     },
     "about": {
-      "title": "Über Exodus"
+      "title": "Über"
     },
     "devices": {
       "title": "Geräte"
@@ -186,6 +186,8 @@
       "available": "Update verfügbar",
       "availableVersion": "Version {{version}}",
       "download": "Herunterladen",
+      "downloadPage": "Download-Seite öffnen",
+      "manualHint": "Dieser Build kann sich nicht selbst aktualisieren. Lade die neue Version herunter und ersetze die App.",
       "downloading": "Update wird heruntergeladen…",
       "ready": "Update bereit zur Installation",
       "readyDescription": "Neu starten, um das Update anzuwenden",
@@ -391,6 +393,10 @@
       "searchKnowledgeBase": {
         "label": "Wissensdatenbank",
         "description": "Kontext aus Ihrer Wissensdatenbank abrufen (erfordert eine konfigurierte LightRAG-URL)"
+      },
+      "updateMemory": {
+        "label": "Gedächtnis aktualisieren",
+        "description": "Erlaubt dem Assistenten, Gedächtniseinträge zu korrigieren, hinzuzufügen oder zu entfernen, wenn Sie ihm sagen, dass etwas über Sie nicht stimmt."
       },
       "mapItinerary": {
         "label": "Reiseroute",
@@ -740,8 +746,7 @@
       "updateFailed": "Server konnte nicht aktualisiert werden",
       "registerFailed": "Registrierung fehlgeschlagen",
       "removeFailed": "Server konnte nicht entfernt werden",
-      "toggleFailed": "Server konnte nicht umgeschaltet werden",
-      "operationFailed": "Vorgang fehlgeschlagen"
+      "toggleFailed": "Server konnte nicht umgeschaltet werden"
     }
   },
   "memory": {
@@ -812,9 +817,10 @@
       "newButton": "Neu",
       "emptyTitle": "Noch keine Gedächtniseinträge",
       "emptyHint": "Sie werden automatisch nach Unterhaltungen hinzugefügt — oder sagen Sie dem Assistenten unten, was er sich merken soll.",
+      "loadFailedTitle": "Gedächtniseinträge konnten nicht geladen werden",
+      "loadFailedHint": "Deine Gedächtniseinträge sind weiterhin gespeichert. Versuche es erneut.",
       "disabledHeading": "Deaktiviert · {{count}}",
       "toast": {
-        "loadFailedTitle": "Gedächtniseinträge konnten nicht geladen werden",
         "createFailedTitle": "Erstellen fehlgeschlagen"
       }
     }

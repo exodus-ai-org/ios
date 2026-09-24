@@ -93,7 +93,7 @@
       "title": "Scorciatoie da tastiera"
     },
     "about": {
-      "title": "Informazioni su Exodus"
+      "title": "Informazioni"
     },
     "devices": {
       "title": "Dispositivi"
@@ -186,6 +186,8 @@
       "available": "Aggiornamento disponibile",
       "availableVersion": "Versione {{version}}",
       "download": "Scarica",
+      "downloadPage": "Apri la pagina di download",
+      "manualHint": "Questa versione non può aggiornarsi da sola. Scarica la nuova versione e sostituisci l'app.",
       "downloading": "Download dell'aggiornamento in corso…",
       "ready": "Aggiornamento pronto per l'installazione",
       "readyDescription": "Riavvia per applicare l'aggiornamento",
@@ -391,6 +393,10 @@
       "searchKnowledgeBase": {
         "label": "Knowledge Base",
         "description": "Recupera contesto dalla tua knowledge base (richiede un URL LightRAG configurato)"
+      },
+      "updateMemory": {
+        "label": "Aggiorna memoria",
+        "description": "Consente all'assistente di correggere, aggiungere o rimuovere voci di memoria quando gli dici che qualcosa su di te è sbagliato."
       },
       "mapItinerary": {
         "label": "Itinerario mappa",
@@ -740,8 +746,7 @@
       "updateFailed": "Aggiornamento del server non riuscito",
       "registerFailed": "Registrazione non riuscita",
       "removeFailed": "Rimozione del server non riuscita",
-      "toggleFailed": "Impossibile attivare/disattivare il server",
-      "operationFailed": "Operazione non riuscita"
+      "toggleFailed": "Impossibile attivare/disattivare il server"
     }
   },
   "memory": {
@@ -812,9 +817,10 @@
       "newButton": "Nuova",
       "emptyTitle": "Ancora nessuna memoria",
       "emptyHint": "Vengono aggiunte automaticamente dopo le conversazioni, oppure di’ all’assistente cosa ricordare qui sotto.",
+      "loadFailedTitle": "Caricamento delle memorie non riuscito",
+      "loadFailedHint": "Le tue memorie sono ancora salvate. Riprova.",
       "disabledHeading": "Disattivate · {{count}}",
       "toast": {
-        "loadFailedTitle": "Caricamento delle memorie non riuscito",
         "createFailedTitle": "Creazione non riuscita"
       }
     }
