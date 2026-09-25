@@ -83,7 +83,8 @@
     "viewButton": "View",
     "chatFailedTitle": "Chat failed",
     "genericErrorFallback": "An error occurred",
-    "headsUpTitle": "Heads up"
+    "headsUpTitle": "Heads up",
+    "approvalTitle": "Waiting for your approval"
   },
   "lcm": {
     "compacting": "Compacting conversation history…",
@@ -292,6 +293,10 @@
     "prefill": "The memory about '{{key}}' is wrong: "
   },
   "renderFailed": "{{what}} could not be shown.",
+  "remoteImage": {
+    "loadButton": "Load image",
+    "inlineImage": "Inline image"
+  },
   "findInPage": {
     "placeholder": "Find in page...",
     "noResults": "No results",
@@ -301,5 +306,20 @@
   },
   "quickChat": {
     "placeholder": "How can I help you today?"
+  },
+  "approval": {
+    "title": "Allow access to a secret?",
+    "fileHint": "A tool wants to use this file, which may hold credentials:",
+    "commandHint": "A command wants to touch credentials on this computer:",
+    "allow": "Allow once",
+    "deny": "Deny",
+    "allowed": "Allowed once",
+    "denied": "Denied",
+    "timedOut": "Timed out",
+    "stopped": "Stopped",
+    "expired": "No longer waiting",
+    "decideFailed": "Couldn’t send your answer",
+    "truncatedNote_one": "{{count}} more character not shown",
+    "truncatedNote_other": "{{count}} more characters not shown"
   }
 }
