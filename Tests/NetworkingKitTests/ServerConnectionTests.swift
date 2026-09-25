@@ -9,11 +9,11 @@ import Testing
 @Suite("ServerConnection", .serialized)
 struct ServerConnectionTests {
     private let stored = PairedServer(
-        hosts: ["10.0.0.2", "mac.local"], port: 60224, fingerprint: "PIN", name: "Mac",
+        hosts: ["10.0.0.2", "mac.local"], port: 63129, fingerprint: "PIN", name: "Mac",
         deviceId: "dev-1", token: "TOKEN")
 
     private let link = PairingLink(
-        string: "exodus://pair?h=10.0.0.2%2Cmac.local&p=60224&c=CODE&f=PIN&n=Mac")!
+        string: "exodus://pair?h=10.0.0.2%2Cmac.local&p=63129&c=CODE&f=PIN&n=Mac")!
 
     @Test("unpaired, it contributes nothing — the app uses the manual address")
     func unpaired() {
@@ -34,10 +34,19 @@ struct ServerConnectionTests {
 
         try await connection.unlock(reason: "test")
         #expect(connection.isUnlocked)
-        #expect(connection.baseURLString == "https://10.0.0.2:60224")
+        #expect(connection.baseURLString == "https://10.0.0.2:63129")
         #expect(connection.authorization == "Bearer TOKEN")
         #expect(connection.pin == "PIN")
         #expect(connection.serverName == "Mac")
+    }
+
+    @Test("the pinned session caches nothing: settings and MCP responses never reach the disk")
+    func sessionHasNoDiskCache() {
+        let configuration = ServerConnection(store: InMemoryCredentialStore()).session.configuration
+        #expect((configuration.urlCache?.diskCapacity ?? 0) == 0)
+        #expect((configuration.urlCache?.memoryCapacity ?? 0) == 0)
+        #expect(configuration.requestCachePolicy == .reloadIgnoringLocalCacheData)
+        #expect(configuration.timeoutIntervalForRequest == URLSessionConfiguration.default.timeoutIntervalForRequest)
     }
 
     @Test("lock() forgets the token but not the pairing")
@@ -62,6 +71,17 @@ struct ServerConnectionTests {
         #expect(!connection.isPaired)
         #expect(!store.exists)
         #expect(connection.authorization == nil)
+    }
+
+    @Test("unpair() tells whoever keeps things from the computer, once per unpair; lock() does not")
+    func unpairNotifies() {
+        let calls = Mutex(0)
+        let connection = ServerConnection(store: InMemoryCredentialStore(stored))
+        connection.onComputerChange { calls.withLock { $0 += 1 } }
+        connection.lock()
+        #expect(calls.withLock { $0 } == 0)
+        connection.unpair()
+        #expect(calls.withLock { $0 } == 1)
     }
 
     @Test("unlockComputer() is a no-op on an unpaired connection — no request sent")
@@ -96,7 +116,7 @@ struct ServerConnectionTests {
         let unlocked = await connection.unlockComputer(session: MockURLProtocol.makeSession())
         #expect(unlocked)
         let request = try #require(seen.withLock { $0 })
-        #expect(request.url == "https://10.0.0.2:60224/api/v1/lock/unlock")
+        #expect(request.url == "https://10.0.0.2:63129/api/v1/lock/unlock")
         #expect(request.authorization == "Bearer TOKEN")
     }
 
@@ -129,18 +149,20 @@ struct ServerConnectionTests {
         try await connection.unlock(reason: "test")
 
         connection.noteReachable(host: "mac.local")
-        #expect(connection.baseURLString == "https://mac.local:60224")
+        #expect(connection.baseURLString == "https://mac.local:63129")
         #expect(try await store.load(reason: "test")?.lastGoodHost == "mac.local")
 
         // An address the computer never advertised is not adopted.
         connection.noteReachable(host: "evil.example")
-        #expect(connection.baseURLString == "https://mac.local:60224")
+        #expect(connection.baseURLString == "https://mac.local:63129")
     }
 
     @Test("pairing posts the code, stores the token, and leaves the connection unlocked")
     func pairs() async throws {
         let store = InMemoryCredentialStore()
         let connection = ServerConnection(store: store)
+        let changes = Mutex(0)
+        connection.onComputerChange { changes.withLock { $0 += 1 } }
         let seen = Mutex<(url: String, body: [String: String])?>(nil)
         MockURLProtocol.handler = { request in
             let body = request.httpBodyStream.map { stream -> Data in
@@ -161,9 +183,10 @@ struct ServerConnectionTests {
         }
 
         try await connection.pair(link, deviceName: "Test iPhone", session: MockURLProtocol.makeSession())
+        #expect(changes.withLock { $0 } == 1, "a new computer: what was kept from the old one goes")
 
         let request = try #require(seen.withLock { $0 })
-        #expect(request.url == "https://10.0.0.2:60224/api/v1/pair")
+        #expect(request.url == "https://10.0.0.2:63129/api/v1/pair")
         #expect(request.body == ["code": "CODE", "deviceName": "Test iPhone"])
         #expect(connection.isUnlocked)
         #expect(connection.authorization == "Bearer NEW-TOKEN")
@@ -201,7 +224,7 @@ struct ServerConnectionTests {
         #expect(config.baseURLString == "http://localhost:60223")
 
         try await connection.unlock(reason: "test")
-        #expect(config.baseURLString == "https://10.0.0.2:60224")
+        #expect(config.baseURLString == "https://10.0.0.2:63129")
         #expect(config.authorization == "Bearer TOKEN")
         #expect(config.manualBaseURLString == "http://localhost:60223")
     }
@@ -214,7 +237,7 @@ struct PairedAPIClientTests {
     private func makePairedClient() async throws -> (APIClient, ServerConnection, InMemoryCredentialStore) {
         let store = InMemoryCredentialStore(
             PairedServer(
-                hosts: ["10.0.0.2"], port: 60224, fingerprint: "PIN", name: "Mac",
+                hosts: ["10.0.0.2"], port: 63129, fingerprint: "PIN", name: "Mac",
                 deviceId: "dev-1", token: "TOKEN"))
         let connection = ServerConnection(store: store)
         try await connection.unlock(reason: "test")
@@ -237,7 +260,7 @@ struct PairedAPIClientTests {
         let _: Empty = try await client.get("/api/v1/history")
 
         let (url, authorization) = try #require(seen.withLock { $0 })
-        #expect(url == "https://10.0.0.2:60224/api/v1/history")
+        #expect(url == "https://10.0.0.2:63129/api/v1/history")
         #expect(authorization == "Bearer TOKEN")
     }
 
@@ -253,6 +276,48 @@ struct PairedAPIClientTests {
         }
         #expect(!connection.isPaired)
         #expect(!store.exists)
+    }
+
+    @Test("data(_:) returns the raw bytes, with the token, from the paired computer")
+    func rawBytes() async throws {
+        let (client, _, _) = try await makePairedClient()
+        let bytes = Data([0x89, 0x50, 0x4E, 0x47, 0x00, 0xFF])
+        let seen = Mutex<(String, String?)?>(nil)
+        MockURLProtocol.handler = { request in
+            seen.withLock {
+                $0 = (request.url?.absoluteString ?? "", request.value(forHTTPHeaderField: "Authorization"))
+            }
+            return (200, bytes)
+        }
+
+        let data = try await client.data("/api/v1/media/c1/a.png")
+
+        #expect(data == bytes)
+        let (url, authorization) = try #require(seen.withLock { $0 })
+        #expect(url == "https://10.0.0.2:63129/api/v1/media/c1/a.png")
+        #expect(authorization == "Bearer TOKEN")
+    }
+
+    @Test("data(_:) throws the server's status: 404 keeps the pairing, 401 forgets it")
+    func rawBytesErrors() async throws {
+        let (client, connection, _) = try await makePairedClient()
+        MockURLProtocol.handler = { _ in (404, Data(#"{"type":"error","error":{"code":"NOT_FOUND","message":"gone"}}"#.utf8)) }
+        do {
+            _ = try await client.data("/api/v1/media/c1/a.png")
+            Issue.record("expected a 404")
+        } catch let error as HTTPError {
+            #expect(error.statusCode == 404)
+        }
+        #expect(connection.isPaired)
+
+        MockURLProtocol.handler = { _ in (401, Data()) }
+        do {
+            _ = try await client.data("/api/v1/media/c1/a.png")
+            Issue.record("expected a 401")
+        } catch let error as HTTPError {
+            #expect(error.statusCode == 401)
+        }
+        #expect(!connection.isPaired)
     }
 
     @Test("an unpaired client sends no Authorization header at all")
@@ -283,7 +348,7 @@ struct AppLockedRetryTests {
     private func makePairedClient() async throws -> (APIClient, ServerConnection, InMemoryCredentialStore) {
         let store = InMemoryCredentialStore(
             PairedServer(
-                hosts: ["10.0.0.2"], port: 60224, fingerprint: "PIN", name: "Mac",
+                hosts: ["10.0.0.2"], port: 63129, fingerprint: "PIN", name: "Mac",
                 deviceId: "dev-1", token: "TOKEN"))
         let connection = ServerConnection(store: store)
         try await connection.unlock(reason: "test")
@@ -326,7 +391,7 @@ struct AppLockedRetryTests {
     func doesNotRepromptWhenAlreadyUnlocked() async throws {
         let store = CountingCredentialStore(
             PairedServer(
-                hosts: ["10.0.0.2"], port: 60224, fingerprint: "PIN", name: "Mac",
+                hosts: ["10.0.0.2"], port: 63129, fingerprint: "PIN", name: "Mac",
                 deviceId: "dev-1", token: "TOKEN"))
         let connection = ServerConnection(store: store)
         try await connection.unlock(reason: "test")
@@ -391,7 +456,7 @@ struct HostFailoverTests {
     private func makeClient() async throws -> (APIClient, InMemoryCredentialStore) {
         let store = InMemoryCredentialStore(
             PairedServer(
-                hosts: ["10.0.0.2", "100.64.0.7"], port: 60224, fingerprint: "PIN", name: "Mac",
+                hosts: ["10.0.0.2", "100.64.0.7"], port: 63129, fingerprint: "PIN", name: "Mac",
                 deviceId: "dev-1", token: "TOKEN"))
         let connection = ServerConnection(store: store)
         try await connection.unlock(reason: "test")
@@ -445,6 +510,110 @@ struct HostFailoverTests {
         await #expect(throws: URLError.self) {
             let _: Empty = try await client.get("/api/v1/history")
         }
+    }
+
+    private struct Note: Encodable { let text: String }
+
+    private final class HostLog: Sendable {
+        let hosts = Mutex<[String]>([])
+        var all: [String] { hosts.withLock { $0 } }
+    }
+
+    /// Every request's host, the first address failing with `error`.
+    private func hostsLog(firstFailsWith error: URLError.Code) -> HostLog {
+        let log = HostLog()
+        MockURLProtocol.handler = { request in
+            let host = request.url?.host ?? ""
+            log.hosts.withLock { $0.append(host) }
+            if host == "10.0.0.2" { throw URLError(error) }
+            return (200, Data("{}".utf8))
+        }
+        return log
+    }
+
+    @Test("a POST that timed out may have reached the computer: it is not sent again elsewhere")
+    func postTimeoutIsNotResent() async throws {
+        let (client, _) = try await makeClient()
+        let hosts = hostsLog(firstFailsWith: .timedOut)
+
+        await #expect(throws: URLError.self) {
+            try await client.post("/api/v1/backup/now", body: Note(text: "x"))
+        }
+        #expect(hosts.all == ["10.0.0.2"])
+    }
+
+    @Test("a POST whose connection was lost after sending is not sent again elsewhere")
+    func postConnectionLostIsNotResent() async throws {
+        let (client, _) = try await makeClient()
+        let hosts = hostsLog(firstFailsWith: .networkConnectionLost)
+
+        await #expect(throws: URLError.self) {
+            try await client.post("/api/v1/memory", body: Note(text: "x"))
+        }
+        #expect(hosts.all == ["10.0.0.2"])
+    }
+
+    @Test("a POST that never connected fails over to the next address")
+    func postCannotConnectFailsOver() async throws {
+        let (client, _) = try await makeClient()
+        let hosts = hostsLog(firstFailsWith: .cannotConnectToHost)
+
+        try await client.post("/api/v1/memory", body: Note(text: "x"))
+        #expect(hosts.all == ["10.0.0.2", "100.64.0.7"])
+    }
+
+    @Test("a GET that timed out is idempotent: it still fails over")
+    func getTimeoutFailsOver() async throws {
+        let (client, _) = try await makeClient()
+        let hosts = hostsLog(firstFailsWith: .timedOut)
+
+        let _: Empty = try await client.get("/api/v1/history")
+        #expect(hosts.all == ["10.0.0.2", "100.64.0.7"])
+    }
+
+    @Test("a PATCH that timed out is not sent again elsewhere")
+    func patchTimeoutIsNotResent() async throws {
+        let (client, _) = try await makeClient()
+        let hosts = hostsLog(firstFailsWith: .timedOut)
+
+        await #expect(throws: URLError.self) {
+            try await client.patch("/api/v1/skills/x/toggle", body: Note(text: "x"))
+        }
+        #expect(hosts.all == ["10.0.0.2"])
+    }
+
+    @Test("a PUT that timed out is idempotent: it fails over")
+    func putTimeoutFailsOver() async throws {
+        let (client, _) = try await makeClient()
+        let hosts = hostsLog(firstFailsWith: .timedOut)
+
+        try await client.put("/api/v1/mcp/1", body: Note(text: "x"))
+        #expect(hosts.all == ["10.0.0.2", "100.64.0.7"])
+    }
+
+    @Test("a cancelled request never fails over")
+    func cancelledIsNotResent() async throws {
+        let (client, _) = try await makeClient()
+        let hosts = hostsLog(firstFailsWith: .cancelled)
+
+        await #expect(throws: URLError.self) {
+            let _: Empty = try await client.get("/api/v1/history")
+        }
+        #expect(hosts.all == ["10.0.0.2"])
+    }
+
+    @Test("a POST's own timeout overrides the 15 s failover wait")
+    func postTimeoutParameter() async throws {
+        let (client, _) = try await makeClient()
+        let timeouts = Mutex<[TimeInterval]>([])
+        MockURLProtocol.handler = { request in
+            timeouts.withLock { $0.append(request.timeoutInterval) }
+            return (200, Data("{}".utf8))
+        }
+
+        try await client.post("/api/v1/backup/now", body: Note(text: "x"), timeout: 300)
+        try await client.post("/api/v1/memory", body: Note(text: "x"))
+        #expect(timeouts.withLock { $0 } == [300, 15])
     }
 }
 

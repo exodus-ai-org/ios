@@ -3,7 +3,13 @@ import NetworkingKit
 import SwiftUI
 
 public struct ChatDetailView: View {
-    @State private var viewModel: ChatDetailViewModel
+    /// This screen's view model, stores and loaders, built on first use and kept for the view's lifetime.
+    /// `State(initialValue:)` is not lazy: building them in `init` built (and threw away) a full set on every re-render
+    /// of the parent. Only the empty box is made per `init`.
+    @State private var objectsBox = LazyBox<ChatScreenObjects>()
+    private let makeObjects: @MainActor () -> ChatScreenObjects
+    private var objects: ChatScreenObjects { objectsBox.value(makeObjects) }
+    private var viewModel: ChatDetailViewModel { objects.viewModel }
     /// The measured height of the send/stop button. The button is taller than one line of text, so
     /// the field is given it as a minimum height and centres its text in it: with the row bottom-
     /// aligned the two boxes then have the same height at rest and their centres coincide, while a
@@ -15,7 +21,11 @@ public struct ChatDetailView: View {
     /// Return inserts a newline in the multi-line composer, so the keyboard needs somewhere else to
     /// go: the composer's hide-keyboard button and a tap on the transcript both clear this.
     @FocusState private var isComposerFocused: Bool
+    /// The Sources sheet, from an answer's Sources button or a tapped citation chip.
+    @State private var sourcesSheet: SourcesSheetModel?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accentGlyph) private var accentGlyph
+    @Environment(\.scenePhase) private var scenePhase
     /// Kept alongside the view model, not just handed to its `init`: a rename from the sidebar
     /// while this chat is the one on screen changes this on a re-render, which `.onChange` below
     /// turns into a push into the already-running view model (its own `@State` only reads `init`'s
@@ -27,49 +37,50 @@ public struct ChatDetailView: View {
         serverConfig: ServerConfigStore
     ) {
         self.title = title
-        _viewModel = State(
-            initialValue: ChatDetailViewModel(
-                chatId: chatId, title: title, apiClient: apiClient, streamManager: streamManager,
-                serverConfig: serverConfig))
+        makeObjects = {
+            ChatScreenObjects(
+                chatId: chatId, title: title, apiClient: apiClient, streamManager: streamManager, serverConfig: serverConfig)
+        }
     }
 
     public var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(viewModel.messages) { message in
-                        MessageRow(
-                            message: message,
-                            showsTypingIndicator: viewModel.isTurnInFlight && message.id == viewModel.messages.last?.id
-                        )
-                        .id(message.id)
-                    }
-                    // Between tapping send and the first assistant message the transcript ends
-                    // with the user's message; without this the screen would show nothing.
-                    if viewModel.showsPendingRow {
-                        AssistantBubble(text: AttributedString("…"))
-                            .id(Self.pendingRowID)
-                    }
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    TranscriptRows(
+                        segments: viewModel.segments, streamingTurnId: viewModel.streamingTurnId,
+                        showsTypingIndicator: viewModel.showsPendingRow, liveError: viewModel.liveRunError,
+                        actions: transcriptActions)
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
+                .environment(\.generatedImageLoader, objects.imageLoader)
+                .environment(\.computerUseFrames, viewModel.computerUseFrames)
+                .environment(\.computerUseRemote, objects.computerUseRemote)
+                .environment(\.deepResearchJobs, objects.researchJobs)
+                .environment(\.runApprovals, viewModel.approvals)
+                .environment(\.memoryFoot, viewModel.memoryFoot)
+                .environment(\.placePhotoLoader, objects.placePhotos)
             }
             // Pull down to retry a history load that failed (the composer stays disabled until it succeeds).
             .scrollBounceBehavior(.always)
             .scrollDismissesKeyboard(.interactively)
-            // Tapping the transcript puts the keyboard away. Rows are not inert — `MessageRow`
-            // renders inline Markdown, so an assistant bubble can hold tappable links — so this is
+            // Tapping the transcript puts the keyboard away. Rows are not inert — an answer's
+            // Markdown holds tappable links, a timeline expands, a card opens — so this is
             // attached *simultaneously*: it recognises alongside whatever the content does instead
             // of competing with it, and a link inside a bubble still opens (measured with the
             // keyboard both up and down). A tap gesture also does not consume the drag that
             // scrolling, the interactive keyboard dismissal above and pull-to-refresh all need.
             .simultaneousGesture(TapGesture().onEnded { isComposerFocused = false })
-            .refreshable { await viewModel.loadHistory() }
-            .onChange(of: viewModel.messages.count) {
+            .refreshable {
+                await viewModel.loadHistory()
+                await viewModel.loadMemoryUsage()
+            }
+            .onChange(of: viewModel.segments.count) {
                 scrollToBottom(proxy, animated: true)
             }
-            // Follow a reply as it streams in: the count is constant while the last message grows.
-            .onChange(of: viewModel.messages.last?.answerText) {
+            // Follow a reply as it streams in: the segment count is constant while the last turn grows.
+            .onChange(of: scrollKey) {
                 scrollToBottom(proxy, animated: false)
             }
             // Sending adds the pending row; reaching it is the point of `isTurnInFlight` flipping.
@@ -86,23 +97,39 @@ public struct ChatDetailView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: viewModel.showsEmptyState)
-        .safeAreaBar(edge: .bottom) { composer }
+        .safeAreaBar(edge: .bottom) {
+            NoticeStack(notice: viewModel.notice, onDismiss: viewModel.dismissNotice) { composer }
+        }
+        .sheet(item: $sourcesSheet) { SourcesSheet(model: $0) }
+        // The banner goes after a few seconds; VoiceOver would never reach it, so it is spoken when it arrives.
+        .onChange(of: viewModel.notice) { _, notice in
+            if let notice { AccessibilityNotification.Announcement(NoticeBanner.announcement(for: notice)).post() }
+        }
         .navigationTitle(viewModel.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.onAppear() }
+        // Apart from `onAppear`, which waits out a turn it re-attaches to.
+        .task(id: viewModel.hasLoadedHistory) { await viewModel.loadMemoryUsage() }
+        .onChange(of: viewModel.composerFocusRequest) { isComposerFocused = true }
+        // The computer's memory may have changed meanwhile; only a list already read is read again.
+        .onChange(of: scenePhase) {
+            if scenePhase == .active, viewModel.memoryFoot.entries != nil {
+                Task { await viewModel.memoryFoot.refreshEntries() }
+            }
+        }
         // A rename from the sidebar while this chat is the one open: `title` changing is that
         // signal, since renaming never changes `chatId` and so never recreates this view.
         .onChange(of: title) { _, newTitle in
             viewModel.applyExternalRename(newTitle)
         }
         .alert(
-            "Error",
+            "ios:chat.alert.errorTitle",
             isPresented: Binding(
-                get: { viewModel.errorMessage != nil },
+                get: { viewModel.showsErrorAlert },
                 set: { if !$0 { viewModel.errorMessage = nil } }
             )
         ) {
-            Button("OK") {}
+            Button("ios:app.alert.ok") {}
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
@@ -112,14 +139,12 @@ public struct ChatDetailView: View {
         .sensoryFeedback(.impact(weight: .light), trigger: viewModel.sendCount)
         .sensoryFeedback(.success, trigger: viewModel.completedTurnCount)
         .sensoryFeedback(.impact(weight: .light), trigger: viewModel.stopCount)
-        .sensoryFeedback(trigger: viewModel.errorMessage) { old, new in
-            // Only the alert's own appearance (nil -> non-nil), never its dismissal.
-            old == nil && new != nil ? .error : nil
-        }
+        // Once per failure, even when a second failure has the same text.
+        .sensoryFeedback(.error, trigger: viewModel.failureCount)
     }
 
     private var emptyState: some View {
-        Text("What can I help with?")
+        Text("ios:chat.detail.greeting")
             .font(.title2.weight(.semibold))
             .multilineTextAlignment(.center)
             .padding(.horizontal, 32)
@@ -128,8 +153,9 @@ public struct ChatDetailView: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField("Ask Exodus", text: $viewModel.composerText, axis: .vertical)
+        @Bindable var viewModel = viewModel
+        return HStack(alignment: .bottom, spacing: 8) {
+            TextField("ios:chat.composer.placeholder", text: $viewModel.composerText, axis: .vertical)
                 .lineLimit(1...5)
                 .focused($isComposerFocused)
                 .frame(minHeight: turnButtonHeight > 0 ? turnButtonHeight : estimatedTurnButtonHeight)
@@ -143,7 +169,7 @@ public struct ChatDetailView: View {
                 Button {
                     isComposerFocused = false
                 } label: {
-                    Label("Hide keyboard", systemImage: "keyboard.chevron.compact.down")
+                    Label("ios:chat.composer.hideKeyboard", systemImage: "keyboard.chevron.compact.down")
                         .labelStyle(.iconOnly)
                         // The keyboard symbol is wider and taller than the send arrow, and a circle
                         // sized to fit it would be the bigger of the two buttons.
@@ -186,14 +212,15 @@ public struct ChatDetailView: View {
                 // One literal per branch, never a ternary of the two (scripts/l10n.py audit bans
                 // it: it can quietly resolve to the non-localizing `String` overload).
                 if viewModel.isTurnInFlight {
-                    Text("Stop")
+                    Text("chat:composer.stop")
                 } else {
-                    Text("Send")
+                    Text("chat:composer.send")
                 }
             } icon: {
                 Image(systemName: viewModel.isTurnInFlight ? "stop.fill" : "arrow.up") // l10n:ignore: SF Symbol names
             }
             .labelStyle(.iconOnly)
+            .foregroundStyle(accentGlyph)
             // The single most-tapped control in the app (apple-design §13: state indication, tens
             // of times a day, so the motion stays fast and subtle, never a showy morph).
             .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
@@ -204,16 +231,78 @@ public struct ChatDetailView: View {
         .accessibilityIdentifier(viewModel.isTurnInFlight ? "stopButton" : "sendButton") // l10n:ignore: a testing identifier, never shown to the user
     }
 
-    /// Stable id of the pending "…" row, so the scroll view can be pointed at it.
-    private static let pendingRowID = "pending"
+    private var transcriptActions: TranscriptActions {
+        TranscriptActions(
+            regenerableTurnId: viewModel.regenerableTurnId,
+            canRetryOrphan: viewModel.canRetryOrphanError,
+            regenerate: { [viewModel] in Task { await viewModel.regenerate() } },
+            showSources: { [viewModel] turnId, marker in
+                sourcesSheet = viewModel.sourcesSheet(forTurn: turnId, marker: marker)
+            })
+    }
+
+    private var scrollKey: TranscriptRules.ScrollKey {
+        TranscriptRules.scrollKey(
+            segments: viewModel.segments, showsTypingIndicator: viewModel.showsPendingRow,
+            liveError: viewModel.liveRunError)
+    }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
-        let targetId = viewModel.showsPendingRow ? Self.pendingRowID : viewModel.messages.last?.id
+        let targetId: String? =
+            if viewModel.showsPendingRow {
+                TranscriptRows.typingIndicatorID
+            } else if TranscriptRules.orphanRunError(segments: viewModel.segments, live: viewModel.liveRunError) != nil {
+                TranscriptRows.orphanErrorID
+            } else {
+                viewModel.segments.last?.id
+            }
         guard let targetId else { return }
         if animated {
             withAnimation { proxy.scrollTo(targetId, anchor: .bottom) }
         } else {
             proxy.scrollTo(targetId, anchor: .bottom)
         }
+    }
+}
+
+/// What one chat screen owns: its view model, and the stores and loaders its cards read, all over the paired session.
+@MainActor
+final class ChatScreenObjects {
+    let viewModel: ChatDetailViewModel
+    /// Generated images come through this chat's paired session.
+    let imageLoader: GeneratedImageLoader
+    /// Answers and stops a computer_use session on the computer through the same paired session.
+    let computerUseRemote: ComputerUseRemote
+    /// Reads deep_research jobs through the same paired session, keeping what it has read.
+    let researchJobs: DeepResearchStore
+    /// Places photos through the computer's proxy, over the same paired session.
+    let placePhotos: PlacePhotoLoader
+
+    init(
+        chatId: String, title: String?, apiClient: APIClient, streamManager: ChatStreamManager,
+        serverConfig: ServerConfigStore
+    ) {
+        viewModel = ChatDetailViewModel(
+            chatId: chatId, title: title, apiClient: apiClient, streamManager: streamManager, serverConfig: serverConfig)
+        imageLoader = GeneratedImageLoader(apiClient: apiClient)
+        computerUseRemote = ComputerUseRemote(apiClient: apiClient)
+        researchJobs = DeepResearchStore(apiClient: apiClient)
+        placePhotos = PlacePhotoLoader(apiClient: apiClient)
+    }
+}
+
+/// A value made on first use and then kept: held in `@State`, it is made once for the view's lifetime, not once per
+/// `init`. Not observable; what it holds is.
+@MainActor
+final class LazyBox<Value> {
+    private var stored: Value?
+
+    var isEmpty: Bool { stored == nil }
+
+    func value(_ make: () -> Value) -> Value {
+        if let stored { return stored }
+        let made = make()
+        stored = made
+        return made
     }
 }

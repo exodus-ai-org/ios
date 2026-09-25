@@ -15,10 +15,15 @@ localization work in its
 
 - Xcode 27 with the iOS 27 SDK (every target deploys to iOS 27.0).
 - Tuist 4.208.0: `brew install --cask tuist`. The Xcode project is generated and gitignored.
+- The Metal Toolchain component: the image-generation card's dither shader (`Sources/ChatFeature/ImageForming.metal`)
+  is compiled by it, and a fresh Xcode install may not have it (the build then fails on that file with "cannot
+  execute tool 'metal' due to missing Metal Toolchain"). Install it once with
+  `xcodebuild -downloadComponent MetalToolchain`.
 
 ## Build and run
 
 ```sh
+tuist install                # a fresh clone: fetches the Swift packages (swift-markdown) first
 tuist generate --no-open
 open ExodusIos.xcworkspace   # run the App scheme, or from the command line:
 xcodebuild build -workspace ExodusIos.xcworkspace -scheme App -destination "generic/platform=iOS Simulator"
@@ -58,7 +63,7 @@ iOS asks once for local-network permission.
 ## Connecting to the computer
 
 A device reaches Exodus only after it has been **paired**. On the computer, Settings → Devices → Pair a device
-shows a QR code: `exodus://pair?h=<hosts>&p=60224&c=<one-time code>&f=<certificate fingerprint>&n=<name>`
+shows a QR code: `exodus://pair?h=<hosts>&p=63129&c=<one-time code>&f=<certificate fingerprint>&n=<name>`
 (`PairingLink`). Settings → Computer here scans it (`QRScannerView`, VisionKit) — or pastes the link, which is
 what the Simulator does — and `ServerConnection.pair` trades the code for a per-device token over HTTPS.
 
@@ -86,10 +91,21 @@ The desktop side is `src/main/lib/lan/` in the exodus repo; its design is
 ## Localization
 
 Every user-visible string lives in `Resources/App/Localizable.xcstrings`, and the permission prompt in
-`Resources/App/InfoPlist.xcstrings`. Both are keyed by the English source text. SwiftUI string literals
-(`Text("Save")`, `Button("Cancel")`, `.navigationTitle(...)`) localize automatically; other code uses
-`String(localized: "…")` or `LocalizedStringResource("…")`. The modules are static frameworks, so every
-string resolves from the app's main bundle.
+`Resources/App/InfoPlist.xcstrings` (keyed by the Info.plist key, `NSCameraUsageDescription`). In
+`Localizable.xcstrings` the key is symbolic, never the English text, and every entry carries an explicit `en`
+value: that is what the screen shows in English. There are two kinds of key:
+
+- `<namespace>:<dotted.path>` for a string the desktop app also has (`chat:composer.send`,
+  `common:action.cancel`), spelled exactly like the desktop's own `t()` key. Its translations come from the
+  desktop, not from this repo.
+- `ios:<module>.<screen>.<element>` for a string only this app has (`ios:settings.pairing.unpair`). Its
+  translations are written here.
+
+SwiftUI string literals (`Text("chat:composer.send")`, `Button("common:action.cancel")`,
+`.navigationTitle(...)`) still localize automatically, but the literal is now the key, and SwiftUI shows the
+catalog's value for the current language. A string with an interpolation, and any string outside a view, uses
+`String(localized: "ios:…", defaultValue: "English text", comment: "…")`; `LocalizedStringResource("…")` also
+takes a key. The modules are static frameworks, so every string resolves from the app's main bundle.
 
 The shipped languages are English (the source), Traditional Chinese for Taiwan (`zh-Hant`) and for Hong Kong
 (`zh-HK`), Japanese, Korean, French, German, Spanish, Brazilian Portuguese and Italian. There is no Simplified
@@ -98,24 +114,63 @@ Chinese, matching the desktop: a Simplified Chinese phone shows English.
 `scripts/l10n.py` (Python 3.9, standard library only) maintains the catalogs:
 
 ```sh
-python3 scripts/l10n.py add "Text" --comment "Where it appears and what any %@ stands for."
-python3 scripts/l10n.py fill translations.json   # {"Text": {"de": "…", "ja": "…"}}
-python3 scripts/l10n.py seed-from-desktop ~/Code/exodus/exodus/packages/shared/src/i18n/locales
+python3 scripts/l10n.py add "ios:chat.detail.copyButton" --en-value "Copy" --comment "Where it appears and what any %@ stands for."
+python3 scripts/l10n.py fill translations.json   # {"ios:chat.detail.copyButton": {"de": "…", "ja": "…"}}
+python3 scripts/l10n.py sync-from-desktop        # Vendor/exodus-locales by default
 python3 scripts/l10n.py audit                    # add --source-only while strings are still being added
+python3 -m unittest Tests.L10nScriptTests.test_l10n   # the script's own tests
 ```
 
-`add` creates the key, `fill` merges translations, `seed-from-desktop` copies the desktop's translation of every
-string whose English text matches one of its own, and `audit` fails when a Swift literal is missing from the
-catalog, a shipped language is untranslated or a placeholder differs from the English.
+`add` creates the key (an `ios:` key needs `--en-value`; a desktop key needs none, the sync writes it), `fill`
+merges translations into an `ios:` key, and `sync-from-desktop` copies the desktop's translations, all ten
+languages, into every catalog key that is not an `ios:` key (`zh-Hant-TW` becomes `zh-Hant`, `zh-Hant-HK`
+becomes `zh-HK`; `{{x}}` becomes `%@` and a literal `%` becomes `%%`). To use a desktop string, `add` its key,
+use it at a call site and run the sync; a desktop key that is not in the catalog is never created. `ios:` keys
+are never touched. A desktop plural (`approval.truncatedNote_one`, `…_other`) is added under its base key
+(`chat:approval.truncatedNote`) and synced as a catalog plural: each language gets the forms the desktop has, and
+`{{count}}` becomes `%lld`, because the plural rule needs a number: its call site passes an `Int`, not a
+`String`, and `{{count}}` must be the English text's first placeholder. A language that orders the placeholders
+differently from the English (ja and ko `chat:placeDetail.pagination`: "{{total}}件中{{index}}件目") gets
+positional ones (`%2$@件中%1$@件目`) and is listed as a note. A shared key the desktop lacks in any language
+(renamed or removed there?) is an error, and so is one the desktop writes with i18next markup (`<1>…</1>`,
+`<strong>`), one added with a plural suffix instead of its base key, or one whose languages do not all have the
+same placeholders: such a string gets an `ios:` key of its own. Either error is listed and makes the sync exit
+1, after it has updated and saved every other key. Without a catalog (the hostless unit tests) a
+`String(localized:)` shows its `defaultValue:`, so a plural's call site branches on the count and gives each
+English form as its own `defaultValue:`. `audit` fails when a Swift literal names a key that is not in the
+catalog (exact match), an entry has no explicit `en`, a shipped language is untranslated, a placeholder differs
+from the English, a `String(localized:)` call has no `defaultValue:` or one whose text differs from the
+catalog's `en` (for a plural, from every English form), or a key that is not `ios:` is missing from
+`Vendor/exodus-locales` (its text would have no recorded source).
+
+The sync overwrites every shared key's translations on every run. A stale translation is a bug, not a feature:
+never hand-edit a shared key (the next sync reverts it, and the fix belongs in the desktop's catalog), and re-run
+the sync whenever `Vendor/exodus-locales` is refreshed. Refresh it from a desktop commit, never its working
+tree. `git subtree pull` refuses a dirty working tree, so when this checkout has uncommitted work, pull in a
+throwaway worktree and fast-forward (the commit touches only `Vendor/`). A scratch clone keeps the split branch
+out of the desktop repository:
+
+```sh
+git clone -q --no-checkout ~/Code/exodus/exodus /tmp/exodus-split       # add -b <branch> for a branch other than master
+git -C /tmp/exodus-split subtree split --prefix=packages/shared/src/i18n/locales <commit> -b exodus-locales-split
+git worktree add --detach /tmp/ios-subtree HEAD
+git -C /tmp/ios-subtree subtree pull --prefix=Vendor/exodus-locales /tmp/exodus-split exodus-locales-split --squash \
+  -m "chore(locales): sync the desktop catalogs (<what>)"
+git merge --ff-only "$(git -C /tmp/ios-subtree rev-parse HEAD)"
+git worktree remove /tmp/ios-subtree && rm -rf /tmp/exodus-split
+```
+
+Then `python3 scripts/l10n.py sync-from-desktop`. The subtree pull commits by itself; the sync's result is left
+to review and commit.
 
 What the audit actually reads is limited, so prefer the forms it checks. It finds string literals passed to
 `Text`, `Label`, `Button`, `TextField`, `SecureField`, `Section`, `Picker`, `Toggle`, `ContentUnavailableView`,
 `.navigationTitle`, `.accessibilityLabel`/`.accessibilityHint`/`.accessibilityValue`, `.alert`,
-`String(localized:)` and `LocalizedStringResource`, plus CJK characters in Swift source outside comments, and
-ternaries of two string literals. Other initializers are NOT checked — `Menu`, `NavigationLink`,
-`LabeledContent`, `Link`, `.confirmationDialog`, `.help`, `.badge` and `.searchable(prompt:)` among them — so a
-literal passed to one of those would ship untranslated without the audit noticing. Use a checked form, or
-extend the tool first.
+`String(localized:)` and `LocalizedStringResource`, and each must be a catalog key; it also flags CJK
+characters in Swift source outside comments, and ternaries of two string literals. Other initializers are NOT
+checked — `Menu`, `NavigationLink`, `LabeledContent`, `Link`, `.confirmationDialog`, `.help`, `.badge` and
+`.searchable(prompt:)` among them — so a literal passed to one of those would ship untranslated without the audit
+noticing. Use a checked form, or extend the tool first.
 
 Rules the audit enforces or relies on:
 
@@ -124,6 +179,15 @@ Rules the audit enforces or relies on:
   non-localizing `String` overload. Use `if`/`else` with one literal per branch.
 - User data (chat titles, search snippets, server text, model names) is shown from a `String` variable or
   `Text(verbatim:)`, never as a literal key.
+- `String(localized:)` in non-view code carries `defaultValue:` with the English text. The unit-test targets
+  are hostless (no test host, so no catalog in `Bundle.main`), and without `defaultValue:` the call returns the
+  raw key, so a test that compares the text fails. Views keep the plain literal.
+- A key shared with the desktop that has a placeholder gets `%@` from the sync (`{{count}}` becomes `%@`), so
+  its call site interpolates a `String` (`String(n)`, `n.formatted()`, a formatted `Date`), never a raw `Int` or
+  `Date`: Xcode derives `%lld` from an `Int` argument, which no longer matches the `%@` in the translations,
+  and the audit cannot see argument types. The one exception is a shared plural's count (`%lld`), which is
+  passed as an `Int`. An `ios:` key with a placeholder keeps the typed one Xcode derives from its argument
+  (`ios:networking.error.httpStatus` is `HTTP %lld`, passed an `Int`).
 
 Translations other than English are machine-generated unless they were copied from the desktop, and native
 speakers have not reviewed them.

@@ -13,7 +13,7 @@ struct SidebarSearchBar: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
-                TextField("Search", text: $text)
+                TextField("ios:chat.search.label", text: $text)
                     .focused($focused)
                     .submitLabel(.search)
                     .textInputAutocapitalization(.never)
@@ -27,14 +27,14 @@ struct SidebarSearchBar: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("Clear")
+                    .accessibilityLabel("ios:chat.search.clearButton")
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .glassEffect(.regular, in: .capsule)
 
-            Button("Cancel", action: onCancel)
+            Button("common:action.cancel", action: onCancel)
                 .accessibilityIdentifier("searchCancel")
         }
         .padding(.horizontal, 12)

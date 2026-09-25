@@ -106,7 +106,7 @@ struct SideDrawer<Sidebar: View, Content: View>: View {
                         .offset(x: offset)
                         .onTapGesture { setOpen(false) }
                         .accessibilityElement()
-                        .accessibilityLabel("Close sidebar")
+                        .accessibilityLabel("ios:app.sidebar.close")
                         .accessibilityAddTraits(.isButton)
                         // `onTapGesture` alone can be dead to a VoiceOver activation of a synthesized
                         // element, so spell the action out.

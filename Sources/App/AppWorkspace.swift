@@ -11,9 +11,9 @@ enum AppWorkspace: CaseIterable, Identifiable {
         switch self {
         case .chat:
             LocalizedStringResource(
-                "Chat", comment: "Name of the chat workspace, and the title of an open conversation that has no name yet.")
+                "ios:app.workspace.chat", comment: "Name of the chat workspace in the sidebar.")
         case .philharmonic:
-            LocalizedStringResource("Philharmonic")
+            LocalizedStringResource("ios:app.workspace.philharmonic")
         }
     }
 

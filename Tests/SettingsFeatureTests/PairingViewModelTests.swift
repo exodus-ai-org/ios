@@ -49,7 +49,7 @@ private final class NoPasscodeStore: CredentialStoring, @unchecked Sendable {
 @MainActor
 @Suite("PairingViewModel", .serialized)
 struct PairingViewModelTests {
-    private static let link = "exodus://pair?h=10.0.0.2&p=60224&c=CODE&f=PIN&n=Studio+Mac"
+    private static let link = "exodus://pair?h=10.0.0.2&p=63129&c=CODE&f=PIN&n=Studio+Mac"
 
     private func makeViewModel(store: CredentialStoring = InMemoryCredentialStore())
         -> (PairingViewModel, ServerConnection)

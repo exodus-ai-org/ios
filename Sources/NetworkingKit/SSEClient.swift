@@ -6,14 +6,20 @@ public struct SSEClient: Sendable {
     /// `ServerConnection.unlockComputer(session:)` on a 423, so the retry uses the same session
     /// (and so the same pin) this client's events came from.
     let session: URLSession
+    let reporter: LogReporter?
 
-    public init(session: URLSession = .shared) {
+    public init(session: URLSession = .shared, reporter: LogReporter? = nil) {
         self.session = session
+        self.reporter = reporter
     }
 
     public func events(for request: URLRequest) -> AsyncThrowingStream<ChatSseEvent, Error> {
         AsyncThrowingStream { continuation in
+            let reporter = self.reporter
+            let path = request.url?.path ?? ""
             let task = Task {
+                var issues = SSEFrameIssues()
+                defer { issues.report(path: path, reporter: reporter) }
                 do {
                     let (bytes, response) = try await session.bytes(for: request)
                     if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -24,11 +30,20 @@ public struct SSEClient: Sendable {
                         }
                         throw HTTPError(
                             statusCode: http.statusCode, code: "UNKNOWN_ERROR",
-                            message: String(localized: "HTTP \(http.statusCode)"))
+                            message: String(
+                                localized: "ios:networking.error.httpStatus", defaultValue: "HTTP \(http.statusCode)",
+                                comment:
+                                    "Fallback error text for a server response without a message. %lld is the HTTP status code."
+                            ))
                     }
                     for try await line in bytes.lines {
-                        if let event = SSEFrameParsing.decodeEvent(fromLine: line) {
+                        switch SSEFrameParsing.frame(fromLine: line) {
+                        case .event(let event):
                             continuation.yield(event)
+                        case .undecodable(let type, let reason, let bytes):
+                            issues.note(type: type, reason: reason, bytes: bytes)
+                        case .ignored:
+                            break
                         }
                     }
                     continuation.finish()

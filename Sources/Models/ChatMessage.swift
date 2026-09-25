@@ -45,18 +45,46 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
     public var toolName: String? { raw["toolName"]?.stringValue }
     public var timestampMs: Double? { raw["timestamp"]?.numberValue }
 
+    /// The id of the run this message belongs to (a run's user message is its own run); `nil` on rows from before runs.
+    public var runId: String? { raw["runId"]?.stringValue }
+    public var toolCallId: String? { raw["toolCallId"]?.stringValue }
+    public var details: JSONValue? {
+        if case .null? = raw["details"] { return nil }
+        return raw["details"]
+    }
+    public var durationMs: Double? { raw["durationMs"]?.numberValue }
+    public var stopReason: String? { raw["stopReason"]?.stringValue }
+    public var errorMessage: String? { raw["errorMessage"]?.stringValue }
+
+    /// `content` as typed blocks: a string is one text block, and a shape the wire never sends is one `.unknown`.
+    public var contentBlocks: [ContentBlock] {
+        switch raw["content"] {
+        case .string(let text)?: [.text(text)]
+        case .array(let blocks)?: blocks.map(ContentBlock.init)
+        case .null?, nil: []
+        case let other?: [.unknown(other)]
+        }
+    }
+
     /// Builds a freshly-composed outgoing user message — the shape the composer
     /// hands to `ChatStreamManager.send`. Every other `ChatMessage` in a
     /// conversation was decoded from the server and must never be constructed
     /// this way (it would drop fields the server needs on round-trip).
     public static func userMessage(id: String, text: String, timestampMs: Double) -> ChatMessage {
+        userMessage(id: id, content: .string(text), timestampMs: timestampMs)
+    }
+
+    /// The same, for content that is already wire-shaped — a string, or an array of text and image blocks —
+    /// as when a question is asked again (Regenerate) and must keep its attachments.
+    public static func userMessage(id: String, content: JSONValue, timestampMs: Double) -> ChatMessage {
         ChatMessage(
             id: id,
             role: "user",
             raw: [
                 "id": .string(id),
+                "runId": .string(id),  // a user message opens its own run, stamped locally like the desktop client does
                 "role": .string("user"),
-                "content": .string(text),
+                "content": content,
                 "timestamp": .number(timestampMs)
             ]
         )

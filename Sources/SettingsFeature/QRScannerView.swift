@@ -109,7 +109,7 @@ struct ScannerScreen: View {
 
             if let unavailable {
                 VStack(spacing: 8) {
-                    Text("The camera is not available")
+                    Text("ios:settings.scanner.cameraUnavailable")
                         .font(.headline)
                     Text(verbatim: unavailable)
                         .font(.footnote)
@@ -120,7 +120,7 @@ struct ScannerScreen: View {
                 .frame(maxWidth: .infinity)
                 .background(.regularMaterial)
             } else {
-                Text("Point the camera at the code on your computer's screen.")
+                Text("ios:settings.scanner.hint")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -129,7 +129,7 @@ struct ScannerScreen: View {
                     .background(.regularMaterial)
             }
         }
-        .navigationTitle("Scan pairing code")
+        .navigationTitle("ios:settings.pairing.scanCode")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

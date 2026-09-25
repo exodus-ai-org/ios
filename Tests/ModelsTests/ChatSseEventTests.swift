@@ -33,6 +33,18 @@ struct ChatSseEventTests {
         #expect(messages[0].displayText == "hi")
     }
 
+    @Test("memories_used carries its run and the memories it read; an unreadable entry costs only itself")
+    func memoriesUsed() throws {
+        let json = #"{"type":"memories_used","runId":"u1","memories":[{"id":"m1","key":"Music","section":"topic"},{"key":"no id"}]}"#
+        let event = try JSONDecoder().decode(ChatSseEvent.self, from: Data(json.utf8))
+        guard case .memoriesUsed(let runId, let memories) = event else {
+            Issue.record("expected .memoriesUsed, got \(event)")
+            return
+        }
+        #expect(runId == "u1")
+        #expect(memories == [UsedMemory(id: "m1", key: "Music", section: "topic")])
+    }
+
     @Test("an unrecognized type decodes to .unknown instead of throwing")
     func unrecognizedTypeIsUnknown() throws {
         let json = """

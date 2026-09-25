@@ -94,6 +94,11 @@ private final class UpdateLog: Sendable {
                 case .title: "title"
                 case .finished: "finished"
                 case .failed(let message): "failed:\(message)"
+                case .notice(let notice): "notice:\(notice.level):\(notice.message)"
+                case .approval(.required(let request)): "approval:required:\(request.toolCallId)"
+                case .approval(.resolved(_, let toolCallId, let outcome)): "approval:resolved:\(toolCallId):\(outcome)"
+                case .memoriesUsed(let runId, let memories): "memories:\(runId):\(memories.map(\.key).joined(separator: ","))"
+                case .memoryChanged: "memoryChanged"
                 }
             }
         }
@@ -269,6 +274,73 @@ struct ChatStreamManagerTests {
             return
         }
         #expect(replayedStatus == .streaming)
+    }
+
+    @Test("approval frames are relayed in order, and replayed to an observer that attaches while the call waits")
+    func approvalsRelayedAndReplayed() async throws {
+        StreamingMockURLProtocol.finishesLoading = false
+        StreamingMockURLProtocol.statusCode = 200
+        let sse = """
+            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"reading"}}\n\n\
+            data: {"type":"approval_required","runId":"u1","toolCallId":"call_1","toolName":"read_file","summary":"~/.ssh/id_rsa","expiresAt":1790000000000}\n\n\
+            data: {"type":"approval_required","runId":"u1","toolCallId":"call_2","toolName":"terminal","summary":"cat ~/.aws/credentials","expiresAt":1790000000000}\n\n\
+            data: {"type":"approval_resolved","runId":"u1","toolCallId":"call_1","outcome":"denied"}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(sse.utf8)]
+        let session = StreamingMockURLProtocol.makeSession()
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let log = UpdateLog()
+        let updates = await manager.send(
+            chatId: "c1", messages: [.userMessage(id: "u1", text: "hi", timestampMs: 0)], serverConfig: serverConfig)
+        let drain = Task { await log.drain(updates) }
+        try await waitUntil("the resolved frame") { log.tags.contains("approval:resolved:call_1:denied") }
+        #expect(
+            log.tags.filter { $0.hasPrefix("approval") } == [
+                "approval:required:call_1", "approval:required:call_2", "approval:resolved:call_1:denied",
+            ])
+
+        let attached = try #require(await manager.attach("c1"))
+        await drain.value
+        session.invalidateAndCancel()
+        let replay = UpdateLog()
+        await replay.drain(attached)
+        #expect(
+            Array(replay.tags.prefix(5)) == [
+                "messages", "status:streaming", "approval:required:call_1", "approval:required:call_2",
+                "approval:resolved:call_1:denied",
+            ])
+    }
+
+    @Test("memories_used is relayed and replayed on attach; update_memory's end says memory changed, other tools' do not")
+    func memoryFramesRelayedAndReplayed() async throws {
+        StreamingMockURLProtocol.finishesLoading = false
+        StreamingMockURLProtocol.statusCode = 200
+        let sse = """
+            data: {"type":"memories_used","runId":"u1","memories":[{"id":"m1","key":"Music","section":"topic"},{"id":"m2","key":"Work","section":"profile"}]}\n\n\
+            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"ok"}}\n\n\
+            data: {"type":"tool_call_end","toolCallId":"k1","toolName":"weather","isError":false}\n\n\
+            data: {"type":"tool_call_end","toolCallId":"k2","toolName":"update_memory","isError":true}\n\n\
+            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"done"}}\n\n
+            """
+        StreamingMockURLProtocol.chunks = [Data(sse.utf8)]
+        let session = StreamingMockURLProtocol.makeSession()
+        let manager = ChatStreamManager(sseClient: SSEClient(session: session))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let log = UpdateLog()
+        let updates = await manager.send(
+            chatId: "c1", messages: [.userMessage(id: "u1", text: "hi", timestampMs: 0)], serverConfig: serverConfig)
+        let drain = Task { await log.drain(updates) }
+        try await waitUntil("the last frame") { log.tags.filter { $0 == "messages" }.count >= 2 }
+        #expect(log.tags.filter { $0.hasPrefix("memor") } == ["memories:u1:Music,Work", "memoryChanged"])
+
+        let attached = try #require(await manager.attach("c1"))
+        await drain.value
+        session.invalidateAndCancel()
+        let replay = UpdateLog()
+        await replay.drain(attached)
+        #expect(Array(replay.tags.prefix(3)) == ["messages", "status:streaming", "memories:u1:Music,Work"])
+        #expect(!replay.tags.contains("memoryChanged"), "a change already reported is not replayed")
     }
 
     @Test("a server-sent error frame is terminal: .status(.error) then .failed, no .idle or .finished, entry removed")
@@ -561,7 +633,7 @@ struct ChatStreamManagerLockedTests {
     private func makePairedConfig(_ suite: String) -> ServerConfigStore {
         let store = InMemoryCredentialStore(
             PairedServer(
-                hosts: ["10.0.0.2"], port: 60224, fingerprint: "PIN", name: "Mac",
+                hosts: ["10.0.0.2"], port: 63129, fingerprint: "PIN", name: "Mac",
                 deviceId: "dev-1", token: "TOKEN"))
         let connection = ServerConnection(store: store)
         let config = ServerConfigStore(userDefaults: UserDefaults(suiteName: suite)!)
@@ -631,6 +703,98 @@ struct ChatStreamManagerLockedTests {
         }
 
         #expect(failure == "Application is locked")
+    }
+
+    @Test("a notice frame reaches the observer as .notice, in order between the messages, and does not end the turn")
+    func noticeFrameIsRelayed() async throws {
+        let sse = """
+            data: {"type":"message_update","message":{"id":"a1","role":"assistant","content":"He"}}\n\n\
+            data: {"type":"notice","level":"warning","message":"Places key expired"}\n\n\
+            data: {"type":"done","messages":[{"id":"u1","role":"user","content":"hi"},{"id":"a1","role":"assistant","content":"Hello"}]}\n\n
+            """
+        StreamingMockURLProtocol.finishesLoading = true
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.chunks = [Data(sse.utf8)]
+        defer { StreamingMockURLProtocol.reset() }
+
+        let manager = ChatStreamManager(sseClient: SSEClient(session: StreamingMockURLProtocol.makeSession()))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        let log = UpdateLog()
+        await log.drain(await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig))
+
+        #expect(
+            log.tags == [
+                "status:submitted", "messages", "notice:warning:Places key expired", "messages", "status:idle",
+                "finished"
+            ])
+    }
+
+    @Test("a repeated notice is relayed once per turn, a different one is relayed too")
+    func repeatedNoticeIsRelayedOnce() async throws {
+        let sse = """
+            data: {"type":"notice","level":"warning","message":"Places key expired"}\n\n\
+            data: {"type":"notice","level":"warning","message":"Places key expired"}\n\n\
+            data: {"type":"notice","level":"info","message":"Places key expired"}\n\n\
+            data: {"type":"notice","level":"warning","message":"Rate limited"}\n\n\
+            data: {"type":"notice","level":"warning","message":"Places key expired"}\n\n
+            """
+        StreamingMockURLProtocol.finishesLoading = true
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.chunks = [Data(sse.utf8)]
+        defer { StreamingMockURLProtocol.reset() }
+
+        let manager = ChatStreamManager(sseClient: SSEClient(session: StreamingMockURLProtocol.makeSession()))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let userMessage = ChatMessage.userMessage(id: "u1", text: "hi", timestampMs: 0)
+
+        let log = UpdateLog()
+        await log.drain(await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig))
+
+        // The desktop keys its `seenNotices` on level + message: same text at another level is a new notice.
+        #expect(
+            log.tags.filter { $0.hasPrefix("notice:") } == [
+                "notice:warning:Places key expired", "notice:info:Places key expired", "notice:warning:Rate limited"
+            ])
+
+        // A second turn starts with an empty set.
+        StreamingMockURLProtocol.chunks = [
+            Data(#"data: {"type":"notice","level":"warning","message":"Places key expired"}\#n\#n"#.utf8)
+        ]
+        let second = UpdateLog()
+        await second.drain(await manager.send(chatId: "c1", messages: [userMessage], serverConfig: serverConfig))
+        #expect(second.tags.filter { $0.hasPrefix("notice:") } == ["notice:warning:Places key expired"])
+    }
+
+    @Test("a notice whose message is blank is not relayed")
+    func blankNoticeIsDropped() async throws {
+        let sse = """
+            data: {"type":"notice","level":"warning","message":""}\n\n\
+            data: {"type":"notice","level":"info","message":"  \\n "}\n\n\
+            data: {"type":"notice","level":"warning","message":"Rate limited"}\n\n
+            """
+        StreamingMockURLProtocol.finishesLoading = true
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.chunks = [Data(sse.utf8)]
+        defer { StreamingMockURLProtocol.reset() }
+
+        let manager = ChatStreamManager(sseClient: SSEClient(session: StreamingMockURLProtocol.makeSession()))
+        let serverConfig = ServerConfigStore(userDefaults: UserDefaults(suiteName: #function)!)
+        let log = UpdateLog()
+        await log.drain(
+            await manager.send(
+                chatId: "c1", messages: [.userMessage(id: "u1", text: "hi", timestampMs: 0)], serverConfig: serverConfig))
+        #expect(log.tags.filter { $0.hasPrefix("notice:") } == ["notice:warning:Rate limited"])
+    }
+
+    @Test("a notice level mirrors the server's normaliser: only info is info, anything else is a warning")
+    func unknownNoticeLevelIsWarning() {
+        #expect(StreamNotice(level: "warning", message: "m").level == .warning)
+        #expect(StreamNotice(level: "info", message: "m").level == .info)
+        #expect(StreamNotice(level: "critical", message: "m").level == .warning)
+        #expect(StreamNotice(level: "", message: "m").level == .warning)
+        #expect(StreamNotice(level: "Info", message: "m").level == .warning)
     }
 
     @Test("an unpaired connection gets the original locked message, with no unlock attempt")

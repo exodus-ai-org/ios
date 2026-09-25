@@ -16,7 +16,7 @@ struct WorkspaceRow: View {
                 }
                 if !option.isAvailable {
                     Spacer()
-                    Text("Coming soon")
+                    Text("ios:app.workspace.comingSoon")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

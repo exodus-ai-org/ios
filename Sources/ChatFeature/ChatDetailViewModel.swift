@@ -7,11 +7,24 @@ import Observation
 @Observable
 public final class ChatDetailViewModel {
     public let chatId: String
-    public private(set) var messages: [ChatMessage] = []
+    public private(set) var messages: [ChatMessage] = [] {
+        didSet { segments = RunGrouper.group(messages, cache: &segmentCache) }
+    }
+    public private(set) var segments: [Segment] = []
+    @ObservationIgnored private var segmentCache = RunGrouper.Cache()
     public private(set) var status: ChatStatus = .idle
     public var composerText: String = ""
+    /// Bumped to ask the composer to take focus ("This is wrong" under a used memory).
+    public private(set) var composerFocusRequest = 0
     public private(set) var chatTitle: String?
     public var errorMessage: String?
+    /// The stream failure of the run this client watched fail; a reload hands the error back to the rows.
+    public private(set) var liveRunError: LiveRunError?
+    /// Bumped on every failure, so a second failure with the same text still triggers the error haptic.
+    public private(set) var failureCount = 0
+    /// The heads-up a tool asked the server to relay, shown over the composer for a few seconds. The text is the
+    /// server's own: shown as it is, never translated.
+    public private(set) var notice: StreamNotice?
     /// True once the transcript is known: history loaded, or re-attached to an in-flight turn.
     /// Nothing is sent before that — the prior turns of a POST are the LLM context when the
     /// server's LCM feature is off, and the desktop does not render a chat before its history.
@@ -53,31 +66,83 @@ public final class ChatDetailViewModel {
     private var turnWasStopped = false
 
     private let apiClient: APIClient
+    /// The frames of computer_use sessions streamed here, kept for the finished card's filmstrip.
+    @ObservationIgnored var computerUseFrames: ComputerUseFrameStore = .shared
+    /// The tool calls paused for an answer on this chat's stream; the run's foot reads its own run from it.
+    @ObservationIgnored let approvals: RunApprovalStore
+    /// Which memories each run read, the memory list the strips compare with, and Undo; the run's foot reads its own run.
+    @ObservationIgnored let memoryFoot: MemoryFootStore
     private let streamManager: ChatStreamManager
     private let serverConfig: ServerConfigStore
+    private let noticeLifetime: Duration
+    private let noticeSleep: @Sendable (Duration) async throws -> Void
+    @ObservationIgnored private var noticeClearTask: Task<Void, Never>?
 
+    /// `noticeLifetime` is how long a notice stays up; `noticeSleep` waits it out — a test hands in one it controls.
     public init(
         chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
-        serverConfig: ServerConfigStore
+        serverConfig: ServerConfigStore, noticeLifetime: Duration = .seconds(6),
+        noticeSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.chatId = chatId
         self.chatTitle = Self.oneLine(title)
         self.apiClient = apiClient
         self.streamManager = streamManager
         self.serverConfig = serverConfig
+        self.noticeLifetime = noticeLifetime
+        self.noticeSleep = noticeSleep
+        self.approvals = RunApprovalStore(apiClient: apiClient)
+        self.memoryFoot = MemoryFootStore(apiClient: apiClient)
+        memoryFoot.onWrong = { [weak self] text in self?.prefillComposer(text) }
+    }
+
+    /// Puts `text` in the composer, replacing what was there (as the desktop does), and asks for focus.
+    func prefillComposer(_ text: String) {
+        composerText = text
+        composerFocusRequest += 1
+    }
+
+    /// Which memories each run of this chat read, for the runs loaded from history (a live run's arrive on its stream).
+    public func loadMemoryUsage() async {
+        guard hasLoadedHistory, !messages.isEmpty else { return }
+        await memoryFoot.loadUsage(chatId: chatId)
     }
 
     public var isTurnInFlight: Bool { status == .submitted || status == .streaming }
 
-    /// True while a turn is in flight and nothing the assistant said is at the end of the
-    /// transcript yet: from tapping send until the server's first assistant message, and again
-    /// after a tool result. The view shows a "…" bubble so the screen is not dead in the meantime.
-    public var showsPendingRow: Bool { isTurnInFlight && messages.last?.role != "assistant" }
+    /// The three dots: nothing of the reply is on screen yet, or its answer has started and it waits on a tool.
+    public var showsPendingRow: Bool {
+        TranscriptRules.showsTypingIndicator(
+            segments: segments, lastMessage: messages.last, isTurnInFlight: isTurnInFlight)
+    }
+
+    /// The turn whose markdown and timeline are live: the last one, while a turn is in flight.
+    public var streamingTurnId: String? {
+        TranscriptRules.streamingTurnId(segments: segments, isTurnInFlight: isTurnInFlight)
+    }
+
+    /// A stream failure is shown at the foot of its run, so the alert is kept for everything else.
+    public var showsErrorAlert: Bool { errorMessage != nil && liveRunError == nil }
 
     public var canSend: Bool {
         hasLoadedHistory && !isTurnInFlight
             && !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    /// The answer that carries Regenerate: the last one, once nothing is in flight.
+    public var regenerableTurnId: String? {
+        TurnActions.regenerableTurnId(
+            segments: segments, hasLoadedHistory: hasLoadedHistory, isTurnInFlight: isTurnInFlight)
+    }
+
+    /// A run that failed before any step has no turn to carry Regenerate; its error line offers it instead.
+    public var canRetryOrphanError: Bool {
+        TurnActions.canRetryOrphan(
+            segments: segments, liveError: liveRunError, hasLoadedHistory: hasLoadedHistory,
+            isTurnInFlight: isTurnInFlight)
+    }
+
+    public var canRegenerate: Bool { regenerableTurnId != nil || canRetryOrphanError }
 
     /// True for a loaded, empty chat with nothing in flight: the view shows its greeting. Never true
     /// before the history is known, so opening a chat does not flash the greeting.
@@ -88,7 +153,13 @@ public final class ChatDetailViewModel {
     /// with messages and has no title yet.
     public var displayTitle: String {
         guard let chatTitle else {
-            return openedWithMessages ? String(localized: "Chat") : String(localized: "New chat")
+            return openedWithMessages
+                ? String(
+                    localized: "chat:toast.chatFallbackTitle", defaultValue: "Chat",
+                    comment: "Title of an open conversation that has no name yet.")
+                : String(
+                    localized: "ios:chat.detail.newChatTitle", defaultValue: "New chat",
+                    comment: "Title bar of a conversation that was empty when it was opened.")
         }
         return Self.shortened(chatTitle)
     }
@@ -117,6 +188,8 @@ public final class ChatDetailViewModel {
         do {
             let rows: [ChatMessage] = try await apiClient.get("/api/v1/chat/\(chatId)")
             messages = ChatHistoryRows.uiMessages(from: rows)
+            memoryFoot.prune(keeping: Set(messages.map { $0.runId ?? $0.id }))
+            clearRunError()
             // Only the first load says what this chat was; a later pull-to-refresh sees the turns
             // that have happened since and must not turn a new chat into an old one.
             if !hasLoadedHistory { openedWithMessages = !messages.isEmpty }
@@ -125,6 +198,7 @@ public final class ChatDetailViewModel {
             // SwiftUI cancels a view's `.task` when the view goes away; that is not a failure.
             guard !isCancellation(error) else { return }
             errorMessage = error.localizedDescription
+            failureCount += 1
         }
     }
 
@@ -133,16 +207,69 @@ public final class ChatDetailViewModel {
         let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
         composerText = ""
 
-        let userMessage = ChatMessage.userMessage(
-            id: UUID().uuidString.lowercased(), text: text, timestampMs: Date().timeIntervalSince1970 * 1000)
+        await startTurn(
+            with: .userMessage(id: Self.newMessageId(), text: text, timestampMs: Self.nowMs))
+    }
+
+    /// Asks the last question again, as the desktop's `regenerate` does: a new user message with a new id (and so a new
+    /// run) carrying the same content is appended, and the transcript so far — the previous answer included — is what is
+    /// sent. Nothing is removed: the previous answer stays on screen and in the database, and the new one follows it.
+    /// Does nothing while a turn is in flight, before the history is known, or when there is no question to repeat.
+    public func regenerate() async {
+        guard canRegenerate, let question = TurnActions.resendableUserMessage(in: segments) else { return }
+        await startTurn(
+            with: .userMessage(id: Self.newMessageId(), content: question.content, timestampMs: Self.nowMs))
+    }
+
+    /// The Sources sheet's content for one of the transcript's turns, at a citation chip's source when it names one.
+    func sourcesSheet(forTurn turnId: String, marker: Int? = nil) -> SourcesSheetModel? {
+        for segment in segments {
+            if case .assistantTurn(let turn) = segment, turn.id == turnId {
+                return SourcesSheetModel(turn: turn, marker: marker)
+            }
+        }
+        return nil
+    }
+
+    /// Takes the notice off the screen now, and stops the timer that would have.
+    public func dismissNotice() {
+        noticeClearTask?.cancel()
+        noticeClearTask = nil
+        notice = nil
+    }
+
+    private func startTurn(with userMessage: ChatMessage) async {
         messages.append(userMessage)
         turnWasStopped = false
+        clearRunError()
+        dismissNotice()
         sendCount += 1
         status = .submitted  // disable the composer now, before the first stream update arrives
 
         let updates = await streamManager.send(chatId: chatId, messages: messages, serverConfig: serverConfig)
         await consume(updates)
     }
+
+    /// The inline error and the alert text it stood in for go together, so neither outlives the other.
+    private func clearRunError() {
+        if liveRunError != nil { errorMessage = nil }
+        liveRunError = nil
+    }
+
+    private func show(_ incoming: StreamNotice) {
+        guard !incoming.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        noticeClearTask?.cancel()
+        notice = incoming
+        let (lifetime, sleep) = (noticeLifetime, noticeSleep)
+        noticeClearTask = Task { [weak self] in
+            try? await sleep(lifetime)
+            guard !Task.isCancelled else { return }
+            self?.notice = nil
+        }
+    }
+
+    private static var nowMs: Double { Date().timeIntervalSince1970 * 1000 }
+    private static func newMessageId() -> String { UUID().uuidString.lowercased() }
 
     /// Ends the turn in flight (the Stop button): the partial reply stays, and no error is shown.
     /// `consume` receives the manager's `.status(.idle)` and `.finished` and ends by itself.
@@ -167,16 +294,30 @@ public final class ChatDetailViewModel {
             switch update {
             case .messages(let messages):
                 self.messages = messages
+                computerUseFrames.ingest(segments)
             case .status(let status):
                 self.status = status
             case .title(let title):
                 chatTitle = Self.oneLine(title) ?? chatTitle
+            case .notice(let notice):
+                show(notice)
+            case .approval(let event):
+                approvals.apply(event)
+            case .memoriesUsed(let runId, let memories):
+                memoryFoot.applyUsed(runId: runId, memories: memories)
+            case .memoryChanged:
+                let run = messages.last { $0.role == "user" }
+                memoryFoot.memoryChanged(inRun: run.map { $0.runId ?? $0.id })
             case .finished(let messages):
                 self.messages = messages
                 status = .idle
                 if !turnWasStopped { completedTurnCount += 1 }
             case .failed(let message):
+                if let run = messages.last(where: { $0.role == "user" }) {
+                    liveRunError = LiveRunError(runId: run.runId ?? run.id, message: message)
+                }
                 errorMessage = message
+                failureCount += 1
                 status = .error
             }
         }

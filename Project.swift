@@ -50,7 +50,9 @@ let project = Project(
                     "NSCameraUsageDescription":
                         "Exodus uses the camera to scan the pairing code shown on your computer.",
                     "NSFaceIDUsageDescription":
-                        "Exodus uses Face ID to unlock the connection to your computer."
+                        "Exodus uses Face ID to unlock the connection to your computer.",
+                    "NSPhotoLibraryAddUsageDescription":
+                        "Exodus saves the images you choose to your photo library."
                 ]
             ),
             buildableFolders: ["Sources/App", "Resources/App"],
@@ -58,7 +60,8 @@ let project = Project(
                 .target(name: "ChatFeature"),
                 .target(name: "SettingsFeature"),
                 .target(name: "PhilharmonicFeature"),
-                .target(name: "NetworkingKit")
+                .target(name: "NetworkingKit"),
+                .target(name: "MarkdownKit")
             ],
             settings: .settings(
                 base: [
@@ -96,9 +99,21 @@ let project = Project(
             buildableFolders: ["Tests/NetworkingKitTests"],
             dependencies: [.target(name: "NetworkingKit"), .target(name: "Models")]
         ),
+        moduleTarget(name: "MarkdownKit", dependencies: [.external(name: "Markdown")]),
+        .target(
+            name: "MarkdownKitTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "\(bundleIdRoot).MarkdownKitTests",
+            deploymentTargets: deploymentTargets,
+            buildableFolders: ["Tests/MarkdownKitTests"],
+            dependencies: [.target(name: "MarkdownKit")]
+        ),
         moduleTarget(
             name: "ChatFeature",
-            dependencies: [.target(name: "NetworkingKit"), .target(name: "Models")]
+            dependencies: [
+                .target(name: "NetworkingKit"), .target(name: "Models"), .target(name: "MarkdownKit")
+            ]
         ),
         .target(
             name: "ChatFeatureTests",

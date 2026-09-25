@@ -5,12 +5,44 @@ public enum ChatStatus: String, Sendable, Equatable {
     case idle, submitted, streaming, error
 }
 
+/// A non-fatal heads-up a tool asked the server to relay (an expired key that only degraded a result).
+/// `message` is the server's own text: data to show as it is, never a string to translate or parse.
+public struct StreamNotice: Hashable, Sendable {
+    public enum Level: Hashable, Sendable { case info, warning }
+
+    public let level: Level
+    public let message: String
+
+    public init(level: Level, message: String) {
+        self.level = level
+        self.message = message
+    }
+
+    /// The server's own normaliser: `info` is info, and anything else is a warning.
+    public init(level: String, message: String) {
+        self.init(level: level == "info" ? .info : .warning, message: message)
+    }
+}
+
 public enum ChatStreamUpdate: Sendable {
     case messages([ChatMessage])
     case status(ChatStatus)
     case title(String)
     case finished([ChatMessage])
     case failed(String)
+    case notice(StreamNotice)
+    /// A tool call paused for the user's answer, or how it was settled.
+    case approval(ApprovalEvent)
+    /// The memories a run read (`memories_used`).
+    case memoriesUsed(runId: String, memories: [UsedMemory])
+    /// An `update_memory` call just ended, done or failed: memory on the computer may read differently now.
+    case memoryChanged
+}
+
+/// The approval frames of a run, in the order they arrived.
+public enum ApprovalEvent: Equatable, Sendable {
+    case required(ApprovalRequest)
+    case resolved(runId: String, toolCallId: String, outcome: ApprovalOutcome)
 }
 
 public actor ChatStreamManager {
@@ -23,13 +55,25 @@ public actor ChatStreamManager {
         var messages: [ChatMessage]
         var status: ChatStatus
         var continuation: AsyncStream<ChatStreamUpdate>.Continuation?
+        /// Notices already relayed this turn: a 12-stop itinerary that hits the same expired key
+        /// reports it once, not per place (the desktop's `seenNotices`).
+        var seenNotices: Set<StreamNotice> = []
+        /// Event types this client does not know, reported once per turn rather than per frame.
+        var seenUnknownTypes: Set<String> = []
+        /// Every approval frame of this turn, replayed to an observer that attaches later (the chat reopened while a
+        /// call waits): the card must still be there to answer.
+        var approvals: [ApprovalEvent] = []
+        /// The run's `memories_used`, replayed the same way: the used-memories line of the run in flight.
+        var memoriesUsed: [(runId: String, memories: [UsedMemory])] = []
     }
 
     private let sseClient: SSEClient
+    private let reporter: LogReporter?
     private var streams: [String: ActiveStream] = [:]
 
-    public init(sseClient: SSEClient = SSEClient()) {
+    public init(sseClient: SSEClient = SSEClient(), reporter: LogReporter? = nil) {
         self.sseClient = sseClient
+        self.reporter = reporter ?? sseClient.reporter
     }
 
     public func isStreaming(_ chatId: String) -> Bool {
@@ -47,6 +91,8 @@ public actor ChatStreamManager {
         let (output, continuation) = AsyncStream<ChatStreamUpdate>.makeStream()
         continuation.yield(.messages(stream.messages))
         continuation.yield(.status(stream.status))
+        for approval in stream.approvals { continuation.yield(.approval(approval)) }
+        for used in stream.memoriesUsed { continuation.yield(.memoriesUsed(runId: used.runId, memories: used.memories)) }
         stream.continuation = continuation
         streams[chatId] = stream
         return output
@@ -75,7 +121,11 @@ public actor ChatStreamManager {
 
         let task = Task { [weak self] in
             guard let request else {
-                await self?.fail(chatId: chatId, generation: generation, message: String(localized: "Invalid server URL"))
+                await self?.fail(
+                    chatId: chatId, generation: generation,
+                    message: String(
+                        localized: "ios:networking.error.invalidServerUrl", defaultValue: "Invalid server URL",
+                        comment: "Short error when the stored server address cannot be parsed."))
                 return
             }
             do {
@@ -145,7 +195,30 @@ public actor ChatStreamManager {
             stream.task?.cancel()
             fail(chatId: chatId, generation: generation, message: message)
             return
-        case .toolCallStart, .toolCallEnd, .notice, .unknown:
+        case .notice(let level, let message):
+            let notice = StreamNotice(level: level, message: message)
+            if !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, stream.seenNotices.insert(notice).inserted {
+                stream.continuation?.yield(.notice(notice))
+            }
+        case .unknown(let type):
+            if stream.seenUnknownTypes.insert(type).inserted {
+                reporter.report(
+                    .warn, scope: "sse", message: "Unknown SSE event type",
+                    attributes: ["eventType": .string(String(type.prefix(40)))])
+            }
+        case .approvalRequired(let request):
+            stream.approvals.append(.required(request))
+            stream.continuation?.yield(.approval(.required(request)))
+        case .approvalResolved(let runId, let toolCallId, let outcome):
+            let event = ApprovalEvent.resolved(runId: runId, toolCallId: toolCallId, outcome: outcome)
+            stream.approvals.append(event)
+            stream.continuation?.yield(.approval(event))
+        case .memoriesUsed(let runId, let memories):
+            stream.memoriesUsed.append((runId, memories))
+            stream.continuation?.yield(.memoriesUsed(runId: runId, memories: memories))
+        case .toolCallEnd(_, let toolName, _) where toolName == "update_memory":
+            stream.continuation?.yield(.memoryChanged)
+        case .toolCallStart, .toolCallEnd:
             break
         }
         streams[chatId] = stream

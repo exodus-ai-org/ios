@@ -108,4 +108,30 @@ struct ChatHistoryRowsTests {
         let keys = Set(try #require(object.first).keys)
         #expect(keys.isDisjoint(with: ["chatId", "searchText", "createdAt"]))
     }
+
+    @Test("a row's runId is kept on a user, assistant and toolResult row alike")
+    func runIdIsKept() throws {
+        let converted = ChatHistoryRows.uiMessages(
+            from: try rows(
+                #"""
+                [{"id":"u1","chatId":"c1","runId":"u1","role":"user","content":"hi","createdAt":"2026-09-18T12:00:00.000Z"},
+                 {"id":"a1","chatId":"c1","runId":"u1","role":"assistant","content":[],"usage":null,"stopReason":"toolUse","createdAt":"2026-09-18T12:00:01.000Z"},
+                 {"id":"t1","chatId":"c1","runId":"u1","role":"toolResult","content":[],"toolCallId":"call_1","toolName":"weather","details":null,"isError":false,"createdAt":"2026-09-18T12:00:02.000Z"}]
+                """#))
+        try #require(converted.count == 3)
+        #expect(converted.map(\.runId) == ["u1", "u1", "u1"])
+        #expect(converted.allSatisfy { $0.raw["runId"] == .string("u1") })
+    }
+
+    @Test("a row without a runId (or a NULL one) converts without inventing one")
+    func missingRunIdStaysAbsent() throws {
+        let converted = ChatHistoryRows.uiMessages(
+            from: try rows(
+                #"""
+                [{"id":"u1","role":"user","content":"a","createdAt":"2026-09-18T12:00:00.000Z"},
+                 {"id":"a1","runId":null,"role":"assistant","content":[],"createdAt":"2026-09-18T12:00:01.000Z"}]
+                """#))
+        try #require(converted.count == 2)
+        #expect(converted.allSatisfy { $0.runId == nil && $0.raw.keys.contains("runId") == false })
+    }
 }

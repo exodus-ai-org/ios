@@ -4,7 +4,7 @@ import Foundation
 /// that lets this device in, and the fingerprint of the only certificate to
 /// trust. Built by `buildPairingLink` in the desktop's `src/main/lib/lan/pairing.ts`.
 ///
-///     exodus://pair?h=192.168.1.10,mac.local&p=60224&c=<code>&f=<fingerprint>&n=<name>
+///     exodus://pair?h=192.168.1.10,mac.local&p=63129&c=<code>&f=<fingerprint>&n=<name>
 public struct PairingLink: Equatable, Sendable {
     /// Addresses to try, in order: the computer's LAN IPs, then its `.local` name.
     public let hosts: [String]

@@ -55,10 +55,37 @@ struct APIClientTests {
         #expect(response.models.isEmpty)
     }
 
+    @Test("a 400 envelope's params reach the HTTPError (SECRET_REENTRY_REQUIRED names its field)")
+    func errorParams() async throws {
+        MockURLProtocol.handler = { _ in
+            (400, Data(#"{"type":"error","error":{"code":"SECRET_REENTRY_REQUIRED","message":"re-enter","params":{"field":"apiKey"},"hasCustomMessage":true}}"#.utf8))
+        }
+        let request = ListModelsRequest(provider: "OpenAI GPT", apiKey: "•••• abcd", baseUrl: "https://x.example", apiVersion: nil)
+        do {
+            let _: ListModelsResponse = try await makeClient().post("/api/v1/settings/models", body: request)
+            Issue.record("no error")
+        } catch let error as HTTPError {
+            #expect(error.statusCode == 400)
+            #expect(error.reentryField == "apiKey")
+        }
+    }
+
+    @Test("data(_:query:) sends the query, each value encoded")
+    func dataWithQuery() async throws {
+        let recorder = stub(status: 200, body: "bytes")
+        let data = try await makeClient().data(
+            "/api/v1/maps/photo",
+            query: [URLQueryItem(name: "name", value: "places/A_1/photos/B-2"), URLQueryItem(name: "maxWidth", value: "800")])
+        #expect(String(decoding: data, as: UTF8.self) == "bytes")
+        let url = try #require(recorder.requests.first?.url)
+        #expect(url.path == "/api/v1/maps/photo")
+        #expect(url.query == "name=places/A_1/photos/B-2&maxWidth=800")
+    }
+
     @Test("POST with no expected response body sends the request and just checks status")
     func postWithoutDecoding() async throws {
         let recorder = stub(status: 200, body: "{}")
-        let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
+        let patch = SettingsWriteBody(id: "global", lastBackupAt: nil, columns: [])
         try await makeClient().post("/api/v1/settings", body: patch)
 
         let requests = recorder.requests
@@ -73,7 +100,7 @@ struct APIClientTests {
     @Test("POST with no expected response body accepts a 2xx with an empty body")
     func postWithoutDecodingAcceptsEmptyBody() async throws {
         let recorder = stub(status: 204)
-        let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
+        let patch = SettingsWriteBody(id: "global", lastBackupAt: nil, columns: [])
         try await makeClient().post("/api/v1/settings", body: patch)
         #expect(recorder.requests.count == 1)
     }
@@ -81,7 +108,7 @@ struct APIClientTests {
     @Test("POST with no expected response body accepts a 2xx with a non-JSON body")
     func postWithoutDecodingAcceptsNonJSONBody() async throws {
         let recorder = stub(status: 200, body: "OK")
-        let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
+        let patch = SettingsWriteBody(id: "global", lastBackupAt: nil, columns: [])
         try await makeClient().post("/api/v1/settings", body: patch)
         #expect(recorder.requests.count == 1)
     }
@@ -89,7 +116,7 @@ struct APIClientTests {
     @Test("PUT encodes the body and sends the method, sharing POST's no-decode path")
     func putWithoutDecoding() async throws {
         let recorder = stub(status: 200, body: "{}")
-        let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
+        let patch = SettingsWriteBody(id: "global", lastBackupAt: nil, columns: [])
         try await makeClient().put("/api/v1/settings", body: patch)
 
         let requests = recorder.requests
@@ -106,7 +133,7 @@ struct APIClientTests {
         let recorder = stub(
             status: 500,
             body: #"{"type":"error","error":{"code":"INTERNAL_ERROR","message":"Could not save settings"}}"#)
-        let patch = SettingsPatch(id: "global", providerConfig: nil, providers: nil)
+        let patch = SettingsWriteBody(id: "global", lastBackupAt: nil, columns: [])
         await #expect(
             throws: HTTPError(statusCode: 500, code: "INTERNAL_ERROR", message: "Could not save settings")
         ) {
@@ -127,6 +154,31 @@ struct APIClientTests {
         #expect(request.method == "DELETE")
         #expect(request.path == "/api/v1/chat/c1")
         #expect(request.body.isEmpty)
+    }
+
+    @Test("PATCH encodes the body and sends the method without decoding the response")
+    func patchWithoutDecoding() async throws {
+        let recorder = stub(status: 200, body: #"{"success":true,"message":"Successfully updated memory m1"}"#)
+        try await makeClient().patch("/api/v1/memory/m1", body: MemoryPatchBody(isActive: false))
+
+        let request = try #require(recorder.requests.first)
+        #expect(recorder.requests.count == 1)
+        #expect(request.method == "PATCH")
+        #expect(request.path == "/api/v1/memory/m1")
+        let body = try JSONSerialization.jsonObject(with: request.body) as? [String: Any]
+        #expect(body?.count == 1)
+        #expect(body?["isActive"] as? Bool == false)
+    }
+
+    @Test("DELETE carries its query items")
+    func deleteWithQuery() async throws {
+        let recorder = stub(status: 200, body: #"{"success":true}"#)
+        try await makeClient().delete("/api/v1/memory/m1", query: [URLQueryItem(name: "hard", value: "true")])
+
+        let url = try #require(recorder.requests.first?.url)
+        #expect(recorder.requests.first?.method == "DELETE")
+        #expect(url.path == "/api/v1/memory/m1")
+        #expect(url.query == "hard=true")
     }
 
     @Test("DELETE accepts a 2xx with an empty body")

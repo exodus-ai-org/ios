@@ -9,7 +9,13 @@ enum RecentTimestamp {
         _ iso8601: String, now: Date = .now, calendar: Calendar = .current, locale: Locale = .current
     ) -> String? {
         guard let date = parseDate(iso8601) else { return nil }
-        if calendar.isDateInToday(date) {
+        return format(date, now: now, calendar: calendar, locale: locale)
+    }
+
+    static func format(
+        _ date: Date, now: Date = .now, calendar: Calendar = .current, locale: Locale = .current
+    ) -> String {
+        if calendar.isDate(date, inSameDayAs: now) {
             return date.formatted(dateStyle(time: .shortened, calendar: calendar, locale: locale))
         }
         let today = calendar.startOfDay(for: now)
@@ -29,7 +35,7 @@ enum RecentTimestamp {
     }
 
     /// `Date.FormatStyle`'s own `timeZone` defaults to the system zone regardless of what
-    /// `calendar` says, so every style is built with the same zone `isDateInToday`/`startOfDay`
+    /// `calendar` says, so every style is built with the same zone `isDate(_:inSameDayAs:)`/`startOfDay`
     /// already used above — otherwise the boundary decision and the rendered string could
     /// disagree near a day's edge, or (a test pinning a zone other than the system's) not agree
     /// at all.

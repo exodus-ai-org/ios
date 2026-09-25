@@ -132,7 +132,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
                                 .listRowInsets(sidebarRowInsets)
                         }
                     }
-                    Section("Recents") {
+                    Section("ios:chat.sidebar.recents") {
                         ForEach(list.chats) { chat in
                             row(for: chat)
                         }
@@ -187,29 +187,29 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 }
             }
             .alert(
-                "Error",
+                "ios:chat.alert.errorTitle",
                 isPresented: Binding(
                     get: { list.showsErrorAlert },
                     set: { if !$0 { list.errorMessage = nil } }
                 )
             ) {
-                Button("OK") {}
+                Button("ios:app.alert.ok") {}
             } message: {
                 Text(list.errorMessage ?? "")
             }
             .alert(
-                "Rename chat",
+                "ios:chat.sidebar.renameTitle",
                 isPresented: Binding(
                     get: { renamingChat != nil },
                     set: { if !$0 { renamingChat = nil } }
                 ),
                 presenting: renamingChat
             ) { chat in
-                TextField("Rename chat", text: $renameText)
+                TextField("ios:chat.sidebar.renameTitle", text: $renameText)
                 // Never a blank title: the row would have nothing left to show, and
                 // `list.rename` would reject it anyway. Disabling here keeps the person in the
                 // dialog to fix it instead of a tap that silently does nothing.
-                Button("Save") {
+                Button("common:action.save") {
                     let title = renameText
                     Task {
                         if await list.rename(chat, to: title) {
@@ -218,7 +218,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
                     }
                 }
                 .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button("Cancel", role: .cancel) {}
+                Button("common:action.cancel", role: .cancel) {}
             }
             // Haptics: the causal event only — the alert's own appearance, and a delete once the
             // row is actually gone (apple-design §13). Neither fires for the tap that opens the
@@ -256,7 +256,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 renameText = chat.title.collapsedWhitespace
                 renamingChat = chat
             } label: {
-                Label("Rename", systemImage: "pencil")
+                Label("chat:sidebar.history.rename", systemImage: "pencil")
             }
             Button(role: .destructive) {
                 Task {
@@ -266,7 +266,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
                     }
                 }
             } label: {
-                Label("Delete", systemImage: "trash")
+                Label("common:action.delete", systemImage: "trash")
             }
         }
     }
@@ -308,23 +308,23 @@ public struct ChatSidebarView<Workspaces: View>: View {
                         .frame(maxWidth: .infinity)
                 } else if list.loadFailed {
                     ContentUnavailableView {
-                        Label("Can't load chats", systemImage: "wifi.exclamationmark")
+                        Label("ios:chat.sidebar.loadFailedTitle", systemImage: "wifi.exclamationmark")
                     } description: {
                         // The error text lives here, not in an alert (see `showsErrorAlert`).
                         VStack(spacing: 4) {
                             if let message = list.errorMessage {
                                 Text(message)
                             }
-                            Text("Pull down or tap Retry to try again.")
+                            Text("ios:chat.sidebar.loadFailedHint")
                         }
                     } actions: {
                         // A list row makes its buttons plain, which would leave Retry looking like
                         // static text; `.borderless` gives it the tint back.
-                        Button("Retry") { Task { await list.load() } }
+                        Button("common:action.retry") { Task { await list.load() } }
                             .buttonStyle(.borderless)
                     }
                 } else {
-                    ContentUnavailableView("No chats yet", systemImage: "message")
+                    ContentUnavailableView("ios:chat.sidebar.empty", systemImage: "message")
                 }
             }
             .transition(.opacity)
@@ -343,19 +343,19 @@ public struct ChatSidebarView<Workspaces: View>: View {
             // on screen while it runs. Earlier results stay visible while a new query is in flight.
             case .idle where search.isSearching, .failed where search.isSearching:
                 ProgressView()
-                    .accessibilityLabel("Searching")
+                    .accessibilityLabel("ios:chat.search.progressLabel")
                     .transition(.opacity)
             case .failed(let message):
                 ContentUnavailableView {
-                    Label("Search failed", systemImage: "exclamationmark.triangle")
+                    Label("ios:chat.search.failedTitle", systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(message)
                 } actions: {
-                    Button("Retry") { search.retry() }
+                    Button("common:action.retry") { search.retry() }
                 }
                 .transition(.opacity)
             case .empty:
-                ContentUnavailableView("No results", systemImage: "magnifyingglass")
+                ContentUnavailableView("ios:chat.search.noResults", systemImage: "magnifyingglass")
                     .transition(.opacity)
             case .idle, .results:
                 EmptyView()
@@ -387,7 +387,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 Button {
                     withAnimation(.snappy) { isSearching = true }
                 } label: {
-                    Label("Search", systemImage: "magnifyingglass")
+                    Label("ios:chat.search.label", systemImage: "magnifyingglass")
                 }
                 .accessibilityIdentifier("sidebarSearch")
             }
@@ -400,7 +400,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
     private var bottomBar: some View {
         HStack {
             Button(action: onNewChat) {
-                Label("New chat", systemImage: "square.and.pencil")
+                Label("chat:sidebar.newChat", systemImage: "square.and.pencil")
                     .labelStyle(.titleAndIcon)
                     // The longest translation ("Nouvelle conversation") must fit on one line next to
                     // the gear, in a sidebar that is a fraction of the screen wide.
@@ -411,7 +411,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
             .accessibilityIdentifier("sidebarNewChat")
             Spacer(minLength: 12)
             Button(action: onOpenSettings) {
-                Label("Settings", systemImage: "gearshape")
+                Label("common:nav.settings", systemImage: "gearshape")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.glass)

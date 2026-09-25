@@ -20,6 +20,7 @@ enum ChatHistoryRows {
             "id": .string(row.id),
             "content": row.raw["content"] ?? .null,
         ]
+        out["runId"] = present(row.raw["runId"])
         if let created = row.raw["createdAt"]?.stringValue, let date = parseDate(created) {
             out["timestamp"] = .number(date.timeIntervalSince1970 * 1000)
         } else if let timestamp = row.raw["timestamp"] {

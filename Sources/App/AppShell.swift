@@ -23,9 +23,13 @@ struct AppShell: View {
     @State private var isSidebarOpen = false
     @State private var workspace: AppWorkspace = .chat
     @State private var showSettings = false
+    /// Settings opens on its Memory page (from a chat's used-memories sheet).
+    @State private var settingsOpensMemory = false
     /// Bumped when Settings closes so the sidebar reloads Recents from the (possibly new) server.
     @State private var recentsReloadToken = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(ColorToneModel.self) private var toneModel: ColorToneModel?
 
     var body: some View {
         SideDrawer(isOpen: $isSidebarOpen) {
@@ -64,9 +68,9 @@ struct AppShell: View {
                                 setSidebar(open: !isSidebarOpen)
                             } label: {
                                 if isSidebarOpen {
-                                    Label("Close sidebar", systemImage: "sidebar.leading")
+                                    Label("ios:app.sidebar.close", systemImage: "sidebar.leading")
                                 } else {
-                                    Label("Open sidebar", systemImage: "sidebar.leading")
+                                    Label("ios:app.sidebar.open", systemImage: "sidebar.leading")
                                 }
                             }
                             .accessibilityIdentifier("sidebarToggle")
@@ -75,21 +79,32 @@ struct AppShell: View {
                             Button {
                                 startNewChat()
                             } label: {
-                                Label("New chat", systemImage: "square.and.pencil")
+                                Label("chat:sidebar.newChat", systemImage: "square.and.pencil")
                             }
                             .accessibilityIdentifier("topNewChat")
                         }
                     }
             }
         }
-        .sheet(isPresented: $showSettings, onDismiss: { recentsReloadToken += 1 }) {
-            SettingsView(apiClient: apiClient, serverConfig: serverConfig)
+        .sheet(
+            isPresented: $showSettings,
+            onDismiss: {
+                recentsReloadToken += 1
+                settingsOpensMemory = false
+            }
+        ) {
+            SettingsView(apiClient: apiClient, serverConfig: serverConfig, opensMemory: settingsOpensMemory)
         }
         // The workspace actually changing, once (apple-design §13): `workspace` only changes when
         // a row not already selected is tapped, so re-tapping the active row fires nothing. And
         // today only `.chat` is selectable (`AppWorkspace.isAvailable`), so this fires for nobody
         // until Philharmonic ships — verified in a disposable export with that gate lifted.
         .sensoryFeedback(.selection, trigger: workspace)
+        // The desktop may have picked another tone meanwhile.
+        .task { await toneModel?.refresh(apiClient: apiClient) }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active { Task { await toneModel?.refresh(apiClient: apiClient) } }
+        }
     }
 
     @ViewBuilder
@@ -102,6 +117,12 @@ struct AppShell: View {
             )
             // A different chat is a different view model.
             .id(activeChat.id)
+            .environment(
+                \.openMemorySettings,
+                OpenMemorySettingsAction {
+                    settingsOpensMemory = true
+                    showSettings = true
+                })
         case .philharmonic:
             PhilharmonicPlaceholderView()
         }

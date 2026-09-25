@@ -55,9 +55,9 @@ struct UnlockGate<Content: View>: View {
             Image(systemName: "lock.fill")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
-            Text("Exodus is locked")
+            Text("ios:app.lock.title")
                 .font(.headline)
-            Button("Unlock") { Task { await unlockIfNeeded() } }
+            Button("ios:app.lock.unlockButton") { Task { await unlockIfNeeded() } }
                 .buttonStyle(.borderedProminent)
                 .disabled(isUnlocking)
         }
@@ -69,7 +69,10 @@ struct UnlockGate<Content: View>: View {
         isUnlocking = true
         defer { isUnlocking = false }
         do {
-            try await connection.unlock(reason: String(localized: "Unlock the connection to your computer"))
+            try await connection.unlock(
+                reason: String(
+                    localized: "ios:app.lock.biometricReason", defaultValue: "Unlock the connection to your computer",
+                    comment: "The reason shown in the Face ID / passcode prompt."))
             // Unpaired meanwhile (revoked, then cleared): nothing left to guard.
             isLocked = connection.isPaired && !connection.isUnlocked
         } catch {

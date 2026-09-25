@@ -41,32 +41,6 @@ struct SettingsTests {
         #expect(snapshot.lastBackupAt == nil)
     }
 
-    @Test("SettingsPatch encodes id/providerConfig/providers, and lastBackupAt only when set")
-    func encodesSettingsPatch() throws {
-        let patch = SettingsPatch(
-            id: "global",
-            providerConfig: ProviderConfig(provider: "Anthropic Claude", model: "claude-sonnet-5", modelSnapshot: nil),
-            providers: ProvidersConfig().settingApiKey("sk-ant-xyz", for: .anthropicClaude)
-        )
-        let data = try JSONEncoder().encode(patch)
-        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        #expect(obj?["id"] as? String == "global")
-        let providerConfig = obj?["providerConfig"] as? [String: Any]
-        #expect(providerConfig?["provider"] as? String == "Anthropic Claude")
-        let providers = obj?["providers"] as? [String: Any]
-        #expect(providers?["anthropicApiKey"] as? String == "sk-ant-xyz")
-        #expect(obj?.keys.contains("lastBackupAt") == false)
-    }
-
-    @Test("SettingsPatch echoes lastBackupAt so the server's unconditional write doesn't null it")
-    func settingsPatchEchoesLastBackupAt() throws {
-        let patch = SettingsPatch(
-            id: "global", providerConfig: nil, providers: nil, lastBackupAt: "2026-09-18T12:00:00.000Z")
-        let data = try JSONEncoder().encode(patch)
-        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        #expect(obj?["lastBackupAt"] as? String == "2026-09-18T12:00:00.000Z")
-    }
-
     @Test("ProvidersConfig.apiKey(for:) and settingApiKey(_:for:) round-trip every provider")
     func providersConfigAccessors() {
         // Every provider except Ollama has a settable API key field (Ollama has
@@ -170,5 +144,57 @@ struct SettingsTests {
         #expect(response.models.count == 1)
         #expect(response.models[0].id == "claude-sonnet-5")
         #expect(response.models[0].snapshot.reasoningLevels == ["off", "low"])
+    }
+
+    @Test("baseUrl(for:) and settingBaseUrl(_:for:) reach each provider's own address field")
+    func providersConfigAddresses() {
+        for provider in AiProviders.allCases {
+            let updated = ProvidersConfig().settingBaseUrl("u-\(provider.rawValue)", for: provider)
+            #expect(updated.baseUrl(for: provider) == "u-\(provider.rawValue)")
+            for other in AiProviders.allCases where other != provider { #expect(updated.baseUrl(for: other) == nil) }
+        }
+        #expect(ProvidersConfig().settingBaseUrl("e", for: .azureOpenAi).azureOpenAiEndpoint == "e")
+        #expect(ProvidersConfig().settingBaseUrl("o", for: .ollama).ollamaBaseUrl == "o")
+    }
+
+    @Test("providerConfig and providers keep keys this app does not model, at every level, through a round trip")
+    func providerColumnsKeepUnmodelledKeys() throws {
+        let json = #"""
+            {"id":"global",
+             "providerConfig":{"provider":"OpenAI GPT","model":"gpt-5","routing":{"fallback":"x"},
+               "modelSnapshot":{"contextWindow":1000,"reasoningLevels":[],"knowledgeCutoff":"2026-01"}},
+             "providers":{"openaiApiKey":"sk","mistralApiKey":"m-1","deepseekBaseUrl":"https://d.example.com"}}
+            """#
+        let snapshot = try JSONDecoder().decode(SettingsSnapshot.self, from: Data(json.utf8))
+        let config = try #require(snapshot.providerConfig)
+        let providers = try #require(snapshot.providers)
+        #expect(config.unmodelledFields["routing"] == .object(["fallback": .string("x")]))
+        #expect(config.modelSnapshot?.unmodelledFields["knowledgeCutoff"] == .string("2026-01"))
+        #expect(providers.unmodelledFields == ["mistralApiKey": .string("m-1"), "deepseekBaseUrl": .string("https://d.example.com")])
+
+        let configJSON = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(config)) as? [String: Any])
+        #expect((configJSON["routing"] as? [String: Any])?["fallback"] as? String == "x")
+        #expect((configJSON["modelSnapshot"] as? [String: Any])?["knowledgeCutoff"] as? String == "2026-01")
+        #expect(configJSON["model"] as? String == "gpt-5")
+        let providersJSON = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(providers)) as? [String: Any])
+        #expect(Set(providersJSON.keys) == ["openaiApiKey", "mistralApiKey", "deepseekBaseUrl"])
+        #expect(try JSONDecoder().decode(ProviderConfig.self, from: JSONEncoder().encode(config)) == config)
+        #expect(try JSONDecoder().decode(ProvidersConfig.self, from: JSONEncoder().encode(providers)) == providers)
+    }
+
+    @Test("with nothing unmodelled, the provider columns encode exactly the modelled keys, nils omitted")
+    func providerColumnsEncodeOnlyModelledKeys() throws {
+        let config = ProviderConfig(provider: "Ollama", model: nil, modelSnapshot: ModelSnapshot())
+        let configJSON = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(config)) as? [String: Any])
+        #expect(Set(configJSON.keys) == ["provider", "modelSnapshot"])
+        let snapshotJSON = try #require(configJSON["modelSnapshot"] as? [String: Any])
+        #expect(Set(snapshotJSON.keys) == ["reasoningLevels"])
+        let providersJSON = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(ProvidersConfig(ollamaBaseUrl: "u")))
+                as? [String: Any])
+        #expect(Set(providersJSON.keys) == ["ollamaBaseUrl"])
     }
 }

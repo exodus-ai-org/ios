@@ -7,7 +7,7 @@ import Testing
 @Suite("CredentialStore")
 struct CredentialStoreTests {
     private let server = PairedServer(
-        hosts: ["10.0.0.2"], port: 60224, fingerprint: "f", name: "Mac",
+        hosts: ["10.0.0.2"], port: 63129, fingerprint: "f", name: "Mac",
         deviceId: "d", token: "secret-token")
 
     @Test("the in-memory store keeps the contract: save, load, clear")

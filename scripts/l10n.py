@@ -6,12 +6,20 @@
       --source-only skips the "every language is translated" check (used while
       strings are still being added); every other check still runs.
   l10n.py add KEY [--comment TEXT] [--no-translate] [--en-value TEXT] [--file PATH]
-      Adds KEY (the English source text) to a catalog if it is not there yet.
+      Adds KEY to a catalog if it is not there yet. A key is symbolic, never the English text:
+      `ios:<module>.<screen>.<element>` (this app only; --en-value gives its English text) or
+      `<namespace>:<dotted.path>` (also on the desktop; the sync writes its text).
   l10n.py fill TRANSLATIONS.json [--file PATH]
       Merges {"key": {"lang": "text"}} into a catalog as translated strings.
-  l10n.py seed-from-desktop LOCALES_DIR [--file PATH]
-      Copies the desktop app's translation of every key whose English text
-      equals one of its English strings exactly (never overwrites a value).
+  l10n.py sync-from-desktop [LOCALES_DIR] [--file PATH]
+      Overwrites every non-`ios:` key with the desktop's text in all ten languages ({{x}} becomes
+      %@, and then a literal % becomes %%); `ios:` keys are never touched. A catalog key the desktop
+      only has as `<key>_one` / `<key>_other` / … becomes a plural (`variations.plural`, {{count}} as
+      %lld, which must be the first placeholder). A language that orders the placeholders differently
+      from English gets positional ones (%2$@ … %1$@) and is listed. Exit status 1 when a shared key
+      is not on the desktop (renamed or removed?) or cannot be shared as-is (markup, a plural-suffixed
+      catalog key, placeholders that differ between languages).
+      Default LOCALES_DIR: Vendor/exodus-locales
 """
 from __future__ import annotations
 
@@ -31,7 +39,6 @@ DESKTOP_LANGUAGE = {
     "en": "en", "zh-Hant-TW": "zh-Hant", "zh-Hant-HK": "zh-HK", "ja": "ja", "ko": "ko",
     "fr": "fr", "de": "de", "es": "es", "pt-BR": "pt-BR", "it": "it",
 }
-DESKTOP_NAMESPACES = ["common", "chat", "settings"]  # preferred when an English text repeats
 
 PLACEHOLDER = r"%(?:\d+\$)?[-+0#]*\d*(?:\.\d+)?(?:hh|h|ll|l|q|z|t|j)?[diouxXeEfFgGaAcCsSp@]"
 PLACEHOLDER_RE = re.compile(PLACEHOLDER)
@@ -71,8 +78,75 @@ def unit_value(loc):
     return loc["stringUnit"].get("value")
 
 
+def source_value(loc):
+    """The text a localization is compared against: its plain value, or a plural's `other` form."""
+    if loc and "stringUnit" not in loc:
+        return unit_value(loc.get("variations", {}).get("plural", {}).get("other"))
+    return unit_value(loc)
+
+
+def forms(loc):
+    """[(label, stringUnit)] of a localization: one plain unit, or one per plural category.
+    None when it is neither (another kind of variation, a substitution, or an empty plural)."""
+    if "stringUnit" in loc and "variations" not in loc and "substitutions" not in loc:
+        return [("", loc["stringUnit"])]
+    plural = loc.get("variations", {}).get("plural") if set(loc) == {"variations"} else None
+    if not plural or set(loc["variations"]) != {"plural"} or "other" not in plural:
+        return None
+    if any(c not in PLURAL_CATEGORIES or "stringUnit" not in f for c, f in plural.items()):
+        return None
+    return [(" " + c, plural[c]["stringUnit"]) for c in PLURAL_CATEGORIES if c in plural]
+
+
 def placeholders(text):
     return sorted(re.sub(r"^%\d+\$", "%", m.group(0)) for m in PLACEHOLDER_RE.finditer(text.replace("%%", "")))
+
+
+INTERP_RE = re.compile(r"\{\{(\w+)\}\}")
+IOS_PREFIX = "ios:"
+# i18next <Trans> markup (`<1>…</1>`, `<strong>`, `<br/>`) and CLDR plural suffixes: neither fits a plain string.
+MARKUP_RE = re.compile(r"</?[A-Za-z0-9]+\s*/?>")
+PLURAL_CATEGORIES = ["zero", "one", "two", "few", "many", "other"]
+PLURAL_KEY_RE = re.compile(r"_(?:zero|one|two|few|many|other)$")
+PLURAL_COUNT = "count"
+MISSING_HEADING = "shared key not found on the desktop (renamed or removed?)"
+UNSHAREABLE_HEADING = "not shareable as-is: markup/plural"
+REORDERED_HEADING = "placeholders reordered (written positional, %n$):"
+
+
+def convert_placeholders(text, order=None, plural=False):
+    """Every `{{name}}` becomes `%@` — see the design spec's §5 for why never a typed specifier — except a
+    plural's `{{count}}`, which is `%lld` (the plural rule needs a number). With `order` (the names in English
+    order) each becomes positional, `%<n>$@`, for a language that puts them in another order.
+    In a text with a placeholder a literal `%` becomes `%%` first (an existing `%%` stays), or `%@% rain` would
+    read `% r` as a conversion. A text without one is shown as stored, never formatted, so its `%` stays as is."""
+    if not INTERP_RE.search(text):
+        return text
+
+    def spec(m):
+        kind = "lld" if plural and m.group(1) == PLURAL_COUNT else "@"
+        return "%%%d$%s" % (order.index(m.group(1)) + 1, kind) if order else "%" + kind
+
+    return INTERP_RE.sub(spec, re.sub(r"%%|%", "%%", text))
+
+
+def placeholder_names(text):
+    return INTERP_RE.findall(text)
+
+
+def flatten_desktop_locales(locales_dir):
+    """(iOS catalog language, "namespace:dotted.key") -> text, for every desktop locale this
+    project ships (DESKTOP_LANGUAGE's keys); anything else (e.g. zh-Hans) is skipped, matching the
+    desktop's own zh-Hans-falls-back-to-English choice."""
+    values = {}
+    for locale_dir in sorted(p for p in Path(locales_dir).iterdir() if p.is_dir()):
+        lang = DESKTOP_LANGUAGE.get(locale_dir.name)
+        if lang is None:
+            continue
+        for f in sorted(locale_dir.glob("*.json")):
+            for key, text in flatten(json.loads(f.read_text(encoding="utf-8"))):
+                values[(lang, "%s:%s" % (f.stem, key))] = text
+    return values
 
 
 # ---------------------------------------------------------------- Swift scanning
@@ -166,14 +240,41 @@ def literal_pieces(raw):
 
 
 def match_key(pieces, keys):
-    pattern = re.compile(PLACEHOLDER.join(re.escape(p) for p in pieces))
-    for key in keys:
-        if pattern.fullmatch(key):
-            return key
-    return None
+    # A key is a plain literal, so `pieces` has one entry. A literal with an interpolation is no key:
+    # it is reported, because that call site should be `String(localized:defaultValue:)`.
+    return pieces[0] if len(pieces) == 1 and pieces[0] in keys else None
 
 
 # ---------------------------------------------------------------- audit
+LOCALIZED_CALL_RE = re.compile(r"String\(\s*localized:")
+DEFAULT_VALUE_RE = re.compile(r"\s*,\s*defaultValue:\s*")
+
+
+def rendered(text):
+    """A catalog text as a reader sees it, every placeholder as `%@` (`%lld`, `%1$@`, … alike) and `%%` as `%`."""
+    return re.sub("%%|" + PLACEHOLDER, lambda m: "%" if m.group(0) == "%%" else "%@", text)
+
+
+def default_value_errors(text, call_start, key_end, key, strings, where):
+    """`String(localized: "key", defaultValue: "…")`: the call carries a `defaultValue:`, and when that is a
+    literal its text (each interpolation as `%@`) is the catalog's `en` for the key."""
+    args = text[key_end:skip_parens(text, text.index("(", call_start)) - 1]
+    given = DEFAULT_VALUE_RE.match(args)
+    if given is None:
+        return ['%s: String(localized: "%s") needs a defaultValue: with the English text' % (where, key)]
+    literal = key_end + given.end()
+    if not text.startswith('"', literal) or text.startswith('"""', literal):
+        return []  # not a plain literal: nothing to compare
+    default = "%@".join(literal_pieces(text[literal + 1:skip_string(text, literal) - 1]))
+    loc = strings[key].get("localizations", {}).get(SOURCE_LANGUAGE)
+    en = source_value(loc)
+    # A plural's call site may branch on the count to give each English form as its own defaultValue.
+    texts = [u.get("value", "") for _, u in forms(loc) or []] if loc else []
+    if en is None or default in map(rendered, texts or [en]):
+        return []  # no en is the catalog audit's error
+    return ['%s: defaultValue "%s" differs from the catalog en "%s" for "%s"' % (where, default, en, key)]
+
+
 def audit_catalog(path, implicit_source, source_only):
     rel = path.relative_to(ROOT).as_posix()
     if not path.exists():
@@ -190,7 +291,7 @@ def audit_catalog(path, implicit_source, source_only):
         stray = sorted(set(locs) - set(SHIPPED))
         if stray:
             errors.append("%s: %r has languages outside the shipped set: %s" % (rel, key, ", ".join(stray)))
-        source_text = key if implicit_source else unit_value(locs.get(SOURCE_LANGUAGE))
+        source_text = key if implicit_source else source_value(locs.get(SOURCE_LANGUAGE))
         if source_text is None:
             errors.append("%s: %r has no %s value" % (rel, key, SOURCE_LANGUAGE))
             continue
@@ -200,19 +301,35 @@ def audit_catalog(path, implicit_source, source_only):
                 if not source_only or lang == SOURCE_LANGUAGE:
                     errors.append("%s: %r is missing %s" % (rel, key, lang))
                 continue
-            if "variations" in loc or "stringUnit" not in loc:
-                errors.append("%s: %r [%s] must be a plain stringUnit (no variations)" % (rel, key, lang))
+            units = forms(loc)
+            if units is None:
+                errors.append("%s: %r [%s] must be a plain stringUnit or a plural with an `other` form" % (rel, key, lang))
                 continue
-            unit = loc["stringUnit"]
-            value = unit.get("value", "")
-            if unit.get("state") != "translated" or not value.strip():
-                errors.append("%s: %r [%s] is not translated" % (rel, key, lang))
-            elif placeholders(value) != placeholders(source_text):
-                errors.append("%s: %r [%s] placeholders differ from the source" % (rel, key, lang))
+            for label, unit in units:
+                value = unit.get("value", "")
+                if unit.get("state") != "translated" or not value.strip():
+                    errors.append("%s: %r [%s%s] is not translated" % (rel, key, lang, label))
+                elif placeholders(value) != placeholders(source_text):
+                    errors.append("%s: %r [%s%s] placeholders differ from the source" % (rel, key, lang, label))
     return errors
 
 
-def audit_sources(keys, excluded):
+def vendor_errors(strings):
+    """A desktop-namespaced catalog key must be in the vendored subtree, or nothing records where its
+    text came from (a later `sync-from-desktop` would report it missing)."""
+    vendor = ROOT / "Vendor/exodus-locales"
+    if not vendor.is_dir():
+        return []
+    en = {key for (lang, key) in flatten_desktop_locales(vendor) if lang == SOURCE_LANGUAGE}
+    return [
+        "%r is a desktop key but not in Vendor/exodus-locales (sync the subtree, or make it an ios: key)" % key
+        for key, entry in sorted(strings.items())
+        if not key.startswith(IOS_PREFIX) and entry.get("shouldTranslate") is not False
+        and key not in en and not any("%s_%s" % (key, c) in en for c in PLURAL_CATEGORIES)
+    ]
+
+
+def audit_sources(strings, excluded):
     errors, used = [], set()
     files = sorted((ROOT / "Sources").rglob("*.swift")) + [ROOT / "Project.swift"]
     for path in files:
@@ -243,20 +360,22 @@ def audit_sources(keys, excluded):
             line = text.count("\n", 0, start) + 1
             if "l10n:ignore" in raw_lines[line - 1] or not any(pieces):
                 continue
-            key = match_key(pieces, keys)
+            key = match_key(pieces, strings)
             if key is None:
                 errors.append('%s:%d: "%s" is not in Localizable.xcstrings' % (rel, line, "%@".join(pieces)))
-            else:
-                used.add(key)
+                continue
+            used.add(key)
+            if LOCALIZED_CALL_RE.match(m.group(0)):
+                errors += default_value_errors(text, m.start(), end, key, strings, "%s:%d" % (rel, line))
     return errors, used
 
 
 def cmd_audit(args):
     excluded = {Path(p).as_posix() for p in args.exclude}
-    errors = audit_catalog(LOCALIZABLE, True, args.source_only) + audit_catalog(INFOPLIST, False, args.source_only)
+    errors = audit_catalog(LOCALIZABLE, False, args.source_only) + audit_catalog(INFOPLIST, False, args.source_only)
     strings = load(LOCALIZABLE)["strings"]
-    source_errors, used = audit_sources(set(strings), excluded)
-    errors += source_errors
+    source_errors, used = audit_sources(strings, excluded)
+    errors += source_errors + vendor_errors(strings)
     for key, entry in sorted(strings.items()):
         if entry.get("shouldTranslate") is not False and key not in used:
             print("warning: %r is not referenced by any Swift string literal" % key)
@@ -311,48 +430,93 @@ def flatten(node, prefix=""):
             yield "%s%s" % (prefix, k), v
 
 
-def cmd_seed(args):
+def desktop_forms(values, key):
+    """lang -> {"": text} for a plain desktop key, or lang -> {category: text} when the desktop has it only
+    as plural suffixes; a language with neither is left out."""
+    found = {}
+    for lang in SHIPPED:
+        if values.get((lang, key)):
+            found[lang] = {"": values[(lang, key)]}
+            continue
+        plural = {c: values[(lang, "%s_%s" % (key, c))] for c in PLURAL_CATEGORIES if values.get((lang, "%s_%s" % (key, c)))}
+        if "other" in plural:
+            found[lang] = plural
+    return found
+
+
+def share(key, found):
+    """(localizations, reordered languages) for a key every language has, or (None, reason)."""
+    plural = "" not in found[SOURCE_LANGUAGE]
+    if plural and any("" in f for f in found.values()) or not plural and any("" not in f for f in found.values()):
+        return None, "plain in some languages, plural in others"
+    marked = [lang for lang in SHIPPED if any(MARKUP_RE.search(t) for t in found[lang].values())]
+    if marked:
+        return None, "markup in: " + ", ".join(marked)
+    order = placeholder_names(found[SOURCE_LANGUAGE]["other" if plural else ""])
+    if plural and (not order or order[0] != PLURAL_COUNT):
+        return None, "plural whose first placeholder is not {{%s}}" % PLURAL_COUNT
+    differ = [lang for lang in SHIPPED if any(sorted(placeholder_names(t)) != sorted(order) for t in found[lang].values())]
+    if differ:
+        return None, "placeholders differ in: " + ", ".join(differ)
+    reordered = [lang for lang in SHIPPED if any(placeholder_names(t) != order for t in found[lang].values())]
+    if reordered and len(set(order)) != len(order):
+        return None, "a repeated placeholder, reordered in: " + ", ".join(reordered)
+    locs = {}
+    for lang in SHIPPED:
+        positional = order if lang in reordered else None
+        units = {
+            c: {"stringUnit": {"state": "translated", "value": convert_placeholders(t, positional, plural)}}
+            for c, t in found[lang].items()
+        }
+        locs[lang] = {"variations": {"plural": units}} if plural else units[""]
+    return locs, reordered
+
+
+def cmd_sync(args):
+    """Overwrites every shared key from the desktop and saves. A shared key (not `ios:`) that is missing
+    from the desktop, or cannot be shared as-is, is listed as an error and left as it was."""
     path = resolve(args.file)
     catalog = load(path)
-    locales = Path(args.locales_dir).expanduser()
-    values, english = {}, {}  # (lang, namespace, key) -> text ; english text -> [(namespace, key)]
-    for locale_dir in sorted(p for p in locales.iterdir() if p.is_dir()):
-        lang = DESKTOP_LANGUAGE.get(locale_dir.name)
-        if lang is None:
-            continue
-        for f in sorted(locale_dir.glob("*.json")):
-            for key, text in flatten(json.loads(f.read_text(encoding="utf-8"))):
-                values[(lang, f.stem, key)] = text
-                if lang == SOURCE_LANGUAGE:
-                    english.setdefault(text, []).append((f.stem, key))
-    targets = [l for l in SHIPPED if l != SOURCE_LANGUAGE]
-    seeded, skipped = 0, []
+    values = flatten_desktop_locales(args.locales_dir)
+    synced, independent, missing, unshareable, reordered = 0, [], [], [], []
     for key, entry in sorted(catalog["strings"].items()):
         if entry.get("shouldTranslate") is False:
             continue
-        candidates = sorted(
-            english.get(key, []),
-            key=lambda c: (DESKTOP_NAMESPACES.index(c[0]) if c[0] in DESKTOP_NAMESPACES else 99, c),
-        )
-        chosen = None
-        for ns, k in candidates:
-            texts = [values.get((lang, ns, k)) for lang in targets]
-            if all(t and "{{" not in t for t in texts) and not PLACEHOLDER_RE.search(key):
-                chosen = (ns, k, texts)
-                break
-        if chosen is None:
-            skipped.append(key)
+        if key.startswith(IOS_PREFIX):
+            independent.append(key)
             continue
-        locs = entry.setdefault("localizations", {})
-        for lang, text in zip(targets, chosen[2]):
-            locs.setdefault(lang, {"stringUnit": {"state": "translated", "value": text}})
-        seeded += 1
-        print("seeded %r from %s:%s" % (key, chosen[0], chosen[1]))
+        if PLURAL_KEY_RE.search(key) and values.get((SOURCE_LANGUAGE, key)):
+            unshareable.append("%s (plural key: use %s)" % (key, PLURAL_KEY_RE.sub("", key)))
+            continue
+        found = desktop_forms(values, key)
+        absent = [lang for lang in SHIPPED if lang not in found]
+        if absent:
+            where = "every language" if len(absent) == len(SHIPPED) else ", ".join(absent)
+            missing.append("%s (missing in: %s)" % (key, where))
+            continue
+        locs, detail = share(key, found)
+        if locs is None:
+            unshareable.append("%s (%s)" % (key, detail))
+            continue
+        if detail:
+            reordered.append("%s (%s)" % (key, ", ".join(detail)))
+        entry.setdefault("localizations", {}).update(locs)
+        synced += 1
+        print("synced %r from the desktop" % key)
     save(path, catalog)
-    print("%d seeded; %d left for manual translation:" % (seeded, len(skipped)))
-    for key in skipped:
+    print("%d synced; %d independently translated (ios: keys, never on the desktop):" % (synced, len(independent)))
+    for key in independent:
         print("  " + key)
-    return 0
+    if reordered:
+        print("note: " + REORDERED_HEADING)
+        for line in reordered:
+            print("  " + line)
+    for heading, keys in ((MISSING_HEADING, missing), (UNSHAREABLE_HEADING, unshareable)):
+        if keys:
+            print("error: %s:" % heading)
+            for line in keys:
+                print("  " + line)
+    return 1 if missing or unshareable else 0
 
 
 def main():
@@ -373,10 +537,10 @@ def main():
     fill.add_argument("translations")
     fill.add_argument("--file")
     fill.set_defaults(run=cmd_fill)
-    seed = sub.add_parser("seed-from-desktop")
-    seed.add_argument("locales_dir")
-    seed.add_argument("--file")
-    seed.set_defaults(run=cmd_seed)
+    sync = sub.add_parser("sync-from-desktop")
+    sync.add_argument("locales_dir", nargs="?", default=str(ROOT / "Vendor/exodus-locales"))
+    sync.add_argument("--file")
+    sync.set_defaults(run=cmd_sync)
     args = parser.parse_args()
     sys.exit(args.run(args))
 

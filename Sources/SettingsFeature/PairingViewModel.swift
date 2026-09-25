@@ -35,7 +35,11 @@ public final class PairingViewModel {
     @discardableResult
     public func pair(from text: String?) async -> Bool {
         guard let text, let link = PairingLink(string: text) else {
-            fail(String(localized: "That is not an Exodus pairing code."), detail: nil)
+            fail(
+                String(
+                    localized: "ios:settings.pairing.notAPairingCode", defaultValue: "That is not an Exodus pairing code.",
+                    comment: "Error: the scanned or pasted text is not a pairing link from the Exodus desktop app. Exodus is the app's name."),
+                detail: nil)
             return false
         }
         isWorking = true
@@ -49,13 +53,18 @@ public final class PairingViewModel {
         } catch let error as CredentialError {
             // The credential needs a passcode-protected Keychain item to live in.
             fail(
-                String(localized: "Set a passcode on this device to pair with your computer."),
+                String(
+                    localized: "ios:settings.pairing.passcodeRequired",
+                    defaultValue: "Set a passcode on this device to pair with your computer.",
+                    comment: "Error: pairing stores a credential that iOS only allows on a device with a passcode."),
                 detail: String(describing: error))
         } catch {
             let nsError = error as NSError
             fail(
                 String(
-                    localized: "Could not reach your computer. Make sure both devices are on the same network."),
+                    localized: "ios:settings.pairing.unreachable",
+                    defaultValue: "Could not reach your computer. Make sure both devices are on the same network.",
+                    comment: "Error: none of the computer's addresses answered while pairing."),
                 detail: "\(nsError.domain) \(nsError.code): \(nsError.localizedDescription)")
         }
         return false

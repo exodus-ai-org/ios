@@ -1,6 +1,7 @@
 import Foundation
 import Models
 import NetworkingKit
+import Observation
 import Synchronization
 import Testing
 
@@ -305,6 +306,9 @@ struct ChatDetailViewModelTests {
         vm.composerText = "hey"
         await vm.sendMessage()
         #expect(vm.errorMessage == "Invalid API key")
+        #expect(vm.liveRunError?.message == "Invalid API key")
+        #expect(vm.liveRunError?.runId == vm.messages.last(where: { $0.role == "user" })?.id)
+        #expect(vm.showsErrorAlert == false)  // pinned to its run instead
         #expect(vm.status == .error)  // not overwritten by a trailing idle
         vm.composerText = "again"
         #expect(vm.canSend)
@@ -453,8 +457,8 @@ struct ChatDetailViewModelTests {
         await send.value
     }
 
-    @Test("showsPendingRow stays true while the last message is a tool result: the model has not spoken since", .timeLimit(.minutes(1)))
-    func pendingRowShowsAfterAToolResult() async throws {
+    @Test("after a tool result with no answer yet, the turn's live timeline shows progress instead of the dots", .timeLimit(.minutes(1)))
+    func liveTimelineReplacesTheDotsAfterAToolResult() async throws {
         serve(history: "[]", reply: toolResultReply, holdReplyOpen: true, recorder: RequestRecorder())
         defer { ChatDetailMockURLProtocol.holdsChatPostOpen = false }
         let harness = Harness()
@@ -466,7 +470,14 @@ struct ChatDetailViewModelTests {
         try await waitUntil("the tool result to arrive") { vm.messages.last?.role == "toolResult" }
 
         #expect(vm.isTurnInFlight)
-        #expect(vm.showsPendingRow)
+        #expect(vm.showsPendingRow == false)
+        let turnId = try #require(vm.streamingTurnId)
+        guard case .assistantTurn(let turn)? = vm.segments.last else {
+            Issue.record("no turn")
+            return
+        }
+        #expect(turn.id == turnId)
+        #expect(TranscriptRules.timelineIsLive(turn, isStreaming: true))
 
         harness.session.invalidateAndCancel()
         await send.value
@@ -944,5 +955,69 @@ struct ChatDetailViewModelTests {
         #expect(vm.showsEmptyState == false)
         harness.session.invalidateAndCancel()
         await appear.value
+    }
+}
+
+@MainActor
+@Suite("ChatDetailViewModel: the memory foot", .serialized)
+struct ChatDetailMemoryFootTests {
+    nonisolated private static let usage = #"{"u1":[{"id":"m2","key":"Work setup","section":"profile"}]}"#
+    nonisolated private static let reply = """
+        data: {"type":"memories_used","runId":"live-run","memories":[{"id":"m1","key":"Music","section":"topic"}]}\n\n\
+        data: {"type":"message_update","message":{"id":"a2","role":"assistant","content":"Hel"}}\n\n\
+        data: {"type":"tool_call_end","toolCallId":"k1","toolName":"update_memory","isError":false}\n\n\
+        data: {"type":"message_update","message":{"id":"a2","role":"assistant","content":"Hello"}}\n\n
+        """
+
+    private func serveMemory() {
+        ChatDetailMockURLProtocol.holdsChatPostOpen = false
+        ChatDetailMockURLProtocol.handler = { request in
+            switch (request.httpMethod ?? "GET", request.url?.path ?? "") {
+            case ("GET", "/api/v1/chat/c1"): (200, Data(historyRowsJSON.utf8))
+            case ("GET", "/api/v1/memory/usage"): (200, Data(Self.usage.utf8))
+            case ("GET", "/api/v1/memory"): (200, Data("[]".utf8))
+            case ("POST", "/api/v1/chat"): (200, Data(Self.reply.utf8))
+            default: (404, Data(envelope404.utf8))
+            }
+        }
+    }
+
+    @Test("history usage lands by run; memories_used and update_memory's end reach the live run, not the settled one")
+    func streamAndHistory() async throws {
+        serveMemory()
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        await vm.loadMemoryUsage()
+        let settled = vm.memoryFoot.run("u1")
+        #expect(settled.used.map(\.key) == ["Work setup"])
+        let fired = Mutex(0)
+        withObservationTracking {
+            _ = (settled.used, settled.live, settled.undo)
+        } onChange: {
+            fired.withLock { $0 += 1 }
+        }
+        vm.composerText = "hey"
+        await vm.sendMessage()
+        try await waitUntil("the reply settles") { vm.status == .idle && vm.messages.last?.displayText == "Hello" }
+        #expect(vm.memoryFoot.run("live-run").used.map(\.key) == ["Music"])
+        let sent = try #require(vm.messages.last { $0.role == "user" })
+        #expect(vm.memoryFoot.run(sent.runId ?? sent.id).live, "the run whose update_memory ended here is live")
+        #expect(fired.withLock { $0 } == 0, "the settled run's foot was not touched by the streaming one")
+        ChatDetailMockURLProtocol.handler = nil
+    }
+
+    @Test("a new, empty chat asks for no usage; This is wrong replaces the composer's text and asks for focus")
+    func prefill() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", recorder: recorder)
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        await vm.loadMemoryUsage()
+        #expect(recorder.lines == ["GET /api/v1/chat/c1"])
+        vm.composerText = "draft"
+        vm.memoryFoot.onWrong("The memory about 'Music' is wrong: ")
+        #expect(vm.composerText == "The memory about 'Music' is wrong: ")
+        #expect(vm.composerFocusRequest == 1)
+        ChatDetailMockURLProtocol.handler = nil
     }
 }

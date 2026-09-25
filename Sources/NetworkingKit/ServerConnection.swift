@@ -17,6 +17,7 @@ public final class ServerConnection: @unchecked Sendable {
     private var server: PairedServer?
     /// The pin to trust while pairing, before there is a stored server.
     private var pendingPin: String?
+    private var computerChangeHandlers: [@Sendable () -> Void] = []
 
     public init(store: CredentialStoring) {
         self.store = store
@@ -28,9 +29,17 @@ public final class ServerConnection: @unchecked Sendable {
     /// untouched. The pin is read at each handshake, so pairing and unpairing take
     /// effect without a new session.
     public private(set) lazy var session: URLSession = URLSession(
-        configuration: .default,
+        configuration: Self.noStoreConfiguration(),
         delegate: PinnedSessionDelegate(pin: { [weak self] in self?.pin }),
         delegateQueue: nil)
+
+    /// Responses carry provider keys and MCP tokens: nothing of them may land in a cache on disk.
+    static func noStoreConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return configuration
+    }
 
     /// A credential exists (it may still be locked behind Face ID).
     public var isPaired: Bool { store.exists }
@@ -74,7 +83,10 @@ public final class ServerConnection: @unchecked Sendable {
     public func unlockComputer(session: URLSession? = nil) async -> Bool {
         guard isPaired else { return false }
         if !isUnlocked {
-            try? await unlock(reason: String(localized: "Unlock the connection to your computer"))
+            try? await unlock(
+                reason: String(
+                    localized: "ios:app.lock.biometricReason", defaultValue: "Unlock the connection to your computer",
+                    comment: "The reason shown in the Face ID / passcode prompt."))
         }
         guard isUnlocked, let base = baseURLString,
             let url = URL(string: base)?.appendingPathComponent("/api/v1/lock/unlock")
@@ -92,6 +104,17 @@ public final class ServerConnection: @unchecked Sendable {
     public func unpair() {
         try? store.clear()
         lock()
+        computerChanged()
+    }
+
+    /// Runs `handler` whenever the paired computer goes (unpaired, revoked) or another is paired, so what was kept in
+    /// memory from the old one (its screenshots, its images) goes with it.
+    public func onComputerChange(_ handler: @escaping @Sendable () -> Void) {
+        state.withLock { computerChangeHandlers.append(handler) }
+    }
+
+    private func computerChanged() {
+        for handler in state.withLock({ computerChangeHandlers }) { handler() }
     }
 
     /// Remember which address worked, so it is tried first next time.
@@ -149,7 +172,9 @@ public final class ServerConnection: @unchecked Sendable {
                 throw HTTPError(
                     statusCode: http.statusCode, code: "PAIRING_FAILED",
                     message: String(
-                        localized: "This pairing code is no longer valid. Show a new one on your computer."))
+                        localized: "ios:networking.pairing.codeRejected",
+                        defaultValue: "This pairing code is no longer valid. Show a new one on your computer.",
+                        comment: "Error: the computer refused the pairing code (used, expired or wrong)."))
             }
             let reply = try JSONDecoder().decode(PairResponse.self, from: data)
             let paired = PairedServer(
@@ -157,6 +182,7 @@ public final class ServerConnection: @unchecked Sendable {
                 deviceId: reply.deviceId, token: reply.token, lastGoodHost: host)
             try store.save(paired)
             state.withLock { server = paired }
+            computerChanged()
             return
         }
         throw lastError

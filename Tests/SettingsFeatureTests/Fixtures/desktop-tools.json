@@ -1,0 +1,145 @@
+{
+  "source": "exodus desktop: packages/shared/src/constants/tool-names.ts (TOOL_NAMES, LEGACY_TOOL_NAMES), constants/tools.ts (TOOL_REGISTRY, TOOL_GROUPS), src/renderer/components/settings/settings-form/tool-config.tsx (TOOL_CONFIG)",
+  "toolNames": [
+    "call_mcp_tool",
+    "computer_use",
+    "create_artifact",
+    "deep_research",
+    "edit_file",
+    "find_files",
+    "grep",
+    "image_generation",
+    "lcm_describe",
+    "lcm_expand",
+    "lcm_grep",
+    "list_directory",
+    "list_mcp_tools",
+    "map_itinerary",
+    "read_file",
+    "search_knowledge_base",
+    "terminal",
+    "update_memory",
+    "weather",
+    "web_fetch",
+    "web_search",
+    "write_file"
+  ],
+  "legacyNames": {
+    "computerUse": "computer_use",
+    "deepResearch": "deep_research",
+    "createArtifact": "create_artifact",
+    "imageGeneration": "image_generation",
+    "findFiles": "find_files",
+    "editFile": "edit_file",
+    "lcmGrep": "lcm_grep",
+    "grep": "grep",
+    "lcmDescribe": "lcm_describe",
+    "searchKnowledgeBase": "search_knowledge_base",
+    "mapItinerary": "map_itinerary",
+    "webSearch": "web_search",
+    "lcmExpand": "lcm_expand",
+    "weather": "weather",
+    "listDirectory": "list_directory",
+    "terminal": "terminal",
+    "readFile": "read_file",
+    "webFetch": "web_fetch",
+    "writeFile": "write_file"
+  },
+  "groups": [
+    "Web",
+    "File System",
+    "AI & Data",
+    "Maps"
+  ],
+  "registry": [
+    {
+      "name": "weather",
+      "labelKey": "settings:tools.registry.weather.label",
+      "descriptionKey": "settings:tools.registry.weather.description",
+      "group": "Web"
+    },
+    {
+      "name": "web_search",
+      "labelKey": "settings:tools.registry.webSearch.label",
+      "descriptionKey": "settings:tools.registry.webSearch.description",
+      "group": "Web"
+    },
+    {
+      "name": "web_fetch",
+      "labelKey": "settings:tools.registry.webFetch.label",
+      "descriptionKey": "settings:tools.registry.webFetch.description",
+      "group": "Web"
+    },
+    {
+      "name": "terminal",
+      "labelKey": "settings:tools.registry.terminal.label",
+      "descriptionKey": "settings:tools.registry.terminal.description",
+      "group": "File System"
+    },
+    {
+      "name": "read_file",
+      "labelKey": "settings:tools.registry.readFile.label",
+      "descriptionKey": "settings:tools.registry.readFile.description",
+      "group": "File System"
+    },
+    {
+      "name": "write_file",
+      "labelKey": "settings:tools.registry.writeFile.label",
+      "descriptionKey": "settings:tools.registry.writeFile.description",
+      "group": "File System"
+    },
+    {
+      "name": "edit_file",
+      "labelKey": "settings:tools.registry.editFile.label",
+      "descriptionKey": "settings:tools.registry.editFile.description",
+      "group": "File System"
+    },
+    {
+      "name": "list_directory",
+      "labelKey": "settings:tools.registry.listDirectory.label",
+      "descriptionKey": "settings:tools.registry.listDirectory.description",
+      "group": "File System"
+    },
+    {
+      "name": "find_files",
+      "labelKey": "settings:tools.registry.findFiles.label",
+      "descriptionKey": "settings:tools.registry.findFiles.description",
+      "group": "File System"
+    },
+    {
+      "name": "grep",
+      "labelKey": "settings:tools.registry.grep.label",
+      "descriptionKey": "settings:tools.registry.grep.description",
+      "group": "File System"
+    },
+    {
+      "name": "image_generation",
+      "labelKey": "settings:tools.registry.imageGeneration.label",
+      "descriptionKey": "settings:tools.registry.imageGeneration.description",
+      "group": "AI & Data"
+    },
+    {
+      "name": "search_knowledge_base",
+      "labelKey": "settings:tools.registry.searchKnowledgeBase.label",
+      "descriptionKey": "settings:tools.registry.searchKnowledgeBase.description",
+      "group": "AI & Data"
+    },
+    {
+      "name": "update_memory",
+      "labelKey": "settings:tools.registry.updateMemory.label",
+      "descriptionKey": "settings:tools.registry.updateMemory.description",
+      "group": "AI & Data"
+    },
+    {
+      "name": "map_itinerary",
+      "labelKey": "settings:tools.registry.mapItinerary.label",
+      "descriptionKey": "settings:tools.registry.mapItinerary.description",
+      "group": "Maps"
+    }
+  ],
+  "configured": [
+    "image_generation",
+    "map_itinerary",
+    "web_search"
+  ]
+}

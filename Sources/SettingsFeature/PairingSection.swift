@@ -25,25 +25,28 @@ struct PairingSection: View {
     }
 
     var body: some View {
-        Section("Computer") {
+        Section("ios:settings.pairing.sectionTitle") {
             if viewModel.isPaired {
                 if let name = viewModel.computerName {
-                    Text("Paired with \(name)")
+                    Text(
+                        String(
+                            localized: "ios:settings.pairing.pairedWith", defaultValue: "Paired with \(name)",
+                            comment: "Settings → Computer. %@ is the computer's name."))
                 }
-                Button("Unpair", role: .destructive) { confirmUnpair = true }
+                Button("ios:settings.pairing.unpair", role: .destructive) { confirmUnpair = true }
             } else if viewModel.isWorking {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text("Pairing…")
+                    Text("ios:settings.pairing.inProgress")
                 }
             } else {
                 Text(
-                    "Pair this iPhone with Exodus on your computer: open Settings → Devices there and choose Pair a device."
+                    "ios:settings.pairing.instructions"
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 if QRScannerView.isSupported {
-                    Button("Scan pairing code") { Task { await openScanner() } }
+                    Button("ios:settings.pairing.scanCode") { Task { await openScanner() } }
                         .navigationDestination(isPresented: $isScanning) {
                             ScannerScreen { link in
                                 scannedLink = link
@@ -51,7 +54,7 @@ struct PairingSection: View {
                             }
                         }
                 }
-                Button("Paste pairing link") {
+                Button("ios:settings.pairing.pasteLink") {
                     pair(from: UIPasteboard.general.string)
                 }
             }
@@ -59,32 +62,32 @@ struct PairingSection: View {
         .onChange(of: isScanning) { _, showing in
             if !showing { pairWithScannedLink() }
         }
-        .alert("Unpair from this computer?", isPresented: $confirmUnpair) {
-            Button("Unpair", role: .destructive) {
+        .alert("ios:settings.pairing.unpairConfirmTitle", isPresented: $confirmUnpair) {
+            Button("ios:settings.pairing.unpair", role: .destructive) {
                 viewModel.unpair()
                 onChange()
             }
-            Button("Cancel", role: .cancel) {}
+            Button("common:action.cancel", role: .cancel) {}
         } message: {
-            Text("You will need to scan a new pairing code to connect again.")
+            Text("ios:settings.pairing.unpairConfirmMessage")
         }
-        .alert("Camera access is off", isPresented: $cameraDenied) {
-            Button("Open Settings") {
+        .alert("ios:settings.pairing.cameraDeniedTitle", isPresented: $cameraDenied) {
+            Button("ios:settings.pairing.openSystemSettings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button("common:action.cancel", role: .cancel) {}
         } message: {
-            Text("Allow Exodus to use the camera in Settings, or paste the pairing link instead.")
+            Text("ios:settings.pairing.cameraDeniedMessage")
         }
         .alert(
-            "Pairing failed",
+            "ios:settings.pairing.failedTitle",
             isPresented: Binding(
                 get: { viewModel.errorMessage != nil },
                 set: { if !$0 { viewModel.clearError() } })
         ) {
-            Button("OK", role: .cancel) {}
+            Button("ios:app.alert.ok", role: .cancel) {}
         } message: {
             // The reason, then the technical detail beneath it — what to report.
             Text(verbatim: [viewModel.errorMessage, viewModel.errorDetail].compactMap { $0 }.joined(separator: "\n\n"))

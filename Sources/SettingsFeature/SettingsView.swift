@@ -2,145 +2,151 @@ import Models
 import NetworkingKit
 import SwiftUI
 
+/// Settings: a hub of groups, each row pushing one page. The pages share one `SettingsStore`, and each page's view
+/// model lives as long as the hub, so unsaved edits survive going back until Settings closes.
 public struct SettingsView: View {
     @State private var viewModel: SettingsViewModel
+    @State private var personality: PersonalityViewModel
+    @State private var tools: ToolsSettingsViewModel
+    @State private var memory: MemorySettingsViewModel
+    @State private var skills: SkillsSettingsViewModel
+    @State private var mcp: McpSettingsViewModel
+    @State private var profile: ProfileViewModel
+    @State private var backup: BackupSettingsViewModel
+    @State private var colorTone: ColorToneViewModel
+    @State private var store: SettingsStore
+    @State private var secrets: SecretsStatusModel
+    @Environment(ColorToneModel.self) private var toneModel: ColorToneModel?
+    @State private var path: [SettingsPage]
+    /// Bumped when pairing changes: `ServerConnection` is not observable.
+    @State private var pairingRevision = 0
     @Environment(\.dismiss) private var dismiss
     private let connection: ServerConnection?
-    /// Bumped when pairing changes, to show or hide the manual address.
-    @State private var pairingRevision = 0
 
-    public init(apiClient: APIClient, serverConfig: ServerConfigStore) {
-        _viewModel = State(initialValue: SettingsViewModel(apiClient: apiClient, serverConfig: serverConfig))
+    public init(apiClient: APIClient, serverConfig: ServerConfigStore, opensMemory: Bool = false) {
+        self.init(apiClient: apiClient, serverConfig: serverConfig, path: opensMemory ? [.memory] : [])
+    }
+
+    init(apiClient: APIClient, serverConfig: ServerConfigStore, path: [SettingsPage]) {
+        let store = SettingsStore(apiClient: apiClient)
+        _viewModel = State(
+            initialValue: SettingsViewModel(apiClient: apiClient, serverConfig: serverConfig, store: store))
+        _personality = State(initialValue: PersonalityViewModel(store: store))
+        _tools = State(initialValue: ToolsSettingsViewModel(store: store))
+        _memory = State(initialValue: MemorySettingsViewModel(store: store, apiClient: apiClient))
+        _skills = State(initialValue: SkillsSettingsViewModel(apiClient: apiClient))
+        _mcp = State(initialValue: McpSettingsViewModel(apiClient: apiClient))
+        _profile = State(initialValue: ProfileViewModel(apiClient: apiClient))
+        _backup = State(initialValue: BackupSettingsViewModel(apiClient: apiClient))
+        _colorTone = State(initialValue: ColorToneViewModel(store: store))
+        _store = State(initialValue: store)
+        _secrets = State(initialValue: SecretsStatusModel(apiClient: apiClient))
+        _path = State(initialValue: path)
         connection = serverConfig.connection
     }
 
-    /// Reads `pairingRevision` so that pairing or unpairing re-evaluates it.
-    private var showsManualAddress: Bool {
-        pairingRevision >= 0 && connection?.isPaired != true
+    public var body: some View {
+        NavigationStack(path: $path) {
+            List {
+                SecretsNoticeSections(status: secrets.status) { item in
+                    SecretNoticeJump.open(item, path: &path, settings: viewModel)
+                }
+                ForEach(SettingsGroup.allCases) { group in
+                    let rows = SettingsHubRow.rows(in: group)
+                    if !rows.isEmpty {
+                        Section {
+                            ForEach(rows) { row in
+                                NavigationLink(value: row.page) { label(for: row) }
+                            }
+                        } header: {
+                            Text(group.title)
+                        }
+                    }
+                }
+                #if DEBUG
+                SettingsDebugSection()
+                #endif
+            }
+            .navigationTitle("common:nav.settings")
+            .navigationDestination(for: SettingsPage.self) { page in
+                destination(for: page)
+                    .navigationTitle(Text(SettingsHubRow.row(for: page).title))
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("common:action.close", role: .close) { dismiss() }
+                }
+            }
+            .task {
+                await viewModel.reloadIfUnchanged()
+                await secrets.load()
+            }
+            // Back on the hub from a page that may have changed a key: the notice follows the computer.
+            .onChange(of: path) { _, now in
+                if now.isEmpty { Task { await secrets.load() } }
+            }
+        }
+        .onChange(of: store.snapshot?.colorTone, initial: true) {
+            if let snapshot = store.snapshot { colorTone.adopt(snapshot) }
+        }
+        .onChange(of: colorTone.selected) {
+            if colorTone.hasLoaded { toneModel?.apply(colorTone.selected) }
+        }
     }
 
-    public var body: some View {
-        NavigationStack {
-            Form {
-                if let connection {
-                    PairingSection(connection: connection) {
-                        // A different server from here on: reload what it holds.
-                        pairingRevision += 1
-                        Task { await viewModel.loadSettings() }
-                    }
-                }
+    @ViewBuilder
+    private func destination(for page: SettingsPage) -> some View {
+        switch page {
+        case .colorTone:
+            ColorToneSettingsPage(viewModel: colorTone)
+        case .connection:
+            ConnectionSettingsPage(viewModel: viewModel, connection: connection, pairingRevision: $pairingRevision)
+        case .providers:
+            ProviderSettingsPage(viewModel: viewModel, secrets: secrets)
+        case .tools:
+            ToolsSettingsPage(viewModel: tools)
+        case .personality:
+            PersonalitySettingsPage(viewModel: personality)
+        case .memory:
+            MemorySettingsPage(viewModel: memory)
+        case .skills:
+            SkillsSettingsPage(viewModel: skills)
+        case .mcp:
+            McpSettingsPage(viewModel: mcp)
+        case .profile:
+            ProfileSettingsPage(viewModel: profile)
+        case .backup:
+            BackupSettingsPage(viewModel: backup)
+        }
+    }
 
-                // The manual address reaches the computer's plain loopback
-                // listener — the Simulator's way in. A paired device ignores it.
-                if showsManualAddress {
-                    Section("Connection") {
-                        TextField(
-                            text: $viewModel.serverURLText,
-                            prompt: Text(verbatim: "http://localhost:60223")
-                        ) {
-                            Text("Server address")
-                        }
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .onSubmit {
-                            // A new address means a different server: reload its provider settings.
-                            if viewModel.saveServerURL() {
-                                Task { await viewModel.loadSettings() }
-                            }
-                        }
-                    }
-                }
-
-                Section("AI Providers") {
-                    Picker(
-                        "Provider",
-                        selection: Binding(
-                            get: { viewModel.selectedProvider },
-                            set: { viewModel.select(provider: $0) })
-                    ) {
-                        ForEach(AiProviders.allCases) { provider in
-                            Text(provider.rawValue).tag(provider)
-                        }
-                    }
-
-                    if viewModel.providerUsesApiKey {
-                        SecureField("API Key", text: $viewModel.apiKeyText)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    } else {
-                        Text("Ollama runs on your Mac and needs no API key.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if viewModel.availableModels.isEmpty {
-                        TextField("Model", text: $viewModel.modelText)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    } else {
-                        Picker("Model", selection: $viewModel.modelText) {
-                            // Keep the current value selectable even when it isn't in the catalog.
-                            if viewModel.modelText.isEmpty {
-                                Text("Select a model").tag("")
-                            } else if !viewModel.availableModels.contains(where: { $0.id == viewModel.modelText }) {
-                                Text(viewModel.modelText).tag(viewModel.modelText)
-                            }
-                            ForEach(viewModel.availableModels) { model in
-                                Text(model.displayName).tag(model.id)
-                            }
-                        }
-                    }
-
-                    Button {
-                        Task { await viewModel.fetchModels() }
-                    } label: {
-                        if viewModel.isLoadingModels {
-                            ProgressView()
-                                .accessibilityLabel("Loading models")
-                        } else {
-                            Text("Refresh model list")
-                        }
-                    }
-                    .disabled(!viewModel.canFetchModels)
-                }
-
-                if let errorMessage = viewModel.errorMessage {
-                    Section {
-                        Text(errorMessage).foregroundStyle(.red)
-                    }
+    private func label(for row: SettingsHubRow) -> some View {
+        LabeledContent {
+            if row.page == .connection { connectionStatus }
+            if row.page == .colorTone, colorTone.hasLoaded {
+                HStack(spacing: 8) {
+                    Text(colorTone.selected.title)
+                    ColorToneSwatch(tone: colorTone.selected)
                 }
             }
-            .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        Task {
-                            guard viewModel.saveServerURL() else { return }
-                            // Not loaded (first run, or the address just changed): connect to that server and
-                            // load its settings instead of writing. Never write to a server we haven't read.
-                            guard viewModel.hasLoadedSettings else {
-                                await viewModel.loadSettings()
-                                return
-                            }
-                            if await viewModel.save() {
-                                dismiss()
-                            }
-                        }
-                    } label: {
-                        if viewModel.hasLoadedSettings {
-                            Text("Save")
-                        } else {
-                            Text("Connect")
-                        }
-                    }
-                    .disabled(viewModel.isSaving || viewModel.isLoading)
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+        } label: {
+            Label {
+                Text(row.title)
+            } icon: {
+                Image(systemName: row.systemImage)
             }
-            .task { await viewModel.loadSettings() }
+        }
+    }
+
+    /// Reads `pairingRevision` so that pairing or unpairing re-evaluates it.
+    @ViewBuilder
+    private var connectionStatus: some View {
+        if pairingRevision >= 0, let connection {
+            if !connection.isPaired {
+                Text("ios:settings.hub.notPaired")
+            } else if let name = connection.serverName {
+                Text(verbatim: name)
+            }
         }
     }
 }

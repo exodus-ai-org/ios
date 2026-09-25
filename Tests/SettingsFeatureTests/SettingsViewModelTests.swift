@@ -231,7 +231,9 @@ struct SettingsViewModelTests {
         await vm.loadSettings()
         #expect(vm.selectedProvider == .anthropicClaude)
         #expect(vm.modelText == "claude-sonnet-5")
-        #expect(vm.apiKeyText == "sk-ant-1")
+        // A saved key is never put in the field: the page describes it instead.
+        #expect(vm.apiKeyText == "")
+        #expect(vm.savedKeyState == .saved(lastFour: nil))
         #expect(vm.errorMessage == nil)
     }
 
@@ -252,7 +254,7 @@ struct SettingsViewModelTests {
         #expect(body["apiKey"] as? String == "sk-ant-xyz")
     }
 
-    @Test("save() posts only id/providerConfig/providers and reports success")
+    @Test("save() posts only id/lastBackupAt/providerConfig/providers and reports success")
     func saveSendsPartialPatch() async throws {
         let recorder = BodyRecorder()
         serve(recorder: recorder)
@@ -263,8 +265,9 @@ struct SettingsViewModelTests {
         let success = await vm.save()
         #expect(success)
         let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
-        #expect(Set(body.keys) == ["id", "providerConfig", "providers"])
+        #expect(Set(body.keys) == ["id", "lastBackupAt", "providerConfig", "providers"])
         #expect(body["id"] as? String == "global")
+        #expect(body["lastBackupAt"] is NSNull)
         let providerConfig = try #require(body["providerConfig"] as? [String: Any])
         #expect(providerConfig["provider"] as? String == "Anthropic Claude")
         #expect(providerConfig["model"] as? String == "claude-sonnet-5")
@@ -314,7 +317,10 @@ struct SettingsViewModelTests {
         await vm.fetchModels()
         vm.modelText = "claude-opus-5"
         #expect(await vm.save())
-        let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
+        // The fetch stored the list in modelCatalog first; the save is the second write.
+        let bodies = recorder.bodies(for: "/api/v1/settings")
+        try #require(bodies.count == 2)
+        let body = try #require(try JSONSerialization.jsonObject(with: bodies[1]) as? [String: Any])
         let providerConfig = try #require(body["providerConfig"] as? [String: Any])
         #expect(providerConfig["model"] as? String == "claude-opus-5")
         let snapshot = try #require(providerConfig["modelSnapshot"] as? [String: Any])
@@ -355,7 +361,7 @@ struct SettingsViewModelTests {
         #expect(providerConfig.keys.contains("modelSnapshot") == false)
     }
 
-    @Test("switching provider swaps the key and model, clears the catalog, and switching back restores them")
+    @Test("switching provider swaps the key, model and list, and switching back restores them")
     func switchingProviderSwapsKeyAndResetsModel() async throws {
         serve(
             settings: Self.loadedSettingsJSON,
@@ -368,13 +374,16 @@ struct SettingsViewModelTests {
 
         vm.select(provider: .openAiGpt)
         #expect(vm.selectedProvider == .openAiGpt)
-        #expect(vm.apiKeyText == "sk-oai-2")
+        #expect(vm.apiKeyText == "")
+        #expect(vm.savedKeyState == .saved(lastFour: nil))
         #expect(vm.modelText == "")
         #expect(vm.availableModels.isEmpty)
 
         vm.select(provider: .anthropicClaude)
-        #expect(vm.apiKeyText == "sk-ant-1")
+        #expect(vm.apiKeyText == "")
+        #expect(vm.savedKeyState == .saved(lastFour: nil))
         #expect(vm.modelText == "claude-sonnet-5")
+        #expect(vm.availableModels.map(\.id) == ["claude-sonnet-5"])
     }
 
     @Test("saving after a provider switch never copies the previous provider's key into the new one")
@@ -397,17 +406,18 @@ struct SettingsViewModelTests {
         #expect(providers.keys.contains("openaiApiKey") == false)
     }
 
-    @Test("clearing the key field removes that provider's key and leaves the other providers' keys alone")
+    @Test("Clear posts that provider's key as null and leaves the other providers' keys alone")
     func clearingAKeyRemovesOnlyThatKey() async throws {
         let recorder = BodyRecorder()
         serve(settings: Self.loadedSettingsJSON, recorder: recorder)
         let (vm, _) = makeViewModel()
         await vm.loadSettings()
-        vm.apiKeyText = ""
+        vm.clearKey()
+        #expect(vm.savedKeyState == .willClear)
         #expect(await vm.save())
         let body = try recorder.onlyJSONBody(for: "/api/v1/settings")
         let providers = try #require(body["providers"] as? [String: Any])
-        #expect(providers.keys.contains("anthropicApiKey") == false)
+        #expect(providers["anthropicApiKey"] is NSNull)
         #expect(providers["openaiApiKey"] as? String == "sk-oai-2")
     }
 
@@ -622,7 +632,8 @@ struct SettingsViewModelTests {
         // The form still shows server B, and is marked loaded for B.
         #expect(vm.selectedProvider == .openAiGpt)
         #expect(vm.modelText == "b-model")
-        #expect(vm.apiKeyText == "sk-b")
+        #expect(vm.apiKeyText == "")
+        #expect(vm.savedKeyState == .saved(lastFour: nil))
         #expect(vm.hasLoadedSettings)
         #expect(vm.errorMessage == nil)
         #expect(vm.isLoading == false)
@@ -695,5 +706,114 @@ extension URLRequest {
             data.append(buffer, count: read)
         }
         return data
+    }
+}
+
+@MainActor
+@Suite("AI Providers: saving over the computer's settings")
+struct ProviderSaveMergeTests {
+    private static let loaded = #"""
+        {"id":"global","lastBackupAt":null,
+         "providerConfig":{"provider":"Anthropic Claude","model":"claude-sonnet-5"},
+         "providers":{"anthropicApiKey":"sk-ant-1","xAiBaseUrl":"https://api.x.ai/v1"}}
+        """#
+    /// The desktop saved in between: a Google key, a new xAI address, another model and a key this app does not model.
+    private static let desktopEdited = #"""
+        {"id":"global","lastBackupAt":"2026-09-24T08:00:00.000Z",
+         "providerConfig":{"provider":"Anthropic Claude","model":"claude-opus-5","temperature":1},
+         "providers":{"anthropicApiKey":"sk-ant-1","xAiBaseUrl":"https://eu.api.x.ai/v1","googleGeminiApiKey":"AIza-desk"}}
+        """#
+
+    private func loadedViewModel(_ server: SettingsPageTestServer, suite: String = #function) async -> SettingsViewModel {
+        let (client, config) = server.makeClient(suite)
+        let vm = SettingsViewModel(apiClient: client, serverConfig: config)
+        await vm.loadSettings()
+        return vm
+    }
+
+    @Test("a desktop edit made between load and save survives; only the field edited here is written over it")
+    func desktopEditSurvivesSave() async throws {
+        let server = SettingsPageTestServer(rows: [Self.loaded])
+        let vm = await loadedViewModel(server)
+        server.serve(rows: [Self.desktopEdited])
+        vm.apiKeyText = "sk-ant-phone"
+        #expect(vm.hasUnsavedChanges)
+        #expect(await vm.save())
+
+        let body = try server.onlyPostBody()
+        #expect(Set(body.keys) == ["id", "lastBackupAt", "providerConfig", "providers"])
+        #expect(body["lastBackupAt"] as? String == "2026-09-24T08:00:00.000Z")
+        let providers = try #require(body["providers"] as? [String: Any])
+        #expect(providers["anthropicApiKey"] as? String == "sk-ant-phone")
+        #expect(providers["googleGeminiApiKey"] as? String == "AIza-desk")
+        #expect(providers["xAiBaseUrl"] as? String == "https://eu.api.x.ai/v1")
+        let providerConfig = try #require(body["providerConfig"] as? [String: Any])
+        #expect(providerConfig["model"] as? String == "claude-opus-5")
+        #expect(providerConfig["temperature"] as? Int == 1)
+        #expect(vm.modelText == "claude-opus-5")
+        #expect(vm.hasUnsavedChanges == false)
+    }
+
+    @Test("a model picked here is written over the fresh providerConfig, keeping its other keys and the desktop's key")
+    func pickedModelOverFreshConfig() async throws {
+        let server = SettingsPageTestServer(rows: [Self.loaded])
+        let vm = await loadedViewModel(server)
+        server.serve(rows: [Self.desktopEdited])
+        vm.modelText = "claude-haiku-5"
+        #expect(await vm.save())
+
+        let body = try server.onlyPostBody()
+        let providerConfig = try #require(body["providerConfig"] as? [String: Any])
+        #expect(providerConfig["model"] as? String == "claude-haiku-5")
+        #expect(providerConfig["provider"] as? String == "Anthropic Claude")
+        #expect(providerConfig["temperature"] as? Int == 1)
+        let providers = try #require(body["providers"] as? [String: Any])
+        #expect(providers["googleGeminiApiKey"] as? String == "AIza-desk")
+        #expect(providers["anthropicApiKey"] as? String == "sk-ant-1")
+    }
+
+    @Test("pull to refresh keeps the key typed here and takes everything else from the computer")
+    func refreshKeepsEdits() async throws {
+        let server = SettingsPageTestServer(rows: [Self.loaded])
+        let vm = await loadedViewModel(server)
+        vm.apiKeyText = "sk-ant-phone"
+        server.serve(rows: [Self.desktopEdited])
+        await vm.refresh()
+        #expect(vm.apiKeyText == "sk-ant-phone")
+        #expect(vm.modelText == "claude-opus-5")
+        vm.select(provider: .xaiGrok)
+        #expect(vm.baseURLText == "https://eu.api.x.ai/v1")
+        #expect(server.postBodies.isEmpty)
+        #expect(vm.hasLoadedSettings)
+    }
+
+    @Test("opening the page re-reads the computer's settings only when nothing is being edited")
+    func reloadOnAppearOnlyWithoutEdits() async throws {
+        let server = SettingsPageTestServer(rows: [Self.loaded])
+        let vm = await loadedViewModel(server)
+        server.serve(rows: [Self.desktopEdited])
+        vm.apiKeyText = "sk-ant-phone"
+        await vm.reloadIfUnchanged()
+        #expect(server.methods == ["GET"])
+        #expect(vm.apiKeyText == "sk-ant-phone")
+
+        vm.apiKeyText = "sk-ant-1"
+        #expect(vm.hasUnsavedChanges == false)
+        await vm.reloadIfUnchanged()
+        #expect(server.methods == ["GET", "GET"])
+        #expect(vm.modelText == "claude-opus-5")
+    }
+
+    @Test("a providers column the phone cannot read is an error state; Save writes nothing over it")
+    func unreadableProvidersAreNotWritten() async throws {
+        let server = SettingsPageTestServer(rows: [
+            #"{"id":"global","providers":{"anthropicApiKey":"sk-ant-1","openaiApiKey":5}}"#
+        ])
+        let vm = await loadedViewModel(server)
+        #expect(vm.hasLoadedSettings == false)
+        #expect(vm.errorMessage?.contains("can't read") == true)
+        vm.apiKeyText = "sk-ant-phone"
+        #expect(await vm.save() == false)
+        #expect(server.postBodies.isEmpty)
     }
 }
