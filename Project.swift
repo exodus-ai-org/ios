@@ -36,7 +36,12 @@ let project = Project(
             deploymentTargets: deploymentTargets,
             infoPlist: .extendingDefault(
                 with: [
-                    "UILaunchScreen": [:],
+                    // Ody on a plain background; LaunchSplash (Sources/App)
+                    // picks up from this exact frame and animates it away.
+                    "UILaunchScreen": [
+                        "UIColorName": "LaunchBackground",
+                        "UIImageName": "LaunchLogo"
+                    ],
                     "NSAppTransportSecurity": [
                         "NSAllowsLocalNetworking": true
                     ],
