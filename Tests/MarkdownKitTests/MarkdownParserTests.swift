@@ -232,6 +232,38 @@ struct MarkdownParserTests {
         #expect(MarkdownFixtures.runs(content).first { $0.text == "icon" }?.link?.absoluteString == "https://x.com/i.png")
     }
 
+    @Test("an HTML line break is a line break, in any spelling; in code it is the text it was")
+    func htmlBreaks() throws {
+        for tag in ["<br>", "<br/>", "<br />", "<BR>", "<Br  />"] {
+            let content = try #require(paragraph("one\(tag)two"))
+            #expect(MarkdownFixtures.plain(content) == "one\ntwo", "\(tag)")
+        }
+        let span = try #require(paragraph("a `<br>` b"))
+        #expect(MarkdownFixtures.plain(span) == "a <br> b")
+        #expect(only("```\n<br>\n```") == .codeBlock(language: nil, code: "<br>"))
+        let other = try #require(paragraph("x <span>y</span><br>z"))
+        #expect(MarkdownFixtures.plain(other) == "x <span>y</span>\nz")
+    }
+
+    @Test("a break at the start or the end of a paragraph leaves no empty line")
+    func edgeBreaks() throws {
+        let content = try #require(paragraph("<br>one<br>two<br/>"))
+        #expect(MarkdownFixtures.plain(content) == "one\ntwo")
+    }
+
+    @Test("a paragraph or an HTML block that is nothing but line breaks is dropped")
+    func onlyBreaks() {
+        #expect(MarkdownParser.parse("<br>").isEmpty)
+        #expect(MarkdownParser.parse("<BR/>").isEmpty)
+        #expect(MarkdownParser.parse("<br> <br />").isEmpty)
+        #expect(MarkdownParser.parse("<br>\n<br>").isEmpty)
+        let around = MarkdownParser.parse("before\n\n<br>\n\nafter")
+        #expect(around.map(\.id.index) == [0, 1])
+        #expect(around.count == 2)
+        // An HTML block that says something keeps it, as text, with its breaks as line breaks.
+        #expect(only("<div>a<br>b</div>") == .html("<div>a\nb</div>"))
+    }
+
     @Test("a half link shows as literal text before healing and as plain text after")
     func halfLink() throws {
         let raw = try #require(paragraph("see [text](https://exa"))

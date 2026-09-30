@@ -44,14 +44,15 @@ struct ExodusApp: App {
         WindowGroup {
             Group {
                 #if DEBUG
+                // The galleries of chat content are painted as a chat is.
                 if MarkdownGalleryLaunch.isEnabled {
-                    MarkdownGalleryView()
+                    MarkdownGalleryView().chatTone(toneModel)
                 } else if MessageGalleryLaunch.isEnabled {
-                    MessageGalleryView()
+                    MessageGalleryView().chatTone(toneModel)
                 } else if SettingsGalleryLaunch.isEnabled {
                     SettingsGalleryView()
                 } else if CardPrototypesLaunch.isEnabled {
-                    CardPrototypesView(embedded: false)
+                    CardPrototypesView(embedded: false).chatTone(toneModel)
                 } else {
                     shell
                 }
@@ -59,10 +60,13 @@ struct ExodusApp: App {
                 shell
                 #endif
             }
-            .colorTone(toneModel.tone)
+            // The tone is the chat's: `ChatDetailView` paints itself in it. Everything around a chat — the
+            // drawer, Settings — keeps the system's own look, so the tone reads as the conversation's colour
+            // and not as the app's.
             .environment(\.accentGlyph, toneModel.tone.glyphColor)
             .environment(\.colorTone, toneModel.tone)
             .environment(\.toneAccent, toneModel.tone.color)
+            .environment(\.toneInk, toneModel.tone.inkColor)
             .environment(toneModel)
             .environment(\.renderDiagnostics, Self.diagnostics(reporter))
             .onChange(of: scenePhase) { _, phase in
@@ -84,3 +88,13 @@ struct ExodusApp: App {
         .launchSplash()
     }
 }
+
+#if DEBUG
+extension View {
+    /// A gallery of chat content, painted as a chat is (`ChatDetailView`): the tone's ink as the tint, and links
+    /// underlined where that ink is the text's own colour.
+    fileprivate func chatTone(_ model: ColorToneModel) -> some View {
+        colorTone(model.tone).environment(\.markdownUnderlinesLinks, model.tone == .neutral)
+    }
+}
+#endif

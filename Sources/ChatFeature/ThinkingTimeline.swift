@@ -8,6 +8,8 @@ extension EnvironmentValues {
 struct ThinkingTimeline: View {
     let turn: AssistantTurn
     let isLive: Bool
+    /// Opens the turn's Sources sheet: where the sites a step does not show are.
+    var showSources: () -> Void = {}
     @State private var isExpanded: Bool?
     @Environment(\.timelineStartsExpanded) private var startsExpanded
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -59,7 +61,7 @@ struct ThinkingTimeline: View {
             ForEach(Array(turn.steps.enumerated()), id: \.offset) { index, step in
                 TimelineStepRow(
                     step: step, isActive: isLive && index == turn.steps.count - 1,
-                    isLast: index == turn.steps.count - 1 && isLive)
+                    isLast: index == turn.steps.count - 1 && isLive, showSources: showSources)
             }
             if !isLive {
                 TimelineNode(isLast: true) {
@@ -78,6 +80,7 @@ private struct TimelineStepRow: View {
     let step: AssistantTurn.Step
     let isActive: Bool
     let isLast: Bool
+    let showSources: () -> Void
 
     var body: some View {
         TimelineNode(isLast: isLast) {
@@ -138,9 +141,14 @@ private struct TimelineStepRow: View {
             Text(verbatim: ToolPresentation.resultCountText(call.resultCount))
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            // A pill per site, not per result: the sheet has every result.
+            let pills = TimelineSources.pills(call.results)
             FlowLayout(spacing: 6) {
-                ForEach(Array(call.results.enumerated()), id: \.offset) { _, result in
-                    SourcePill(source: result)
+                ForEach(pills.sites) { site in
+                    SitePill(site: site)
+                }
+                if pills.more > 0 {
+                    MoreSitesPill(count: pills.more, open: showSources)
                 }
             }
         }
@@ -153,28 +161,67 @@ private struct TimelineStepRow: View {
     }
 }
 
-private struct SourcePill: View {
-    let source: CitationSource
+/// How a pill of the timeline is drawn: small print on a faint fill, quieter than the step it belongs to.
+private struct PillShape: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.caption)
+            .lineLimit(1)
+            .frame(minHeight: 28)
+            .background(.fill.quaternary, in: .capsule)
+            .contentShape(.capsule)
+            .foregroundStyle(.secondary)
+    }
+}
+
+/// A site a search found: its icon, its name and, when it gave more than one result, how many. It opens the
+/// site's first result.
+private struct SitePill: View {
+    let site: TimelineSources.Site
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         Button {
             // The Sources sheet's allowlist, so a pill and the sheet open exactly the same links.
-            if let url = ExternalLinkPolicy.openableURL(source.link) { openURL(url) }
+            if let url = ExternalLinkPolicy.openableURL(site.first.link) { openURL(url) }
         } label: {
-            Text(verbatim: ToolPresentation.host(of: source) ?? source.title)
-                .font(.caption)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 180)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
-                .contentShape(.capsule)
+            HStack(spacing: 5) {
+                SourceIconView(
+                    url: SourceIcon.url(for: site.first), fallback: SourceIcon.fallback(for: site.first), side: 15)
+                Text(verbatim: site.name)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 170)
+                if let count = site.countText {
+                    Text(verbatim: count)
+                        .monospacedDigit()
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.leading, 6)
+            .padding(.trailing, 10)
+            .modifier(PillShape())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .accessibilityLabel(Text(verbatim: source.title.isEmpty ? source.link : source.title))
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isLink)
+        .accessibilityLabel(Text(verbatim: site.name))
+        .accessibilityValue(Text(verbatim: ToolPresentation.resultCountText(site.count)))
+    }
+}
+
+/// The sites a step does not show: they are in the Sources sheet, which this opens.
+private struct MoreSitesPill: View {
+    let count: Int
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            Text(verbatim: ToolPresentation.moreSitesText(count))
+                .monospacedDigit()
+                .padding(.horizontal, 10)
+                .modifier(PillShape())
+        }
+        .buttonStyle(.plain)
     }
 }
 

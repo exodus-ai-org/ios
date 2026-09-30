@@ -56,6 +56,22 @@ struct DeepResearchJobTests {
         #expect(DeepResearchJob(json: json(#"{"id":"d","jobStatus":"archived","startTime":"yesterday"}"#))?.startTime == nil)
     }
 
+    @Test("a failed row: its errorMessage and endTime; an older row has neither and still decodes")
+    func failedRow() throws {
+        let failed = try #require(
+            DeepResearchJob(
+                json: json(
+                    #"{"id":"d","jobStatus":"failed","errorMessage":"APICallError: rate limited","finalReport":null,"webSources":null,"startTime":"2026-09-24T09:00:00.000Z","endTime":"2026-09-24T09:03:00.000Z"}"#
+                )))
+        #expect(failed.status == .failed)
+        #expect(failed.errorMessage == "APICallError: rate limited")
+        #expect(failed.endTime != nil)
+        let blank = DeepResearchJob(json: json(#"{"id":"d","jobStatus":"failed","errorMessage":""}"#))
+        #expect(blank?.errorMessage == nil)
+        let older = try #require(DeepResearchJob(json: json(DeepResearchFixtures.archived)))
+        #expect(older.errorMessage == nil)
+    }
+
     @Test("each progress payload type decodes to its event; an unknown type is kept as unknown")
     func events() throws {
         func event(_ data: String) throws -> DeepResearchEvent {
@@ -85,6 +101,8 @@ struct DeepResearchJobTests {
                 == .learned(["Trips fell"]))
         #expect(try event(#"{"type":4}"#) == .writing)
         #expect(try event(#"{"type":5,"query":"Cars"}"#) == .completed(query: "Cars"))
+        #expect(try event(#"{"type":6,"error":"TypeError: fetch failed"}"#) == .failed(error: "TypeError: fetch failed"))
+        #expect(try event(#"{"type":6}"#) == .failed(error: ""))
         #expect(try event(#"{"type":9}"#) == .unknown)
         let message = try #require(DeepResearchMessage(json: json(DeepResearchFixtures.message("m1", #"{"type":0}"#))))
         #expect(message.id == "m1")

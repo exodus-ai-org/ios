@@ -154,7 +154,7 @@ struct EditFileCard: View {
                     Text(verbatim: FileCardText.replacements(summary.count, before: summary.before, after: summary.after))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, CardStyle.inset)
                         .padding(.vertical, 7)
                 }
             }
@@ -321,9 +321,7 @@ struct FileCardHeader<Trailing: View>: View {
             }
             trailing
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(Color(.tertiarySystemFill))
+        .cardHeader()
         .accessibilityElement(children: .combine)
         .contextMenu {
             if let copyText {
@@ -382,7 +380,7 @@ struct FileCardNote: View {
             .italic()
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, CardStyle.inset)
             .padding(.vertical, 8)
     }
 }
@@ -406,7 +404,7 @@ struct CodeLines: View {
         }
         .font(.caption.monospaced())
         .textSelection(.enabled)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, CardStyle.inset)
         .padding(.vertical, 8)
         // Code does not reflow gracefully: past xxLarge a line wraps every word.
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)

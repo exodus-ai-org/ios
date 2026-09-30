@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 
 /// DEBUG-only: tool cards for the owner to judge on a device, drawn by the real views from desktop-shaped results. Reached from Settings → Card prototypes (a DEBUG row) or `-CardPrototypes`;
-/// `-CardPrototypesSection files|computer|research|weather|image|map|media|memory|approval` shows that group alone and
+/// `-CardPrototypesSection files|computer|research|weather|image|map|media|memory|approval|compare` shows that group alone and
 /// `-CardPrototypesY <points>` scrolls to an offset.
 public enum CardPrototypesLaunch {
     public static var isEnabled: Bool { ProcessInfo.processInfo.arguments.contains("-CardPrototypes") }
@@ -23,7 +23,7 @@ public enum CardPrototypesLaunch {
 }
 
 enum ProtoGroup: String, CaseIterable, Identifiable {
-    case files, computer, research, weather, image, map, media, memory, approval
+    case files, computer, research, weather, image, map, media, memory, approval, compare
 
     var id: Self { self }
 
@@ -38,6 +38,7 @@ enum ProtoGroup: String, CaseIterable, Identifiable {
         case .media: "Web Search · images and videos"
         case .memory: "Memory · update_memory strip / used memories"
         case .approval: "Approval · a tool asks to read a secret"
+        case .compare: "Regenerate · two answers compared"
         }
     }
 
@@ -52,6 +53,7 @@ enum ProtoGroup: String, CaseIterable, Identifiable {
         case .media: "photo.stack"
         case .memory: "brain"
         case .approval: "key"
+        case .compare: "square.on.square"
         }
     }
 }
@@ -127,7 +129,7 @@ public struct CardPrototypesView: View {
     }
 
     private var intro: some View {
-        Text(verbatim: "Every card here is the real one chats draw, fed desktop-shaped results: Files, Computer Use, Deep Research, Weather, Image Generation, Map Itinerary, the search images and videos, the approval card and the memory foot. Each is shown inside a reply in its main states. create_artifact is not here: the phone draws it as the generic card. Tap cards to expand them, open sheets and viewers, and try Undo.")
+        Text(verbatim: "Every card here is the real one chats draw, fed desktop-shaped results: Files, Computer Use, Deep Research, Weather, Image Generation, Map Itinerary, the search images and videos, the approval card and the memory foot. Each is shown inside a reply in its main states. Two states are sketches a chat never draws, and say so: the running Weather and Map Itinerary cards. create_artifact is not here: the phone draws it as the generic card. Tap cards to expand them, open sheets and viewers, and try Undo.")
             .font(.footnote)
             .foregroundStyle(.secondary)
     }
@@ -144,6 +146,7 @@ public struct CardPrototypesView: View {
         case .media: ProtoSearchMediaSection()
         case .memory: ProtoMemorySection()
         case .approval: ProtoApprovalSection()
+        case .compare: ProtoCompareSection()
         }
     }
 }

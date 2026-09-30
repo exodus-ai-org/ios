@@ -4,8 +4,11 @@ import UIKit
 struct MarkdownTableView: View {
     let table: MarkdownTable
     let citations: [Int: MarkdownCitation]
+    /// Still being written: its cells are drawn by `Text`. Settled, each stands in a text view.
+    var isArriving = false
 
     @ScaledMetric(relativeTo: .subheadline) private var maxCellWidth: CGFloat = 260
+    @Environment(\.markdownUnderlinesLinks) private var underlinesLinks
 
     private var columnCount: Int {
         max(table.header.count, table.rows.map(\.count).max() ?? 0)
@@ -29,10 +32,8 @@ struct MarkdownTableView: View {
                 }
             }
             .fixedSize()
-            .overlay {
-                RoundedRectangle(cornerRadius: 8).strokeBorder(Color(uiColor: .separator), lineWidth: 0.5)
-            }
-            .clipShape(.rect(cornerRadius: 8))
+            .overlay { MarkdownBlockShape.shape.strokeBorder(Color(uiColor: .separator), lineWidth: 0.5) }
+            .clipShape(MarkdownBlockShape.shape)
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .markdownTrailingFade()
@@ -40,15 +41,19 @@ struct MarkdownTableView: View {
 
     private func cell(_ content: AttributedString?, column: Int, isHeader: Bool) -> some View {
         let alignment = table.alignments[safe: column] ?? nil
+        let spec = MarkdownFontSpec(style: .subheadline, weight: isHeader ? .semibold : nil)
         let styled = MarkdownInlineStyler.style(
-            content ?? AttributedString(),
-            spec: MarkdownFontSpec(style: .subheadline, weight: isHeader ? .semibold : nil),
-            citations: citations)
+            content ?? AttributedString(), spec: spec, citations: citations, underlinesLinks: underlinesLinks)
         return MarkdownWidthCap(maxWidth: maxCellWidth) {
-            Text(styled.text)
-                .multilineTextAlignment(Self.textAlignment(alignment))
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
+            if isArriving {
+                MarkdownStyledText(styled: styled, spec: spec)
+                    .lineSpacing(spec.pointSize * MarkdownLayoutRules.lineGap(for: spec))
+                    .multilineTextAlignment(Self.textAlignment(alignment))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                MarkdownSelectableText(styled: styled, spec: spec)
+                    .multilineTextAlignment(Self.textAlignment(alignment))
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)

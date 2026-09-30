@@ -26,11 +26,17 @@ private struct ApprovalCard: View {
     let store: RunApprovalStore
 
     var body: some View {
+        // A card stands a block's distance under what is over it; the line it settles into is small print, a
+        // row's distance under the bar.
         switch ApprovalDisplay.of(entry.state, runIsActive: runIsActive) {
         case .asking(let sending):
             ApprovalAsk(entry: entry, sending: sending, store: store)
+                .padding(.top, TurnFootMetrics.blockGap)
+                .padding(.bottom, TurnFootMetrics.cardBottom)
         case let display:
             ApprovalSettledLine(summary: entry.request.summary, display: display)
+                .padding(.top, TurnFootMetrics.rowTop)
+                .padding(.bottom, TurnFootMetrics.rowBottom)
         }
     }
 }
@@ -44,11 +50,12 @@ private struct ApprovalAsk: View {
     let sending: Bool
     let store: RunApprovalStore
     @ScaledMetric(relativeTo: .footnote) private var summaryMaxHeight: CGFloat = 220
+    @Environment(\.accentGlyph) private var accentGlyph
 
     private var request: ApprovalRequest { entry.request }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Label {
                 Text("chat:approval.title").font(.subheadline.weight(.semibold))
             } icon: {
@@ -64,14 +71,14 @@ private struct ApprovalAsk: View {
                 // All of it, wrapped, in a region that scrolls once it is long: nothing is cut or hidden.
                 ScrollView {
                     ApprovalSummaryText(summary: request.summary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: summaryMaxHeight)
                 .fixedSize(horizontal: false, vertical: true)
                 .scrollBounceBehavior(.basedOnSize)
-                .background(.fill.tertiary, in: .rect(cornerRadius: 8))
+                .background(.fill.tertiary, in: CardStyle.innerShape)
                 if request.truncated, let hidden = request.hiddenChars, hidden > 0 {
                     Text(verbatim: ApprovalSummary.truncatedNote(hiddenChars: hidden))
                         .font(.footnote.weight(.medium))
@@ -95,10 +102,9 @@ private struct ApprovalAsk: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(12)
+        .padding(CardStyle.inset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.fill.quinary, in: .rect(cornerRadius: 14))
-        .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(.separator) }
+        .modifier(CardSurface())
         .accessibilityElement(children: .contain)
         .task(id: ObjectIdentifier(entry)) {
             await store.arm(entry)
@@ -123,9 +129,10 @@ private struct ApprovalAsk: View {
         Button {
             Task { await store.decide(entry, .allow) }
         } label: {
-            Text("chat:approval.allow").frame(minWidth: 88)
+            Text("chat:approval.allow").foregroundStyle(accentGlyph).frame(minWidth: 88)
         }
         .buttonStyle(.borderedProminent)
+        .toneFill()
         .disabled(!entry.allowArmed || sending)
         Button {
             Task { await store.decide(entry, .deny) }

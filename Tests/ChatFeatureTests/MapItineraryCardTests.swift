@@ -85,14 +85,44 @@ struct MapItineraryCardModelTests {
         #expect(map.region == map.days[0].region)
         let nowhere = try model(#"{"type":"mapItinerary","days":[{"label":"D","places":[{"name":"X"},{"name":"Y"}]}]}"#)
         #expect(!nowhere.hasMap)
-        #expect(nowhere.inlineStops.map(\.place.name) == ["X", "Y"])
+        #expect(nowhere.inline(day: 0).stops.map(\.place.name) == ["X", "Y"])
     }
 
-    @Test("the transcript lists the first 4 stops across the days; +N more counts every other one")
-    func moreCount() throws {
+    @Test("the transcript lists one day at a time: its first 4 stops, and +N more counts the rest of that day")
+    func inlineDay() throws {
         let map = try model(kyoto)
-        #expect(map.inlineStops.map(\.id) == ["d0-s0", "d0-s1", "d0-s2", "d0-s3"])
-        #expect(map.moreCount == 8)
+        #expect(map.showsDayPicker)
+        let first = map.inline(day: 0)
+        #expect(first.index == 0)
+        #expect(first.stops.map(\.id) == ["d0-s0", "d0-s1", "d0-s2", "d0-s3"])
+        #expect(first.moreCount == 5)
+        #expect(first.summary == "Shrines early, Gion by evening.")
+        let second = map.inline(day: 1)
+        #expect(second.stops.map(\.id) == ["d1-s0", "d1-s1", "d1-s2"])
+        #expect(second.stops.map(\.number) == [1, 2, 3])
+        #expect(second.moreCount == 0)
+        // A day that is not there is the first: the card always has a day to show.
+        #expect(map.inline(day: 9) == first)
+        #expect(map.inline(day: -1) == first)
+    }
+
+    @Test("the list names its day over its stops: its label and, when it has one, its title")
+    func dayHeader() throws {
+        let map = try model(kyoto)
+        #expect(map.inline(day: 0).header == .init(label: "Day 1", title: "Southern Higashiyama"))
+        #expect(map.inline(day: 1).header == .init(label: "Day 2", title: "Arashiyama"))
+        #expect(MapItineraryText.dayHeader(.init(label: "D1", title: "Arrival in Kamala")) == "D1 \u{00B7} Arrival in Kamala")
+        #expect(MapItineraryText.dayHeader(.init(label: "D1", title: nil)) == "D1")
+        let partly = try model(partlyPlaced)
+        // A day with no name of its own is named by its number; a day with no stops lists none.
+        #expect(partly.inline(day: 1).header == .init(label: "Day 2", title: nil))
+        #expect(partly.inline(day: 2).header == .init(label: "Rest", title: nil))
+        #expect(partly.inline(day: 2).stops.isEmpty)
+        #expect(partly.inline(day: 2).moreCount == 0)
+    }
+
+    @Test("the cap is per day: 4 stops are all listed, a fifth is behind +1 more")
+    func capPerDay() throws {
         func places(_ counts: [Int]) -> String {
             let days = counts.enumerated().map { day, count in
                 let places = (0..<count).map { #"{"name":"P\#(day)-\#($0)","lat":1,"lng":\#(Double($0) / 10)}"# }
@@ -100,14 +130,30 @@ struct MapItineraryCardModelTests {
             }
             return #"{"type":"mapItinerary","days":[\#(days.joined(separator: ","))]}"#
         }
-        #expect(try model(places([4])).moreCount == 0)
-        #expect(try model(places([3])).moreCount == 0)
-        #expect(try model(places([5])).moreCount == 1)
-        #expect(try model(places([])).moreCount == 0)
-        let split = try model(places([2, 3]))
-        #expect(split.inlineStops.map(\.id) == ["d0-s0", "d0-s1", "d1-s0", "d1-s1"])
-        #expect(split.moreCount == 1)
-        #expect(try model(partlyPlaced).moreCount == 1)
+        #expect(try model(places([4])).inline(day: 0).moreCount == 0)
+        #expect(try model(places([3])).inline(day: 0).moreCount == 0)
+        #expect(try model(places([5])).inline(day: 0).moreCount == 1)
+        let split = try model(places([2, 6]))
+        #expect(split.inline(day: 0).stops.map(\.id) == ["d0-s0", "d0-s1"])
+        #expect(split.inline(day: 0).moreCount == 0)
+        #expect(split.inline(day: 1).stops.map(\.id) == ["d1-s0", "d1-s1", "d1-s2", "d1-s3"])
+        #expect(split.inline(day: 1).moreCount == 2)
+        // No day at all: nothing to list, nothing to pick.
+        let empty = try model(places([]))
+        #expect(empty.inline(day: 0).stops.isEmpty)
+        #expect(empty.inline(day: 0).header == nil)
+        #expect(!empty.showsDayPicker)
+    }
+
+    @Test("a trip of one day has no picker, and its list is named only when the day has a title")
+    func singleDay() throws {
+        let plain = try model(#"{"type":"mapItinerary","days":[{"label":"Stop","places":[{"name":"X","lat":1,"lng":2}]}]}"#)
+        #expect(!plain.showsDayPicker)
+        #expect(plain.inline(day: 0).header == nil)
+        let titled = try model(
+            #"{"type":"mapItinerary","days":[{"label":"Day 1","title":"Old town","places":[{"name":"X","lat":1,"lng":2}]}]}"#)
+        #expect(!titled.showsDayPicker)
+        #expect(titled.inline(day: 0).header == .init(label: "Day 1", title: "Old town"))
     }
 
     @Test("paging through a day's stops wraps around, as the desktop's detail panel does")
@@ -191,23 +237,56 @@ struct MapRegionMathTests {
 
 @Suite("Map itinerary: day colours")
 struct MapDayPaletteTests {
-    @Test("the first day takes the tone; the next days skip the hues close to it (neutral is the system blue)")
+    @Test("eight designed colours in the family of the tones, not the system's")
+    func designed() {
+        #expect(MapDayPalette.Hue.allCases.count == 8)
+        #expect(MapDayPalette.Hue.blue.reference == ColorTone.blue.reference)
+        #expect(MapDayPalette.Hue.green.reference == ColorTone.emerald.reference)
+        #expect(MapDayPalette.Hue.yellow.reference == ColorTone.yellow.reference)
+        #expect(MapDayPalette.Hue.pink.reference == ColorTone.rose.reference)
+        #expect(MapDayPalette.Hue.orange.reference == ColorTone.orange.reference)
+        #expect(MapDayPalette.Hue.purple.reference == ColorTone.violet.reference)
+        #expect(Set(MapDayPalette.Hue.allCases.map(\.reference.hexString)).count == 8)
+    }
+
+    @Test("every colour stands out from the map's tiles, light and dark, at 3:1")
+    func contrastOnTiles() {
+        for hue in MapDayPalette.Hue.allCases {
+            for scheme in [ColorTone.Scheme.light, .dark] {
+                let color = MapDayPalette.color(hue, scheme)
+                for tile in MapDayPalette.tileLuminances(scheme) {
+                    #expect(color.contrast(onLuminance: tile) >= 3, "\(hue) \(scheme)")
+                }
+            }
+        }
+    }
+
+    @Test("neighbours in the order are far apart in hue")
+    func neighboursApart() {
+        let order = MapDayPalette.Hue.allCases
+        for (a, b) in zip(order, order.dropFirst()) {
+            #expect(MapDayPalette.hueDistance(a.angle, b.angle) >= 60, "\(a) \(b)")
+        }
+    }
+
+    @Test("the first day takes the tone; neutral is black and white, so every colour follows it")
     func neutral() {
-        let colors = MapDayPalette.colors(dayCount: 6, tone: .neutral)
-        #expect(colors.map(\.swatch) == [.accent, .system(.orange), .system(.purple), .system(.green), .system(.pink), .system(.brown)])
+        let colors = MapDayPalette.colors(dayCount: 4, tone: .neutral)
+        let order = MapDayPalette.Hue.allCases
+        #expect(colors.map(\.swatch) == [.accent, .palette(order[0]), .palette(order[1]), .palette(order[2])])
         #expect(colors.allSatisfy { !$0.dashed })
-        #expect(MapDayPalette.palette(for: .blue) == MapDayPalette.palette(for: .neutral))
-        #expect(MapDayPalette.palette(for: .emerald) == [.orange, .teal, .purple, .pink, .brown, .indigo, .blue])
-        #expect(MapDayPalette.palette(for: .orange) == [.teal, .purple, .green, .pink, .indigo, .blue])
+        #expect(MapDayPalette.palette(for: .neutral) == order)
     }
 
     @Test("under every tone no later day is near the tone's hue, and neighbouring days always differ")
     func separation() {
         for tone in ColorTone.allCases {
             let palette = MapDayPalette.palette(for: tone)
-            #expect(palette.count >= 4, "\(tone)")
-            for hue in palette {
-                #expect(MapDayPalette.hueDistance(hue.angle, MapDayPalette.angle(of: tone)) >= 45, "\(tone) \(hue)")
+            #expect(palette.count >= 5, "\(tone)")
+            if let angle = MapDayPalette.angle(of: tone) {
+                for hue in palette {
+                    #expect(MapDayPalette.hueDistance(hue.angle, angle) >= 45, "\(tone) \(hue)")
+                }
             }
             let colors = MapDayPalette.colors(dayCount: 20, tone: tone)
             #expect(colors.first?.swatch == .accent)
@@ -222,10 +301,10 @@ struct MapDayPaletteTests {
     func cycles() {
         let palette = MapDayPalette.palette(for: .neutral)
         let colors = MapDayPalette.colors(dayCount: 1 + palette.count * 3, tone: .neutral)
-        #expect(colors[1] == .init(swatch: .system(palette[0]), dashed: false))
-        #expect(colors[1 + palette.count] == .init(swatch: .system(palette[0]), dashed: true))
-        #expect(colors[palette.count * 2] == .init(swatch: .system(palette.last!), dashed: true))
-        #expect(colors[1 + palette.count * 2] == .init(swatch: .system(palette[0]), dashed: false))
+        #expect(colors[1] == .init(swatch: .palette(palette[0]), dashed: false))
+        #expect(colors[1 + palette.count] == .init(swatch: .palette(palette[0]), dashed: true))
+        #expect(colors[palette.count * 2] == .init(swatch: .palette(palette.last!), dashed: true))
+        #expect(colors[1 + palette.count * 2] == .init(swatch: .palette(palette[0]), dashed: false))
         #expect(MapDayPalette.colors(dayCount: 0, tone: .rose).isEmpty)
         #expect(MapDayPalette.colors(dayCount: 1, tone: .rose) == [.init(swatch: .accent, dashed: false)])
     }
@@ -235,6 +314,50 @@ struct MapDayPaletteTests {
         #expect(MapDayPalette.hueDistance(349, 35) == 46)
         #expect(MapDayPalette.hueDistance(10, 350) == 20)
         #expect(MapDayPalette.hueDistance(90, 270) == 180)
+    }
+}
+
+@MainActor
+@Suite("Map itinerary: where the user is")
+struct ItineraryLocationAccessTests {
+    final class FakeSource: LocationAuthorizationSource {
+        var status: LocationAuthorization
+        var requests = 0
+        var onChange: ((LocationAuthorization) -> Void)?
+        init(_ status: LocationAuthorization) { self.status = status }
+        func requestWhenInUse() { requests += 1 }
+    }
+
+    @Test("asks once, and only when it has not been asked")
+    func asksOnce() {
+        let source = FakeSource(.notDetermined)
+        let access = ItineraryLocationAccess(source: source)
+        access.requestIfNeeded()
+        access.requestIfNeeded()
+        #expect(source.requests == 1)
+
+        let granted = FakeSource(.authorized)
+        ItineraryLocationAccess(source: granted).requestIfNeeded()
+        #expect(granted.requests == 0)
+    }
+
+    @Test("shows the user's place while allowed or not yet asked, never when refused")
+    func showsLocation() {
+        #expect(ItineraryLocationAccess(source: FakeSource(.notDetermined)).showsUserLocation)
+        #expect(ItineraryLocationAccess(source: FakeSource(.authorized)).showsUserLocation)
+        #expect(!ItineraryLocationAccess(source: FakeSource(.denied)).showsUserLocation)
+        #expect(!ItineraryLocationAccess(source: FakeSource(.restricted)).showsUserLocation)
+    }
+
+    @Test("follows the answer to the prompt")
+    func followsTheAnswer() {
+        let source = FakeSource(.notDetermined)
+        let access = ItineraryLocationAccess(source: source)
+        access.requestIfNeeded()
+        source.onChange?(.denied)
+        #expect(!access.showsUserLocation)
+        source.onChange?(.authorized)
+        #expect(access.showsUserLocation)
     }
 }
 

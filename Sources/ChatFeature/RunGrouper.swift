@@ -24,6 +24,7 @@ public enum RunGrouper {
         var currentRun: String?
         var citations: [CitationSource] = []
         var occurrences: [String: Int] = [:]
+        let layout = AttemptLayout(messages)
 
         func flush() {
             guard !buffer.isEmpty else { return }
@@ -40,6 +41,7 @@ public enum RunGrouper {
                 turn.occurrence = occurrence
                 turn.citations = turn.sources.isEmpty ? citations : citations + turn.sources
             }
+            turn.attempt = layout.attempts[bufferRun]
             seen[key] = Cache.Entry(messages: buffer, priorCitations: citations, turn: turn)
             citations = turn.citations
             if turn.hasContent { segments.append(.assistantTurn(turn)) }
@@ -49,10 +51,14 @@ public enum RunGrouper {
         for message in messages {
             if message.role == "user" {
                 flush()
-                currentRun = message.runId ?? message.id
-                segments.append(.user(message))
+                let run = message.runId ?? message.id
+                currentRun = run
+                if !layout.hiddenRuns.contains(run) && !layout.hiddenQuestions.contains(run) {
+                    segments.append(.user(message))
+                }
             } else {
                 let run = message.runId ?? currentRun ?? message.id
+                if layout.hiddenRuns.contains(run) { continue }
                 if currentRun == nil && message.runId == nil { currentRun = message.id }
                 if !buffer.isEmpty && run != bufferRun { flush() }
                 bufferRun = run
@@ -66,9 +72,8 @@ public enum RunGrouper {
 
     static func buildTurn(runId: String, messages: [ChatMessage]) -> AssistantTurn {
         var steps: [AssistantTurn.Step] = []
-        var texts: [String] = []
         var pending: [PendingToolCall] = []
-        var cards: [ToolCard] = []
+        var layout = TurnLayout()
         var sources: [CitationSource] = []
         var timestamp: Double?
         var callArguments: [String: JSONValue] = [:]
@@ -113,10 +118,11 @@ public enum RunGrouper {
                     case .toolCall(let id, let name, let arguments):
                         steps.append(.toolCall(toolCallStep(id: id, name: name, arguments: arguments)))
                         pending.append(PendingToolCall(id: id, name: name))
+                        layout.call(id)
                         callArguments[id] = .object(arguments)
                         if name == "update_memory", ran { memoryUpdates.append(MemoryUpdate(id: id, status: .pending)) }
                     case .text(let text) where !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
-                        texts.append(text)
+                        layout.text(text)
                     default:
                         break
                     }
@@ -140,7 +146,7 @@ public enum RunGrouper {
                             MemoryUpdate(id: message.toolCallId ?? message.id, status: .failed, errorText: errorText))
                     }
                     if ToolCardRegistry.drawsFailures(for: name) {
-                        cards.append(
+                        layout.card(
                             ToolCard(
                                 id: message.id, toolCallId: message.toolCallId, toolName: name, kind: .generic,
                                 arguments: message.toolCallId.flatMap { callArguments[$0] }, isError: true,
@@ -168,7 +174,7 @@ public enum RunGrouper {
                     sources.append(source)
                 } else {
                     if let kind = cardKind(name, output) {
-                        cards.append(
+                        layout.card(
                             ToolCard(
                                 id: message.id, toolCallId: message.toolCallId, toolName: name, kind: kind,
                                 payload: output, arguments: message.toolCallId.flatMap { callArguments[$0] },
@@ -182,38 +188,65 @@ public enum RunGrouper {
         }
 
         for call in pending where ToolCardRegistry.drawsPending(for: call.name) {
-            cards.append(
+            layout.card(
                 ToolCard(
                     id: "pending:\(call.id)", toolCallId: call.id, toolName: call.name, kind: .generic,
                     arguments: callArguments[call.id], isPending: true))
         }
 
-        cards = imageCardsLast(cards, steps: steps)
-        let body = texts.joined(separator: "\n\n")
+        let blocks = layout.blocks
         let lastAssistant = messages.last { $0.role == "assistant" }
         let error = lastAssistant?.stopReason == "error" ? (lastAssistant?.errorMessage ?? "") : nil
         let hasToolResult = messages.contains { $0.role == "toolResult" }
         return AssistantTurn(
-            runId: runId, messageIds: messages.map(\.id), steps: steps, body: body, toolCards: cards,
+            runId: runId, messageIds: messages.map(\.id), steps: steps, blocks: blocks,
             pendingToolCalls: pending, sources: sources, citations: sources,
             durationMs: duration(of: messages), timestampMs: timestamp, error: error,
-            hasContent: !steps.isEmpty || !body.isEmpty || !pending.isEmpty || hasToolResult || error != nil,
+            hasContent: !steps.isEmpty || !blocks.isEmpty || !pending.isEmpty || hasToolResult || error != nil,
             foot: foot(memoryUpdates: memoryUpdates, sources: sources))
     }
 
-    /// The desktop draws the image-generation cards after every other card, in call order; a running one keeps the
-    /// slot its result lands in.
-    private static func imageCardsLast(_ cards: [ToolCard], steps: [AssistantTurn.Step]) -> [ToolCard] {
-        let images = cards.enumerated().filter { $0.element.toolName == "image_generation" }
-        guard !images.isEmpty else { return cards }
-        var order: [String: Int] = [:]
-        for case .toolCall(let step) in steps where order[step.id] == nil { order[step.id] = order.count }
-        let sorted = images.sorted {
-            let lhs = $0.element.toolCallId.flatMap { order[$0] } ?? Int.max
-            let rhs = $1.element.toolCallId.flatMap { order[$0] } ?? Int.max
-            return lhs != rhs ? lhs < rhs : $0.offset < $1.offset
+    /// The answer as it is laid out while the run's rows are walked: the model's text and the places of its calls,
+    /// in order. A card takes the place of its call — where the model asked, not where the result landed — so
+    /// results that come back out of order, or late, move nothing; a call that gets no card leaves no gap, and the
+    /// text on either side of it is one block.
+    private struct TurnLayout {
+        private enum Piece {
+            case text(String)
+            case call(String)
+            case card(ToolCard)
         }
-        return cards.filter { $0.toolName != "image_generation" } + sorted.map(\.element)
+
+        private var pieces: [Piece] = []
+        private var calls: Set<String> = []
+        private var cards: [String: ToolCard] = [:]
+
+        mutating func text(_ text: String) { pieces.append(.text(text)) }
+
+        mutating func call(_ id: String) {
+            guard calls.insert(id).inserted else { return }
+            pieces.append(.call(id))
+        }
+
+        /// A card whose call is not among the rows (or is taken) stands where it arrived.
+        mutating func card(_ card: ToolCard) {
+            if let id = card.toolCallId, calls.contains(id), cards[id] == nil {
+                cards[id] = card
+            } else {
+                pieces.append(.card(card))
+            }
+        }
+
+        var blocks: [AssistantTurn.Block] {
+            AssistantTurn.Block.numbered(
+                pieces.compactMap { piece in
+                    switch piece {
+                    case .text(let text): .text(AssistantTurn.TextBlock(id: "", text: text))
+                    case .call(let id): cards[id].map(AssistantTurn.Block.card)
+                    case .card(let card): .card(card)
+                    }
+                })
+        }
     }
 
     private static func foot(memoryUpdates: [MemoryUpdate], sources: [CitationSource]) -> RunFoot {

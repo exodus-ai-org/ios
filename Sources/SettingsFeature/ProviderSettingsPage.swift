@@ -9,6 +9,8 @@ struct ProviderSettingsPage: View {
     @Environment(\.dismiss) private var dismiss
     @FocusState private var keyFieldFocused: Bool
     @FocusState private var addressFocused: Bool
+    /// Replace Key was pressed: the field stands in for the saved key's row until the page is saved or Cancel takes it back.
+    @State private var replacingKey = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -84,6 +86,7 @@ struct ProviderSettingsPage: View {
             await secrets?.load()
         }
         .onChange(of: viewModel.selectedProvider) {
+            replacingKey = false
             Task { await viewModel.fetchModelsIfStale() }
         }
         .refreshable { await viewModel.pullToRefresh() }
@@ -170,7 +173,41 @@ struct ProviderSettingsPage: View {
         }
     }
 
+    /// The key, by what is true of it. A key that is saved is shown as one — its mask, with what can be done to it —
+    /// and the field to type one appears when there is none, or when the saved one is being replaced: an empty field
+    /// over a line saying "saved" read as a key that had gone missing.
+    @ViewBuilder
     private func apiKeyRow(provider: AiProviders) -> some View {
+        switch viewModel.savedKeyState {
+        case .saved(let lastFour) where !replacingKey:
+            SavedKeyRow(lastFour: lastFour)
+            Button {
+                replacingKey = true
+                keyFieldFocused = true
+            } label: {
+                Text("ios:settings.secrets.replaceKey")
+            }
+            Button(role: .destructive, action: viewModel.clearKey) {
+                Text("ios:settings.secrets.removeKey")
+            }
+            keyProblem
+        case .willClear:
+            LabeledContent {
+                Button(action: viewModel.keepSavedKey) {
+                    Text("ios:settings.secrets.keep")
+                }
+                .buttonStyle(.borderless)
+            } label: {
+                Text("settings:providers.fields.apiKey.label")
+                Text("ios:settings.secrets.willClear")
+                    .foregroundStyle(.red)
+            }
+        case .saved, .none, .replacing:
+            keyField(provider: provider)
+        }
+    }
+
+    private func keyField(provider: AiProviders) -> some View {
         let name = provider.rawValue
         let description = String(
             localized: "settings:providers.fields.apiKey.description", defaultValue: "Your \(name) API key",
@@ -180,7 +217,7 @@ struct ProviderSettingsPage: View {
         } field: {
             SecureField(
                 "settings:providers.fields.apiKey.label", text: $viewModel.apiKeyText,
-                prompt: Self.keyPlaceholder(provider).map { Text(verbatim: $0) })
+                prompt: Text("ios:settings.secrets.keyPrompt"))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .focused($keyFieldFocused)
@@ -188,16 +225,37 @@ struct ProviderSettingsPage: View {
                 .onChange(of: keyFieldFocused) { _, focused in
                     if !focused { Task { await viewModel.fetchModelsIfStale() } }
                 }
-            SavedKeyLine(state: viewModel.savedKeyState, clear: viewModel.clearKey, keep: viewModel.keepSavedKey)
-            if let message = viewModel.keyReentryMessage {
-                Text(verbatim: message)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-            } else if viewModel.keyNeedsReentry(status: secrets?.status) {
-                Text("settings:secrets.input.reenter")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+            if viewModel.hasSavedKey {
+                HStack(spacing: 8) {
+                    Text("ios:settings.secrets.replacing")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Button {
+                        viewModel.apiKeyText = ""
+                        replacingKey = false
+                        keyFieldFocused = false
+                    } label: {
+                        Text("common:action.cancel")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.footnote.weight(.medium))
+                }
             }
+            keyProblem
+        }
+    }
+
+    @ViewBuilder
+    private var keyProblem: some View {
+        if let message = viewModel.keyReentryMessage {
+            Text(verbatim: message)
+                .font(.footnote)
+                .foregroundStyle(.red)
+        } else if viewModel.keyNeedsReentry(status: secrets?.status) {
+            Text("settings:secrets.input.reenter")
+                .font(.footnote)
+                .foregroundStyle(.red)
         }
     }
 
@@ -325,77 +383,36 @@ extension View {
     }
 }
 
-/// Beside the empty key field: whether a key is saved on the computer (its last four characters), with Clear; or what
-/// the save will do to it. VoiceOver hears "Saved key ending in abcd", never the mask's bullets.
-struct SavedKeyLine: View {
-    let state: SettingsViewModel.SavedKeyState
-    let clear: () -> Void
-    let keep: () -> Void
+/// A saved key, as the computer shows it to anyone but itself: its mask. VoiceOver hears "Saved key ending in abcd",
+/// never the mask's bullets.
+struct SavedKeyRow: View {
+    let lastFour: String?
 
     var body: some View {
-        switch state {
-        case .none:
-            Text("settings:secrets.input.noneAria")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        case .saved(let lastFour):
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) { saved(lastFour, spaced: true) }
-                VStack(alignment: .leading, spacing: 6) { saved(lastFour, spaced: false) }
-            }
-        case .willClear:
-            HStack(spacing: 8) {
-                Text("ios:settings.secrets.willClear")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                Spacer(minLength: 8)
-                Button(action: keep) {
-                    Text("ios:settings.secrets.keep")
-                }
-                .buttonStyle(.borderless)
-                .font(.footnote.weight(.medium))
-            }
-        case .replacing(let hadKey):
-            if hadKey {
-                Text("ios:settings.secrets.replacing")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+        LabeledContent {
+            Text(verbatim: Self.mask(lastFour))
+                .monospaced()
+                .accessibilityLabel(Text(verbatim: Self.spoken(lastFour)))
+        } label: {
+            Text("settings:providers.fields.apiKey.label")
+            // One line of text, the seal set into it: a `Label` in a row's subtitle stacks its icon over its title.
+            let seal = Text(Image(systemName: "checkmark.seal.fill")).foregroundStyle(.green)
+            let saved = Text("settings:secrets.input.saved")
+            Text("\(seal) \(saved)")  // l10n:ignore: two texts side by side, no words of its own
         }
     }
 
-    @ViewBuilder
-    private func saved(_ lastFour: String?, spaced: Bool) -> some View {
-        Label {
-            if let lastFour {
-                Text(verbatim: Self.savedText(lastFour))
-                    .accessibilityLabel(Text(verbatim: Self.savedSpoken(lastFour)))
-            } else {
-                Text("settings:secrets.input.saved")
-                    .accessibilityLabel(Text("settings:secrets.input.savedShortAria"))
-            }
-        } icon: {
-            Image(systemName: "checkmark.seal")
-                .accessibilityHidden(true)
-        }
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        if spaced { Spacer(minLength: 8) }
-        Button(role: .destructive, action: clear) {
-            Text("ios:settings.secrets.clear")
-        }
-        .buttonStyle(.borderless)
-        .font(.footnote.weight(.medium))
+    static func mask(_ lastFour: String?) -> String {
+        lastFour.map { "\(SecretMask.bullets) \($0)" } ?? SecretMask.bullets
     }
 
-    static func savedText(_ lastFour: String) -> String {
-        String(
-            localized: "ios:settings.secrets.savedEnding", defaultValue: "Saved · ends in \(lastFour)",
-            comment: "Beside an empty API key field when a key is saved on the computer. %@ is the key's last four characters.")
-    }
-
-    static func savedSpoken(_ lastFour: String) -> String {
-        String(
+    static func spoken(_ lastFour: String?) -> String {
+        guard let lastFour else {
+            return String(
+                localized: "settings:secrets.input.savedShortAria", defaultValue: "Saved key",
+                comment: "What VoiceOver says for a saved key too short to show any of.")
+        }
+        return String(
             localized: "settings:secrets.input.savedAria", defaultValue: "Saved key ending in \(lastFour)",
             comment: "What VoiceOver says for a saved key. %@ is its last four characters.")
     }

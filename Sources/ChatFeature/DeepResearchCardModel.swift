@@ -40,7 +40,7 @@ struct DeepResearchCardModel: Equatable, Sendable {
 /// Where a running job stands, summarised from its progress messages the way the desktop's Activity panel lists them.
 struct DeepResearchProgress: Equatable, Sendable {
     enum Step: Equatable, Sendable {
-        case starting, searching, searched(String), planning, writing, completed
+        case starting, searching, searched(String), planning, writing, completed, failed
     }
 
     struct Search: Equatable, Sendable, Identifiable {
@@ -59,6 +59,8 @@ struct DeepResearchProgress: Equatable, Sendable {
     private(set) var learnings = 0
     /// The newest message's time, else the job's start: what a stall is measured from.
     private(set) var lastActivity: Date?
+    /// The failure a `FailDeepResearch` message reported, once one did.
+    private(set) var failure: String?
 
     var recent: [Search] { Array(searches.suffix(Self.recentLimit)) }
 
@@ -85,6 +87,9 @@ struct DeepResearchProgress: Equatable, Sendable {
                 step = .writing
             case .completed:
                 step = .completed
+            case .failed(let error):
+                failure = error
+                step = .failed
             case .unknown:
                 break
             }
@@ -123,7 +128,11 @@ struct DeepResearchReport: Equatable, Sendable {
         var byRank: [Int: CitationSource] = [:]
         for source in sources where byRank[source.rank] == nil { byRank[source.rank] = source }
         citations = byRank.keys.sorted().compactMap { rank in
-            byRank[rank].map { MarkdownCitation(number: rank, title: $0.title, host: ToolPresentation.host(of: $0)) }
+            byRank[rank].map {
+                MarkdownCitation(
+                    number: rank, title: $0.title, host: ToolPresentation.host(of: $0), iconURL: SourceIcon.url(for: $0),
+                    iconFallbackURL: SourceIcon.fallback(for: $0))
+            }
         }
         let citedRanks = Set(document.citations)
         cited = sources.filter { citedRanks.contains($0.rank) }
@@ -137,12 +146,14 @@ struct DeepResearchReport: Equatable, Sendable {
 enum DeepResearchJobState: Equatable, Sendable {
     case loading
     case running(DeepResearchProgress)
-    /// Still `streaming`, but nothing new for a long time: the desktop never marks a job that died (an error, a quit)
-    /// as failed, so this is how such a job looks.
+    /// Still `streaming`, but nothing new for a long time: a desktop from before the `failed` status never marks a job
+    /// that died (an error, a quit), so this is how such a job looks there.
     case stalled(DeepResearchProgress)
     case done(DeepResearchReport)
     case finishedWithoutReport
-    case failed(terminated: Bool)
+    /// `failed`, with the desktop's error message when it stored one.
+    case failed(String?)
+    case terminated
     /// A `jobStatus` this app does not know.
     case unknownStatus(String)
     /// The answer was no job row, or the id is not one this app will put in a path.
@@ -311,9 +322,9 @@ final class DeepResearchStore {
                 try Task.checkCancellation()
                 return .state(.done(DeepResearchReport(job: job, report: report)))
             case .failed:
-                return .state(.failed(terminated: false))
+                return .state(.failed(job.errorMessage))
             case .terminated:
-                return .state(.failed(terminated: true))
+                return .state(.terminated)
             case .other(let status):
                 return .state(.unknownStatus(status))
             case .streaming:
@@ -321,6 +332,7 @@ final class DeepResearchStore {
                 let events: [DeepResearchMessage] =
                     ((try? JSONDecoder().decode([JSONValue].self, from: raw)) ?? []).compactMap(DeepResearchMessage.init(json:))
                 let progress = DeepResearchProgress(events: events, startedAt: job.startTime)
+                if let failure = progress.failure { return .state(.failed(failure.isEmpty ? nil : failure)) }
                 if let last = progress.lastActivity, now.timeIntervalSince(last) > stallAfter {
                     return .state(.stalled(progress))
                 }
@@ -362,6 +374,8 @@ enum DeepResearchText {
             String(
                 localized: "deepResearch:messages.complete.title", defaultValue: "Completed deep research",
                 comment: "Deep research card: the research is done.")
+        case .failed:
+            failedTitle
         }
     }
 
@@ -397,6 +411,12 @@ enum DeepResearchText {
             localized: "ios:chat.card.research.unknownStatus",
             defaultValue: "This research is in a state this app doesn't know: \(status).",
             comment: "Deep research card: the computer reported a job status this app version does not know. %@ is it.")
+    }
+
+    static var failedTitle: String {
+        String(
+            localized: "chat:deepResearchCard.failed", defaultValue: "Research failed",
+            comment: "Deep research card: the job failed on the computer; its error message follows.")
     }
 
     static var failed: String {

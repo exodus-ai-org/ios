@@ -103,6 +103,9 @@ public final class SettingsViewModel {
         return .none
     }
 
+    /// Whether the computer holds a key for the selected provider, whatever is being typed over it.
+    public var hasSavedKey: Bool { baselineProviders.apiKey(for: selectedProvider) != nil }
+
     /// Clear: the saved key is removed (posted as `null`) when the page is saved.
     public func clearKey() {
         apiKeyText = ""

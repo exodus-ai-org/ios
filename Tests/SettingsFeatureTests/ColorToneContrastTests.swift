@@ -5,7 +5,7 @@ import UIKit
 
 @testable import SettingsFeature
 
-@Suite("Color tone: iOS colours, safe in every appearance")
+@Suite("Color tone: fills and inks, safe in every appearance")
 struct ColorToneContrastTests {
     static let appearances: [(UIUserInterfaceStyle, UIAccessibilityContrast)] = [
         (.light, .normal), (.light, .high), (.dark, .normal), (.dark, .high),
@@ -23,55 +23,66 @@ struct ColorToneContrastTests {
     }
 
     @Test(
-        "every chromatic tone reads as text on the page and on a cell, and as a control on a grouped background",
-        arguments: ColorTone.allCases.filter { $0 != .neutral })
-    func chromaticTonesAreSafe(tone: ColorTone) {
+        "every tone's ink reads as text on the page and on a cell, and as a control on a grouped background",
+        arguments: ColorTone.allCases)
+    func inksAreSafe(tone: ColorTone) {
         for (style, contrast) in Self.appearances {
             let t = Self.traits(style, contrast)
-            let accent = Self.rgb(tone.uiColor, t)
+            let ink = Self.rgb(tone.inkUIColor, t)
             for background in [UIColor.systemBackground, .secondarySystemGroupedBackground] {
-                #expect(ColorTone.contrast(accent, Self.rgb(background, t)) >= 4.5, "\(tone) \(style.rawValue)/\(contrast.rawValue)")
+                #expect(ColorTone.contrast(ink, Self.rgb(background, t)) >= 4.5, "\(tone) \(style.rawValue)/\(contrast.rawValue)")
             }
-            #expect(ColorTone.contrast(accent, Self.rgb(.systemGroupedBackground, t)) >= 3, "\(tone) \(style.rawValue)")
+            #expect(ColorTone.contrast(ink, Self.rgb(.systemGroupedBackground, t)) >= 3, "\(tone) \(style.rawValue)")
         }
     }
 
-    @Test("a tone is its system colour as drawn whenever that is already safe; otherwise iOS's own accessible variant")
-    func standardWhenSafe() {
+    @Test("a tone is painted in its own colours, in the phone's colour space: the fill, and the ink for text")
+    func paintedInItsOwnColours() {
         for tone in ColorTone.allCases {
-            guard let system = tone.systemColor.map(ColorTone.uiColor(for:)) else { continue }
             for (style, contrast) in Self.appearances {
                 let t = Self.traits(style, contrast)
-                let painted = Self.rgb(tone.uiColor, t)
-                let standard = Self.rgb(system, t)
-                let accessible = Self.rgb(system, Self.traits(style, .high))
-                #expect(painted == standard || painted == accessible)
-                if ColorTone.contrast(standard, Self.rgb(.systemBackground, t)) >= 4.5,
-                    ColorTone.contrast(standard, Self.rgb(.secondarySystemGroupedBackground, t)) >= 4.5
-                {
-                    #expect(painted == standard, "\(tone) needlessly darkened")
-                }
+                let scheme: ColorTone.Scheme = style == .dark ? .dark : .light
+                let fill = tone.fill(scheme)
+                let ink = tone.ink(scheme, increasedContrast: contrast == .high)
+                #expect(tone.uiColor.resolvedColor(with: t) == ColorTone.uiColor(displaying: fill), "\(tone)")
+                #expect(tone.inkUIColor.resolvedColor(with: t) == ColorTone.uiColor(displaying: ink), "\(tone)")
             }
         }
     }
 
-    @Test("light yellow is darkened for contrast; dark yellow is the system yellow")
-    func yellowVariants() {
+    @Test("what tints text is the ink, never the fill")
+    func tintIsTheInk() {
         let light = Self.traits(.light, .normal)
-        let dark = Self.traits(.dark, .normal)
-        #expect(Self.rgb(ColorTone.yellow.uiColor, light) != Self.rgb(.systemYellow, light))
-        #expect(Self.rgb(ColorTone.yellow.uiColor, dark) == Self.rgb(.systemYellow, dark))
+        #expect(Self.rgb(UIColor(ColorTone.yellow.tint), light) == Self.rgb(ColorTone.yellow.inkUIColor, light))
+        #expect(Self.rgb(ColorTone.yellow.inkUIColor, light) != Self.rgb(ColorTone.yellow.uiColor, light))
     }
 
-    @Test("neutral is the system accent untouched: no tint, and the swatch is system blue")
-    func neutralIsSystemDefault() {
-        #expect(ColorTone.neutral.tint == nil)
+    @Test("no tone is one of the system's standard colours any more")
+    func notASystemColour() {
+        let light = Self.traits(.light, .normal)
+        let system: [UIColor] = [.systemGreen, .systemBlue, .systemIndigo, .systemPink, .systemOrange, .systemYellow]
+        for tone in ColorTone.allCases {
+            for color in system {
+                #expect(Self.rgb(tone.uiColor, light) != Self.rgb(color, light), "\(tone)")
+                #expect(Self.rgb(tone.inkUIColor, light) != Self.rgb(color, light), "\(tone)")
+            }
+        }
+    }
+
+    @Test("neutral is black and white, as the desktop's default: its swatch, its tint and its glyph")
+    func neutralIsBlackAndWhite() {
+        let (light, dark) = (Self.traits(.light, .normal), Self.traits(.dark, .normal))
+        #expect(Self.rgb(ColorTone.neutral.uiColor, light).hexString == "#171717")
+        #expect(Self.rgb(ColorTone.neutral.uiColor, dark).hexString == "#E5E5E5")
+        #expect(Self.rgb(UIColor(ColorTone.neutral.tint), light).hexString == "#171717")
+        #expect(Self.rgb(UIColor(ColorTone.neutral.tint), dark).hexString == "#E5E5E5")
+        #expect(Self.rgb(UIColor(ColorTone.neutral.glyphColor), light).hexString == "#FAFAFA")
+        #expect(Self.rgb(UIColor(ColorTone.neutral.glyphColor), dark).hexString == "#171717")
         for (style, contrast) in Self.appearances {
             let t = Self.traits(style, contrast)
-            #expect(Self.rgb(ColorTone.neutral.uiColor, t) == Self.rgb(.systemBlue, t))
-            #expect(ColorTone.contrast(Self.rgb(ColorTone.neutral.uiColor, t), Self.rgb(.systemBackground, t)) >= 3)
+            #expect(Self.rgb(ColorTone.neutral.uiColor, t) != Self.rgb(.systemBlue, t))
+            #expect(ColorTone.contrast(Self.rgb(ColorTone.neutral.inkUIColor, t), Self.rgb(.systemBackground, t)) >= 7)
         }
-        #expect(ColorTone.violet.tint != nil)
     }
 
     @Test("the send glyph stands out from the accent at 3:1 in every tone and appearance", arguments: ColorTone.allCases)
@@ -79,7 +90,7 @@ struct ColorToneContrastTests {
         for (style, contrast) in Self.appearances {
             let t = Self.traits(style, contrast)
             let accent = Self.rgb(tone.uiColor, t)
-            let glyph = ColorTone.glyphIsWhite(on: accent) ? ColorTone.RGB.white : .black
+            let glyph = Self.rgb(UIColor(tone.glyphColor), t)
             #expect(ColorTone.contrast(glyph, accent) >= 3, "\(tone) \(style.rawValue)/\(contrast.rawValue)")
         }
     }

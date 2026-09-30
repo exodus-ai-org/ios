@@ -86,6 +86,8 @@ public struct SettingsView: View {
                 if now.isEmpty { Task { await secrets.load() } }
             }
         }
+        // Icons in Settings are ink: the colour tone is the chat's, and a list of tinted symbols read as one of links.
+        .listItemTint(.primary)
         .onChange(of: store.snapshot?.colorTone, initial: true) {
             if let snapshot = store.snapshot { colorTone.adopt(snapshot) }
         }
@@ -133,7 +135,9 @@ public struct SettingsView: View {
             Label {
                 Text(row.title)
             } icon: {
+                // Ink, not the accent: the colour tone is the chat's, and Settings reads as the system's own.
                 Image(systemName: row.systemImage)
+                    .foregroundStyle(.primary)
             }
         }
     }

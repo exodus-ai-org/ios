@@ -50,44 +50,44 @@ public final class ColorToneModel {
 }
 
 extension ColorTone {
-    /// The tone as painted: neutral is the system accent as it is; every other tone is its system colour, in the
-    /// variant that reads as text on this appearance's backgrounds (see `safeVariant`).
+    static func scheme(_ traits: UITraitCollection) -> Scheme {
+        traits.userInterfaceStyle == .dark ? .dark : .light
+    }
+
+    /// The tone as a surface or a shape (`fill`): the send button, a selected chip, a swatch. Drawn in Display P3,
+    /// the phone's own space.
     public var uiColor: UIColor {
-        guard let system = systemColor.map(Self.uiColor(for:)) else { return .systemBlue }
-        return UIColor { traits in
-            let standard = system.resolvedColor(with: traits)
-            let accessible = system.resolvedColor(
-                with: traits.modifyingTraits { $0.accessibilityContrast = .high })
-            let backgrounds = [UIColor.systemBackground, .secondarySystemGroupedBackground]
-                .map { Self.rgb($0.resolvedColor(with: traits)) }
-            let safe = Self.safeVariant(standard: Self.rgb(standard), accessible: Self.rgb(accessible), on: backgrounds)
-            return safe == Self.rgb(accessible) ? accessible : standard
+        UIColor { traits in Self.uiColor(displaying: self.fill(Self.scheme(traits))) }
+    }
+
+    /// The tone as text and glyphs on the page (`ink`): dark enough in light, light enough in dark, and more so
+    /// under Increase Contrast. A fill is not an ink: yellow on white cannot be read.
+    public var inkUIColor: UIColor {
+        UIColor { traits in
+            Self.uiColor(
+                displaying: self.ink(Self.scheme(traits), increasedContrast: traits.accessibilityContrast == .high))
         }
+    }
+
+    static func uiColor(displaying color: OKLCH) -> UIColor {
+        let p3 = color.components(in: .displayP3)
+        return UIColor(displayP3Red: p3.red, green: p3.green, blue: p3.blue, alpha: 1)
     }
 
     public var color: Color { Color(uiColor: uiColor) }
+    public var inkColor: Color { Color(uiColor: inkUIColor) }
 
-    /// What `.tint` gets: nothing for neutral, so every control keeps its system look (switches stay green).
-    public var tint: Color? { self == .neutral ? nil : color }
+    /// What `.tint` gets — the ink, since a tint colours links and button titles. Neutral's is black in light and
+    /// near white in dark, as the desktop's default: nothing in a chat is the system's blue.
+    public var tint: Color { inkColor }
 
-    /// A glyph drawn on the accent, such as the send button's arrow.
+    /// A glyph drawn on the fill, such as the send button's arrow.
     public var glyphColor: Color {
-        let accent = uiColor
-        return Color(
+        Color(
             uiColor: UIColor { traits in
-                Self.glyphIsWhite(on: Self.rgb(accent.resolvedColor(with: traits))) ? .white : .black
+                let glyph = self.glyph(Self.scheme(traits))
+                return UIColor(red: glyph.red, green: glyph.green, blue: glyph.blue, alpha: 1)
             })
-    }
-
-    static func uiColor(for system: SystemColor) -> UIColor {
-        switch system {
-        case .blue: .systemBlue
-        case .green: .systemGreen
-        case .indigo: .systemIndigo
-        case .pink: .systemPink
-        case .orange: .systemOrange
-        case .yellow: .systemYellow
-        }
     }
 
     static func rgb(_ color: UIColor) -> RGB {

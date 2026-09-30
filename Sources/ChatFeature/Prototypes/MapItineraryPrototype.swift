@@ -50,8 +50,11 @@ struct ProtoMapItinerarySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             UserBubble(text: "Plan two days in Kyoto: temples on day one, Arashiyama on day two.")
-            ProtoInReply(state: "Running") {
-                ProtoCardHeader(systemImage: "map", title: "Map Itinerary", subtitle: "Days: 2, stops: 12") {
+            ProtoInReply(state: "Running · a sketch: a chat shows the step in the timeline, no card") {
+                ProtoCardHeader(
+                    systemImage: "map", title: "Map Itinerary",
+                    subtitle: ToolPresentation.itineraryText(ItineraryScale(days: 2, stops: 12))
+                ) {
                     ProtoStatusIcon(status: .running)
                 }
                 .protoCard()
@@ -65,6 +68,9 @@ struct ProtoMapItinerarySection: View {
             ProtoInReply(state: "Four days, one colour each; a stop with no position") {
                 Self.card(details: ProtoFixtures.vienna)
             }
+            ProtoInReply(state: "A week: the day picker scrolls, and the list names its day over its times") {
+                Self.card(details: ProtoFixtures.phuket)
+            }
             ProtoInReply(state: "A single place") {
                 Self.card(details: ProtoFixtures.lookup)
             }
@@ -76,7 +82,8 @@ struct ProtoMapItinerarySection: View {
             }
         }
         .fullScreenCover(item: $launchFocus) { focus in
-            if let details = MapItineraryDetails(json: ProtoFixtures.kyoto) {
+            // `-CardPrototypesMapFull week`: the seven-day Phuket trip instead of Kyoto.
+            if let details = MapItineraryDetails(json: Self.fullLaunch == "week" ? ProtoFixtures.phuket : ProtoFixtures.kyoto) {
                 MapItineraryFullView(model: MapItineraryCardModel(details), start: focus)
                     .environment(\.placePhotoLoader, Self.photos)
             }
@@ -85,7 +92,7 @@ struct ProtoMapItinerarySection: View {
         .task {
             guard let launch = Self.fullLaunch else { return }
             try? await Task.sleep(for: .milliseconds(600))
-            launchFocus = MapItineraryFocus(dayIndex: launch.hasPrefix("d1") ? 1 : 0, stopId: launch == "day" ? nil : launch)
+            launchFocus = MapItineraryFocus(dayIndex: launch.hasPrefix("d1") ? 1 : 0, stopId: launch == "day" || launch == "week" ? nil : launch)
         }
     }
 }

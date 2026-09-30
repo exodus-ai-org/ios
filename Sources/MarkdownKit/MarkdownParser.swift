@@ -46,7 +46,9 @@ public enum MarkdownParser {
         switch markup {
         case let paragraph as Paragraph:
             if let image = soleImage(paragraph) { return .image(image) }
-            return .paragraph(inline(paragraph.children))
+            // What is left of a paragraph that was nothing but `<br>` is nothing: it is not drawn.
+            let content = HTMLBreak.trimming(inline(paragraph.children))
+            return content.characters.allSatisfy(\.isWhitespace) ? nil : .paragraph(content)
         case let heading as Heading:
             return .heading(level: heading.level, content: inline(heading.children))
         case let list as UnorderedList:
@@ -66,7 +68,8 @@ public enum MarkdownParser {
         case is ThematicBreak:
             return .thematicBreak
         case let html as HTMLBlock:
-            return .html(trimmingFinalNewline(html.rawHTML))
+            let text = HTMLBreak.replacing(in: trimmingFinalNewline(html.rawHTML))
+            return text.allSatisfy(\.isWhitespace) ? nil : .html(text)
         default:
             let name = String(describing: type(of: markup))
             if !unhandled.contains(name) { unhandled.append(name) }
@@ -131,6 +134,35 @@ public enum MarkdownParser {
     }
 }
 
+/// `<br>`, `<br/>`, `<br />`, in any case: the one piece of HTML a model writes into markdown as a matter of
+/// course, and it means a line break. Every other tag is shown as the text it is.
+enum HTMLBreak {
+    nonisolated(unsafe) private static let tag = #/<br\s*/?>/#.ignoresCase()
+
+    static func matches(_ html: String) -> Bool {
+        html.trimmingCharacters(in: .whitespaces).wholeMatch(of: tag) != nil
+    }
+
+    /// An HTML block's text with its breaks as line breaks, and none of them left at its start or its end.
+    static func replacing(in html: String) -> String {
+        guard html.contains("<") else { return html }
+        let replaced = html.replacing(tag, with: "\n")
+        guard replaced != html else { return html }
+        return replaced.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// A break at the start or the end of a paragraph would draw an empty line there.
+    static func trimming(_ content: AttributedString) -> AttributedString {
+        guard content.characters.first?.isNewline == true || content.characters.last?.isNewline == true else {
+            return content
+        }
+        var content = content
+        while content.characters.first?.isNewline == true { content.characters.removeFirst() }
+        while content.characters.last?.isNewline == true { content.characters.removeLast() }
+        return content
+    }
+}
+
 // Appending many small AttributedStrings is slow; collect plain text and styled scalar ranges, then style once.
 private struct InlineBuilder {
     struct Run {
@@ -183,7 +215,7 @@ private struct InlineBuilder {
         case let image as Image:
             withLink(image.source.flatMap(URL.init(string:))) { $0.append(image.plainText) }
         case let html as InlineHTML:
-            append(html.rawHTML)
+            append(HTMLBreak.matches(html.rawHTML) ? "\n" : html.rawHTML)
         default:
             if markup.childCount > 0 {
                 visitChildren(markup)

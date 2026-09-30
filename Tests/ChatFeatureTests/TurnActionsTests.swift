@@ -33,11 +33,54 @@ private let toolsOnly = #"""
 
 @Suite("TurnActions: the action bar")
 struct ActionBarRulesTests {
-    @Test("a finished answer gets copy, the time and no sources when it searched nothing")
+    @Test("a finished answer gets copy, and no sources when it searched nothing")
     func plainAnswer() {
         let bar = TurnActions.bar(for: turn(answered), isStreaming: false, canRegenerate: false)
-        #expect(bar == TurnActionBar(copyText: "Hello **there**", showsRegenerate: false, sourceCount: 0, timestampMs: 1_700_000_000_000))
+        #expect(bar == TurnActionBar(turnId: "run:u1", copyText: "Hello **there**", showsRegenerate: false, sourceCount: 0))
         #expect(bar?.showsSources == false)
+        #expect(bar?.sourceIcons.isEmpty == true)
+    }
+
+    @Test("read aloud takes the answer as prose, and is offered when there is something to say")
+    func readAloud() {
+        let bar = TurnActions.bar(for: turn(searched), isStreaming: false, canRegenerate: false)
+        #expect(bar?.speechText == "Found two")
+        #expect(bar?.showsReadAloud == true)
+        #expect(bar?.turnId == "run:u1")
+        let code = TurnActionBar(copyText: "\u{3010}1-source\u{3011}", showsRegenerate: false, sourceCount: 0)
+        #expect(code.showsReadAloud == false)
+    }
+
+    @Test("Sources draws the icons of its first three sites, each once, in the sources' order: Google's, as the desktop's")
+    func sourceIcons() {
+        func source(_ rank: Int, _ link: String, icon: String? = nil) -> CitationSource {
+            CitationSource(rank: rank, link: link, favicon: icon)
+        }
+        let icons = TurnActions.sourceIcons([
+            source(1, "https://a.example/1", icon: "https://icons.example/a.png"),
+            source(2, "https://a.example/2"),
+            source(3, "javascript:alert(1)", icon: "https://icons.example/x.png"),
+            source(4, "https://b.example/1"),
+            source(5, "https://c.example:8443/1"),
+            source(6, "https://d.example/1"),
+        ])
+        #expect(icons.map(\.id) == ["https://a.example", "https://b.example", "https://c.example:8443"])
+        #expect(
+            icons.map(\.iconURL)
+                == ["a.example", "b.example", "c.example"].map { SourceIcon.google(host: $0) })
+    }
+
+    @Test("sources that name no site leave the group one default glyph; no sources, no group")
+    func noIcons() {
+        #expect(TurnActions.sourceIcons([CitationSource(rank: 1, link: "not a link")]) == [SourceAvatar(id: "", iconURL: nil)])
+        #expect(TurnActions.sourceIcons([]).isEmpty)
+    }
+
+    @Test("the bar carries the icons of the turn's own sources")
+    func barIcons() {
+        let bar = TurnActions.bar(for: turn(searched), isStreaming: false, canRegenerate: false)
+        #expect(bar?.sourceIcons.map(\.id) == ["https://a.example", "https://b.example"])
+        #expect(bar?.sourceIcons.map(\.iconURL) == [SourceIcon.google(host: "a.example"), SourceIcon.google(host: "b.example")])
     }
 
     @Test("Sources shows with the turn's own count, and only when there is one")
@@ -66,7 +109,7 @@ struct ActionBarRulesTests {
         #expect(TurnActions.bar(for: AssistantTurn(runId: "r", body: ""), isStreaming: false, canRegenerate: true) == nil)
     }
 
-    @Test("copy takes the whole markdown body, joined across the run's text blocks, markers and all")
+    @Test("copy takes the whole markdown body, joined across the run's text blocks; a marker no source answers to is dropped")
     func copyText() {
         let twoBlocks = #"""
             [{"id":"u1","runId":"u1","role":"user","content":"hi"},
@@ -75,34 +118,17 @@ struct ActionBarRulesTests {
              {"id":"a2","runId":"u1","role":"assistant","content":[{"type":"text","text":"Second 【1-source】."}],"stopReason":"stop"}]
             """#
         let bar = TurnActions.bar(for: turn(twoBlocks), isStreaming: false, canRegenerate: false)
-        #expect(bar?.copyText == "First.\n\nSecond \u{3010}1-source\u{3011}.")
-        #expect(bar?.copyText == turn(twoBlocks).body)
+        #expect(turn(twoBlocks).body == "First.\n\nSecond \u{3010}1-source\u{3011}.")
+        #expect(bar?.copyText == "First.\n\nSecond .")
     }
 
-    @Test("the time reads from the last assistant message, and nothing for a missing, zero or broken timestamp")
-    func timeText() {
-        #expect(TurnActions.bar(for: turn(searched), isStreaming: false, canRegenerate: false)?.timestampMs == 1_700_000_005_000)
-        #expect(TurnActions.timeText(nil) == nil)
-        #expect(TurnActions.timeText(0) == nil)
-        #expect(TurnActions.timeText(-5) == nil)
-        #expect(TurnActions.timeText(.nan) == nil)
-        #expect(TurnActions.timeText(.infinity) == nil)
-        #expect(TurnActions.timeText(1_700_000_000_000)?.isEmpty == false)
-    }
-
-    @Test("the time is the Recents list's format: exactly the short time today, a weekday this week, a date before")
-    func timeFormat() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        let locale = Locale(identifier: "en_US")
-        let now = Date(timeIntervalSince1970: 1_790_078_400)  // 2026-09-22 12:00 UTC, a Tuesday
-        func text(_ secondsBefore: TimeInterval) -> String? {
-            TurnActions.timeText(
-                (now.timeIntervalSince1970 - secondsBefore) * 1000, now: now, calendar: calendar, locale: locale)
-        }
-        #expect(text(2 * 3600 + 45 * 60) == "9:15\u{202F}AM")
-        #expect(text(24 * 3600) == "Mon")
-        #expect(TurnActions.timeText(1_700_000_000_000, now: now, calendar: calendar, locale: locale) == "11/14/2023")
+    @Test("copy writes references for what the answer cites; read aloud still takes the answer alone")
+    func copyTextWithReferences() {
+        let bar = TurnActions.bar(for: turn(searched), isStreaming: false, canRegenerate: false)
+        #expect(bar?.copyText.contains("\u{3010}") == false)
+        #expect(bar?.copyText.contains("[1]") == true)
+        #expect(bar?.copyText.contains("\n\n---\n\n## ") == true)
+        #expect(bar?.speechText == "Found two")
     }
 }
 

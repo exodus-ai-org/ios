@@ -84,8 +84,10 @@ struct DeepResearchJobCard: View {
             DeepResearchPreview(report: report) { showsReport = true }
         case .finishedWithoutReport:
             DeepResearchNote(text: Text("ios:chat.card.research.noReport"), systemImage: "doc")
-        case .failed(let terminated):
-            DeepResearchError(text: terminated ? DeepResearchText.terminated : DeepResearchText.failed)
+        case .failed(let message):
+            DeepResearchFailure(message: message)
+        case .terminated:
+            DeepResearchError(text: DeepResearchText.terminated)
         case .unknownStatus(let status):
             DeepResearchNote(text: Text(verbatim: DeepResearchText.unknownStatus(status)), systemImage: "questionmark.circle")
         case .unreadable:
@@ -124,7 +126,7 @@ struct DeepResearchFrame<Content: View>: View {
             DeepResearchHeader(subject: subject, status: status, detail: detail)
             Divider()
             content
-                .padding(12)
+                .padding(CardStyle.inset)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .modifier(CardSurface())
@@ -132,13 +134,18 @@ struct DeepResearchFrame<Content: View>: View {
 }
 
 enum DeepResearchStatus: Equatable {
-    case working, done, attention, failed
+    /// `starting`: the job is known, its first step is not. `working`: its steps are coming in.
+    case starting, working, done, attention, failed
+
+    /// One spinner at a time: once the steps show, the step in progress carries it.
+    var spinsInHeader: Bool { self == .starting }
 
     init(_ state: DeepResearchJobState) {
         switch state {
-        case .loading, .running: self = .working
+        case .loading: self = .starting
+        case .running: self = .working
         case .done: self = .done
-        case .failed: self = .failed
+        case .failed, .terminated: self = .failed
         case .stalled, .finishedWithoutReport, .unknownStatus, .unreadable, .missing, .unreachable: self = .attention
         }
     }
@@ -179,24 +186,21 @@ struct DeepResearchHeader: View {
             }
             badge
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(Color(.tertiarySystemFill))
+        .cardHeader()
         .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private var badge: some View {
         switch status {
-        case .working:
-            HStack(spacing: 5) {
-                ProgressView().controlSize(.mini).accessibilityHidden(true)
-                Text("chat:deepResearchCard.researching")
+        case .starting, .working:
+            // The spinner alone: the title names the tool, and the words beside it took the room the question
+            // needs. VoiceOver still hears them.
+            if status.spinsInHeader {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel(Text("chat:deepResearchCard.researching"))
             }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            // Stacked under the title at accessibility sizes, where it wraps rather than running past the card's edge.
-            .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
         case .done:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -345,6 +349,29 @@ struct DeepResearchError: View {
         }
         .font(.subheadline)
         .foregroundStyle(.red)
+    }
+}
+
+/// A failed job, as the desktop's card shows it: "Research failed" and the stored error, when there is one.
+struct DeepResearchFailure: View {
+    let message: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label {
+                Text("chat:deepResearchCard.failed")
+                    .font(.subheadline.weight(.semibold))
+            } icon: {
+                Image(systemName: "exclamationmark.circle")
+            }
+            .foregroundStyle(.red)
+            Text(verbatim: message ?? DeepResearchText.failed)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

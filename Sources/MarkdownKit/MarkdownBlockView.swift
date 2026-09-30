@@ -8,31 +8,36 @@ struct MarkdownBlockView: View, Equatable {
     var body: some View {
         switch block.kind {
         case .paragraph(let content):
-            MarkdownInlineText(content: content, spec: .body, citations: citations)
+            MarkdownInlineText(content: content, spec: .body, citations: citations, isArriving: context.isArriving)
         case .heading(let level, let content):
             MarkdownInlineText(
-                content: content, spec: MarkdownLayoutRules.headingFont(level: level), citations: citations)
-                .foregroundStyle(level >= 6 ? .secondary : .primary)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityHeading(Self.headingLevel(level))
+                content: content, spec: MarkdownLayoutRules.headingFont(level: level), citations: citations,
+                isArriving: context.isArriving, isSecondary: level >= 6
+            )
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityHeading(Self.headingLevel(level))
         case .list(let list):
-            MarkdownListView(list: list, citations: citations, depth: context.listDepth)
+            MarkdownListView(
+                list: list, citations: citations, depth: context.listDepth, isArriving: context.isArriving)
         case .blockquote(let blocks):
             MarkdownQuoteView(blocks: blocks, citations: citations, context: context)
         case .codeBlock(let language, let code):
             MarkdownCodeBlockView(language: language, code: code)
         case .table(let table):
-            MarkdownTableView(table: table, citations: citations)
+            MarkdownTableView(table: table, citations: citations, isArriving: context.isArriving)
         case .thematicBreak:
             Divider()
         case .image(let image):
             MarkdownImageView(image: image)
         case .html(let html):
-            Text(verbatim: html)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
+            if context.isArriving {
+                Text(verbatim: html)
+                    .font(MarkdownFontSpec.body.font)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                SelectableBodyText(html, lineSpacing: 0, isSecondary: true)
+            }
         }
     }
 
@@ -52,17 +57,21 @@ struct MarkdownInlineText: View {
     let content: AttributedString
     let spec: MarkdownFontSpec
     let citations: [Int: MarkdownCitation]
+    /// Still being written: drawn by `Text`. Settled, it stands in a text view.
+    var isArriving = false
+    var isSecondary = false
 
-    @ScaledMetric(relativeTo: .body) private var lineSpacing: CGFloat = 3
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
+    @Environment(\.markdownUnderlinesLinks) private var underlinesLinks
 
     var body: some View {
-        let styled = MarkdownInlineStyler.style(content, spec: spec, citations: citations)
-        Text(styled.text)
-            .lineSpacing(lineSpacing)
-            .fixedSize(horizontal: false, vertical: true)
+        // The read is the point: the fonts below are the system's at this text size.
+        _ = dynamicTypeSize
+        let styled = MarkdownInlineStyler.style(
+            content, spec: spec, citations: citations, underlinesLinks: underlinesLinks)
+        return text(styled)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .textSelection(.enabled)
             .accessibilityActions {
                 ForEach(styled.chips, id: \.self) { number in
                     if let citation = citations[number] {
@@ -81,12 +90,27 @@ struct MarkdownInlineText: View {
     }
 }
 
+extension MarkdownInlineText {
+    @ViewBuilder
+    fileprivate func text(_ styled: MarkdownInlineStyler.Output) -> some View {
+        if isArriving {
+            MarkdownStyledText(styled: styled, spec: spec)
+                .lineSpacing(spec.pointSize * MarkdownLayoutRules.lineGap(for: spec))
+                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(isSecondary ? .secondary : .primary)
+        } else {
+            MarkdownSelectableText(styled: styled, spec: spec, isSecondary: isSecondary)
+        }
+    }
+}
+
 struct MarkdownListView: View {
     let list: MarkdownList
     let citations: [Int: MarkdownCitation]
     let depth: Int
+    var isArriving = false
 
-    @ScaledMetric(relativeTo: .body) private var em: CGFloat = 17
+    @ScaledMetric(relativeTo: .body) private var em: CGFloat = MarkdownFontSpec.bodySize
 
     var body: some View {
         let widest = MarkdownLayoutRules.widestMarker(list, depth: depth)
@@ -96,7 +120,7 @@ struct MarkdownListView: View {
                     marker(for: item, number: list.startIndex + index, widest: widest)
                     MarkdownBlockStack(
                         blocks: item.blocks, citations: citations,
-                        context: MarkdownRenderContext(listDepth: depth + 1, inList: true))
+                        context: MarkdownRenderContext(listDepth: depth + 1, inList: true, isArriving: isArriving))
                 }
             }
         }
@@ -119,7 +143,7 @@ struct MarkdownListView: View {
                 Text(verbatim: MarkdownLayoutRules.listMarker(isOrdered: list.isOrdered, number: number, depth: depth))
                     .foregroundStyle(.secondary)
             }
-            .font(list.isOrdered ? Font.body.monospacedDigit() : Font.body.weight(.semibold))
+            .font(list.isOrdered ? MarkdownFontSpec.body.font.monospacedDigit() : MarkdownFontSpec.body.font.weight(.semibold))
             .accessibilityHidden(!list.isOrdered)
         }
     }
@@ -130,12 +154,12 @@ struct MarkdownQuoteView: View {
     let citations: [Int: MarkdownCitation]
     let context: MarkdownRenderContext
 
-    @ScaledMetric(relativeTo: .body) private var em: CGFloat = 17
+    @ScaledMetric(relativeTo: .body) private var em: CGFloat = MarkdownFontSpec.bodySize
 
     var body: some View {
         HStack(alignment: .top, spacing: em * 0.75) {
             Capsule()
-                .fill(LinearGradient(colors: [.accentColor, .accentColor.opacity(0.35)], startPoint: .top, endPoint: .bottom))
+                .fill(.tint.opacity(0.55))
                 .frame(width: 3)
                 .padding(.vertical, 2)
             MarkdownBlockStack(blocks: blocks, citations: citations, context: context)

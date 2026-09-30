@@ -51,6 +51,8 @@ let project = Project(
                         "Exodus uses the camera to scan the pairing code shown on your computer.",
                     "NSFaceIDUsageDescription":
                         "Exodus uses Face ID to unlock the connection to your computer.",
+                    "NSLocationWhenInUseUsageDescription":
+                        "Exodus uses your location to show your position on the itinerary map and center the map when you tap the location button.",
                     "NSPhotoLibraryAddUsageDescription":
                         "Exodus saves the images you choose to your photo library."
                 ]

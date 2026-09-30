@@ -276,10 +276,12 @@ struct UsedMemoriesLine: View {
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-                .frame(minHeight: 32, alignment: .leading)
-                .contentShape(.rect)
+                // The line takes the room of its text; its target reaches beyond it.
+                .footRowTarget()
             }
             .buttonStyle(.plain)
+            .padding(.top, TurnFootMetrics.rowTop)
+            .padding(.bottom, TurnFootMetrics.rowBottom)
             .accessibilityLabel(Text(verbatim: label))
             .accessibilityAddTraits(.isButton)
             .sheet(isPresented: $open, onDismiss: perform) {

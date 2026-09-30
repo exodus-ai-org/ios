@@ -46,7 +46,7 @@ struct ComputerUseCard: View {
                 }
                 outcome
             }
-            .padding(12)
+            .padding(CardStyle.inset)
         }
         .modifier(CardSurface())
         .task(id: model.finalScreenshot) { await loadFinal() }
@@ -169,9 +169,7 @@ struct ComputerUseHeader: View {
             }
             badge
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(Color(.tertiarySystemFill))
+        .cardHeader()
         .accessibilityElement(children: .combine)
     }
 
@@ -281,6 +279,7 @@ struct ComputerUseControls: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.toolCardsAreLive) private var isLive
     @Environment(\.computerUseRemote) private var remote
+    @Environment(\.accentGlyph) private var accentGlyph
 
     var body: some View {
         let question = ComputerUseRules.question(model, isLive: isLive)
@@ -360,9 +359,10 @@ struct ComputerUseControls: View {
         Button {
             controls.answer(remote, sessionId: sessionId, step: step)
         } label: {
-            Text("chat:computerUseCard.doneContinue")
+            Text("chat:computerUseCard.doneContinue").foregroundStyle(accentGlyph)
         }
         .buttonStyle(.borderedProminent)
+        .toneFill()
         .disabled(controls.busy)
     }
 

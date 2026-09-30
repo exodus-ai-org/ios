@@ -40,7 +40,8 @@ private struct ColorToneRow: View {
             if isSelected {
                 Image(systemName: "checkmark")
                     .fontWeight(.semibold)
-                    .foregroundStyle(tone.color)
+                    // A glyph on the page: the tone's ink, which reads where its fill may not.
+                    .foregroundStyle(tone.inkColor)
             }
         }
         .contentShape(.rect)

@@ -42,11 +42,27 @@ enum TranscriptRules {
         !turn.steps.isEmpty || timelineIsLive(turn, isStreaming: isStreaming)
     }
 
-    /// The cards a turn draws. An image still forming is shown only while its run streams: in a stopped run it never
-    /// will, so it shows nothing, as on the desktop. (A stopped computer_use keeps its card, reading "stopped".)
+    /// What a turn draws, in the order the model produced it. An image still forming is shown only while its run
+    /// streams: in a stopped run it never will, so it shows nothing, as on the desktop — and the text it stood
+    /// between is one block again. (A stopped computer_use keeps its card, reading "stopped".)
+    static func blocks(_ turn: AssistantTurn, isStreaming: Bool) -> [AssistantTurn.Block] {
+        guard !isStreaming, turn.blocks.contains(where: neverComes) else { return turn.blocks }
+        return AssistantTurn.Block.numbered(turn.blocks.filter { !neverComes($0) })
+    }
+
+    /// The cards among `blocks`.
     static func toolCards(_ turn: AssistantTurn, isStreaming: Bool) -> [ToolCard] {
-        if isStreaming { return turn.toolCards }
-        return turn.toolCards.filter { !($0.isPending && $0.toolName == "image_generation") }
+        blocks(turn, isStreaming: isStreaming).compactMap { if case .card(let card) = $0 { card } else { nil } }
+    }
+
+    private static func neverComes(_ block: AssistantTurn.Block) -> Bool {
+        if case .card(let card) = block { card.isPending && card.toolName == "image_generation" } else { false }
+    }
+
+    /// The block that grows while the run streams: the last one, when it is text. Text above a card is finished.
+    static func streamingBlockId(_ blocks: [AssistantTurn.Block], isStreaming: Bool) -> String? {
+        guard isStreaming, case .text(let text)? = blocks.last else { return nil }
+        return text.id
     }
 
     /// The search media belong to the answer's section, as on the desktop: a run with no answer and no error shows none.
@@ -124,7 +140,11 @@ enum TranscriptRules {
             byRank[source.rank] = source
         }
         return order.compactMap { rank in
-            byRank[rank].map { MarkdownCitation(number: rank, title: $0.title, host: ToolPresentation.host(of: $0)) }
+            byRank[rank].map {
+                MarkdownCitation(
+                    number: rank, title: $0.title, host: ToolPresentation.host(of: $0), iconURL: SourceIcon.url(for: $0),
+                    iconFallbackURL: SourceIcon.fallback(for: $0))
+            }
         }
     }
 }

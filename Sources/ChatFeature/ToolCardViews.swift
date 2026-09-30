@@ -18,16 +18,6 @@ struct ToolCardView: View {
     }
 }
 
-struct CardSurface: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground).opacity(0.5), in: .rect(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(.separator), lineWidth: 0.5))
-            .clipShape(.rect(cornerRadius: 12))
-    }
-}
-
 struct TerminalCard: View {
     let output: ToolPresentation.TerminalOutput
     @State private var showsAll = false
@@ -52,9 +42,7 @@ struct TerminalCard: View {
                     .fixedSize()
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color(.tertiarySystemFill))
+            .cardHeader()
             Divider()
             outputBody
             if isLong {
@@ -68,7 +56,7 @@ struct TerminalCard: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.head)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, CardStyle.inset)
                     .padding(.vertical, 6)
             }
         }
@@ -105,7 +93,7 @@ struct TerminalCard: View {
             Text("ios:chat.message.terminal.noOutput")
                 .italic()
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, CardStyle.inset)
                 .padding(.vertical, 8)
         } else {
             VStack(alignment: .leading, spacing: 6) {
@@ -119,7 +107,7 @@ struct TerminalCard: View {
                         .foregroundStyle(output.succeeded ? Color.orange : Color.red)
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, CardStyle.inset)
             .padding(.vertical, 8)
         }
     }
@@ -156,7 +144,7 @@ private struct GenericToolCard: View {
                     }
                 }
                 .font(.subheadline)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, CardStyle.inset)
                 .padding(.vertical, 9)
                 .contentShape(.rect)
             }
@@ -169,7 +157,7 @@ private struct GenericToolCard: View {
                     .font(.caption2.monospaced())
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, CardStyle.inset)
                     .padding(.vertical, 8)
                     .transition(.opacity)
             }

@@ -315,6 +315,8 @@ enum ImageGenerationText {
 /// on screen; with Reduce Motion it is one still frame (the status line says what is happening).
 struct ImageFormingField: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The field is a surface in the tone: its fill.
+    @Environment(\.toneAccent) private var fill
     @State private var isVisible = true
 
     var body: some View {
@@ -330,7 +332,7 @@ struct ImageFormingField: View {
     private func field(time: Float) -> some View {
         if let library = ImageFormingShader.library {
             Rectangle()
-                .fill(.tint)
+                .fill(fill)
                 .visualEffect { content, proxy in
                     content.colorEffect(library.imageForming(.float2(proxy.size), .float(time)))
                 }

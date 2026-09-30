@@ -15,7 +15,7 @@ struct ProtoWeatherSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             UserBubble(text: "What's the weather in Shanghai this week?")
-            ProtoInReply(state: "Running") {
+            ProtoInReply(state: "Running · a sketch: a chat shows the step in the timeline, no card") {
                 ProtoCardHeader(systemImage: "cloud.sun", title: "Weather", subtitle: "Shanghai") {
                     ProtoStatusIcon(status: .running)
                 }

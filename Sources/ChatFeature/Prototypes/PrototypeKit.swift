@@ -5,18 +5,8 @@ import SwiftUI
 // DEBUG-only building blocks of the card prototypes. Copy is `Text(verbatim:)`: this page never ships, and the real
 // cards will take catalog keys when a design is picked.
 
-struct ProtoCardSurface: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground).opacity(0.5), in: .rect(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(.separator), lineWidth: 0.5))
-            .clipShape(.rect(cornerRadius: 12))
-    }
-}
-
 extension View {
-    func protoCard() -> some View { modifier(ProtoCardSurface()) }
+    func protoCard() -> some View { modifier(CardSurface()) }
 }
 
 enum ProtoStatus {
@@ -73,8 +63,7 @@ struct ProtoCardHeader<Trailing: View>: View {
             }
             trailing
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .cardHeader()
     }
 }
 

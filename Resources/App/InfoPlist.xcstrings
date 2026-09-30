@@ -212,6 +212,72 @@
         }
       }
     },
+    "NSLocationWhenInUseUsageDescription" : {
+      "comment" : "Location permission prompt. Exodus is the app's name and stays as is.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus verwendet deinen Standort, um deine Position auf der Routenkarte anzuzeigen und die Karte beim Tippen auf die Standorttaste dorthin zu zentrieren."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus uses your location to show your position on the itinerary map and center the map when you tap the location button."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus usa tu ubicación para mostrar tu posición en el mapa del itinerario y centrarlo al tocar el botón de ubicación."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus utilise votre position pour l'afficher sur la carte de l'itinéraire et centrer la carte lorsque vous touchez le bouton de localisation."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus usa la tua posizione per mostrarla sulla mappa dell'itinerario e centrare la mappa quando tocchi il pulsante della posizione."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus は、旅程マップに現在地を表示し、現在地ボタンをタップしたときに地図を現在地へ移動するために位置情報を使用します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus는 일정 지도에 현재 위치를 표시하고 위치 버튼을 탭할 때 지도를 해당 위치로 이동하기 위해 위치 정보를 사용합니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Exodus usa sua localização para mostrar sua posição no mapa do roteiro e centralizar o mapa quando você toca no botão de localização."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 會使用你的位置，在行程地圖上顯示你的位置，並在你點按定位按鈕時將地圖移至該處。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 會使用你的位置，在行程地圖上顯示你的位置，並在你點選定位按鈕時將地圖移至該處。"
+          }
+        }
+      }
+    },
     "NSPhotoLibraryAddUsageDescription" : {
       "comment" : "Photo library (add only) permission prompt, shown when saving a generated image. Exodus is the app's name and stays as is.",
       "extractionState" : "manual",

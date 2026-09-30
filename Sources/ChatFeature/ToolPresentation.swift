@@ -174,8 +174,24 @@ enum ToolPresentation {
             : String(localized: "ios:chat.message.timeline.resultCount", defaultValue: "\(count) results", comment: "A web search step. %lld is how many results it found (never 1).")
     }
 
+    static func moreSitesText(_ count: Int) -> String {
+        String(localized: "ios:chat.message.timeline.moreSites", defaultValue: "+\(count) more", comment: "The last pill under a web search step: how many more sites it found than the pills show. It opens the list of sources.")
+    }
+
+    /// "3 days, 12 stops": the desktop's phrase, each count in its own plural form.
     static func itineraryText(_ scale: ItineraryScale) -> String {
-        String(localized: "ios:chat.message.timeline.itinerary", defaultValue: "Days: \(scale.days), stops: \(scale.stops)", comment: "What a map itinerary step built. The first number is days, the second the places to visit.")
+        // The catalog's plural picks the form; the branches only give the hostless tests (no catalog) the right English.
+        let days =
+            scale.days == 1
+            ? String(localized: "chat:toolPreview.mapItineraryDayCount", defaultValue: "\(scale.days) day", comment: "A map itinerary's length in days (plural).")
+            : String(localized: "chat:toolPreview.mapItineraryDayCount", defaultValue: "\(scale.days) days", comment: "A map itinerary's length in days (plural).")
+        let stops =
+            scale.stops == 1
+            ? String(localized: "chat:toolPreview.mapItineraryStopCount", defaultValue: "\(scale.stops) stop", comment: "A map itinerary's number of places to visit (plural).")
+            : String(localized: "chat:toolPreview.mapItineraryStopCount", defaultValue: "\(scale.stops) stops", comment: "A map itinerary's number of places to visit (plural).")
+        return String(
+            localized: "chat:toolPreview.mapItinerarySummary", defaultValue: "\(days), \(stops)",
+            comment: "A map itinerary's scale: its days, then its stops, each already a phrase.")
     }
 
     static func host(of source: CitationSource) -> String? {

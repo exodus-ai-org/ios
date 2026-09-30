@@ -25,9 +25,145 @@ struct ColorToneAndCatalogTests {
         #expect(ColorTone.allCases.map(\.rawValue) == ["neutral", "emerald", "blue", "violet", "rose", "orange", "yellow"])
     }
 
-    @Test("each tone is painted in its iOS system colour; neutral keeps the system accent")
-    func tonesMapToSystemColors() {
-        #expect(ColorTone.allCases.map(\.systemColor) == [nil, .green, .blue, .indigo, .pink, .orange, .yellow])
+    @Test("the fills are the reference's colours in light")
+    func fillsAreTheReference() {
+        let expected: [ColorTone: String] = [
+            .emerald: "#6CB362", .blue: "#5480F0", .violet: "#8553E7", .rose: "#E17EAD", .orange: "#DE8344",
+            .yellow: "#EDC859",
+        ]
+        for (tone, hex) in expected {
+            #expect(tone.fill(.light).components(in: .sRGB).hexString == hex, "\(tone)")
+        }
+        #expect(ColorTone.neutral.reference == nil)
+    }
+
+    @Test("neutral is the desktop's default, shadcn's black and white: its base tokens, converted")
+    func neutralIsTheDesktopsBase() {
+        let neutral = ColorTone.neutral
+        // --primary: oklch(0.205 0 0) and oklch(0.922 0 0).
+        #expect(neutral.fill(.light) == OKLCH(lightness: 0.205, chroma: 0, hue: 0))
+        #expect(neutral.fill(.dark) == OKLCH(lightness: 0.922, chroma: 0, hue: 0))
+        #expect(neutral.fill(.light).components(in: .sRGB).hexString == "#171717")
+        #expect(neutral.fill(.dark).components(in: .sRGB).hexString == "#E5E5E5")
+        // --primary-foreground: oklch(0.985 0 0) and oklch(0.205 0 0).
+        #expect(neutral.glyph(.light).hexString == "#FAFAFA")
+        #expect(neutral.glyph(.dark).hexString == "#171717")
+        // --secondary: oklch(0.97 0 0) and oklch(0.269 0 0).
+        #expect(neutral.surface(.light).hexString == "#F5F5F5")
+        #expect(neutral.surface(.dark).hexString == "#262626")
+        // Black on white and the other way round are text already: the ink is the fill.
+        for scheme in [ColorTone.Scheme.light, .dark] {
+            for increased in [false, true] {
+                #expect(neutral.ink(scheme, increasedContrast: increased) == neutral.fill(scheme), "\(scheme)")
+            }
+        }
+        // It is a grey: it has no hue to keep other colours away from.
+        #expect(neutral.accentHueAngle == nil)
+        #expect(ColorTone.blue.accentHueAngle != nil)
+    }
+
+    @Test("on a dark page a fill keeps its hue, a touch lighter and a little less colourful")
+    func darkFills() {
+        for tone in ColorTone.allCases where tone != .neutral {
+            let light = tone.fill(.light)
+            let dark = tone.fill(.dark)
+            #expect(abs(dark.hue - light.hue) < 0.5, "\(tone)")
+            #expect(dark.lightness > light.lightness, "\(tone)")
+            #expect(dark.lightness - light.lightness < 0.06, "\(tone)")
+            #expect(dark.chroma < light.chroma, "\(tone)")
+            #expect(dark.chroma > light.chroma * 0.8, "\(tone)")
+        }
+    }
+
+    @Test(
+        "an ink reads as text on the page at 4.5:1, light and dark, and at 7:1 under Increase Contrast",
+        arguments: ColorTone.allCases)
+    func inksRead(tone: ColorTone) {
+        for scheme in [ColorTone.Scheme.light, .dark] {
+            let fill = tone.fill(scheme)
+            for (increased, minimum) in [(false, 4.5), (true, 7.0)] {
+                let ink = tone.ink(scheme, increasedContrast: increased)
+                for background in ColorTone.pageLuminances(scheme) {
+                    #expect(ink.contrast(onLuminance: background) >= minimum, "\(tone) \(scheme) \(increased)")
+                }
+                // The same hue, moved away from the page and no further than the contrast asks.
+                #expect(abs(ink.hue - fill.hue) < 0.5, "\(tone)")
+                #expect(scheme == .light ? ink.lightness <= fill.lightness : ink.lightness >= fill.lightness)
+                #expect(ink.contrast(onLuminance: scheme == .light ? 1 : 0.0185) < minimum + 1.2 || ink == fill.mapped(into: ColorTone.gamut))
+            }
+        }
+    }
+
+    @Test("a fill that reads already is its own ink; one that does not is never used as text")
+    func inkIsTheFillWhenItReads() {
+        // Violet on white is 4.8:1 as it is.
+        #expect(ColorTone.violet.ink(.light) == ColorTone.violet.fill(.light))
+        // Yellow on white is 1.6:1.
+        let yellow = ColorTone.yellow.fill(.light)
+        #expect(yellow.contrast(onLuminance: 1) < 2)
+        let ink = ColorTone.yellow.ink(.light)
+        #expect(ink.lightness < yellow.lightness - 0.2)
+    }
+
+    @Test("the glyph on a fill is decided by contrast, tone by tone: white on blue and violet, black on the rest")
+    func glyphOnFills() {
+        for scheme in [ColorTone.Scheme.light, .dark] {
+            for tone in ColorTone.allCases where tone != .neutral {
+                let fill = tone.fill(scheme).components(in: .sRGB)
+                let white = ColorTone.glyphIsWhite(on: fill)
+                let glyph: ColorTone.RGB = white ? .white : .black
+                #expect(tone.glyph(scheme) == glyph, "\(tone) \(scheme)")
+                #expect(ColorTone.contrast(glyph, fill) >= 3, "\(tone) \(scheme)")
+                if scheme == .light {
+                    #expect(white == [ColorTone.blue, .violet].contains(tone), "\(tone)")
+                }
+            }
+        }
+    }
+
+    @Test("a glyph stands out from its fill at 3:1 in every tone, neutral's included")
+    func glyphsStandOut() {
+        for scheme in [ColorTone.Scheme.light, .dark] {
+            for tone in ColorTone.allCases {
+                let fill = tone.fill(scheme).components(in: .sRGB)
+                #expect(ColorTone.contrast(tone.glyph(scheme), fill) >= 3, "\(tone) \(scheme)")
+            }
+        }
+    }
+
+    @Test("the bubble's surface is the fill washed far into the page: mostly page, the tone still in it")
+    func surfaces() {
+        let wash = ColorTone.RGB.white.mixed(with: .init(hex: 0x5480F0), share: ColorTone.surfaceShare(.light))
+        #expect(near(ColorTone.blue.surface(.light), wash))
+        #expect(ColorTone.blue.surface(.light).hexString == "#E7EDFD")
+        let dark = ColorTone.blue.surface(.dark)
+        #expect(dark.blue > dark.red)
+        #expect(dark.blue < 0.3)
+        // Neutral's is a grey: the desktop's `--secondary`.
+        let neutral = ColorTone.neutral.surface(.light)
+        #expect(near(neutral, .init(red: neutral.green, green: neutral.green, blue: neutral.green)))
+        #expect(neutral.hexString == "#F5F5F5")
+    }
+
+    private func near(_ a: ColorTone.RGB, _ b: ColorTone.RGB, _ tolerance: Double = 0.001) -> Bool {
+        abs(a.red - b.red) <= tolerance && abs(a.green - b.green) <= tolerance && abs(a.blue - b.blue) <= tolerance
+    }
+
+    @Test("text reads on the bubble at 4.5:1 and better, in every tone")
+    func textReadsOnTheSurface() {
+        for tone in ColorTone.allCases {
+            #expect(ColorTone.contrast(.black, tone.surface(.light)) >= 4.5, "\(tone)")
+            #expect(ColorTone.contrast(.white, tone.surface(.dark)) >= 4.5, "\(tone)")
+        }
+    }
+
+    @Test("mixing: none of the other is the colour itself, all of it is the other")
+    func mixing() {
+        let blue = ColorTone.RGB(hex: 0x5480F0)
+        #expect(ColorTone.RGB.white.mixed(with: blue, share: 0) == .white)
+        #expect(near(ColorTone.RGB.white.mixed(with: blue, share: 1), blue))
+        #expect(ColorTone.RGB.white.mixed(with: blue, share: 0.5).hexString == "#AAC0F8")
+        #expect(ColorTone.RGB(hex: 0x5480F0).hexString == "#5480F0")
     }
 
     @Test("WCAG contrast: the known extremes and a mid grey")

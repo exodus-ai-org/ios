@@ -177,8 +177,8 @@ struct ImageGenerationPendingTests {
         #expect(TranscriptRules.toolCards(settled, isStreaming: false).count == 1, "a settled card stays")
     }
 
-    @Test("image cards come after every other card, in call order, as on the desktop; a running one keeps its slot")
-    func imagesLast() throws {
+    @Test("image cards stand where their calls were made, like every card; a running one keeps its place")
+    func imagesInCallOrder() throws {
         let both = decode(
             #"{"id":"a1","runId":"u1","role":"assistant","content":[{"type":"toolCall","id":"k1","name":"image_generation","arguments":{"prompt":"one"}},{"type":"toolCall","id":"k2","name":"terminal","arguments":{"command":"ls"}},{"type":"toolCall","id":"k3","name":"image_generation","arguments":{"prompt":"two"}}],"stopReason":"toolUse","timestamp":2}"#
         )
@@ -191,11 +191,11 @@ struct ImageGenerationPendingTests {
             guard case .assistantTurn(let turn)? = RunGrouper.group(messages, cache: &cache).last else { return [] }
             return turn.toolCards.map(\.renderKey)
         }
-        // k3 lands first, then the terminal; k1 is still forming and stays ahead of k3.
-        #expect(keys([user, both, result("t3", "k3", details: details), terminal]) == ["call:k2", "call:k1", "call:k3"])
+        // k3 lands first, then the terminal; k1 is still forming. The calls were made k1, k2, k3.
+        #expect(keys([user, both, result("t3", "k3", details: details), terminal]) == ["call:k1", "call:k2", "call:k3"])
         #expect(
             keys([user, both, result("t3", "k3", details: details), terminal, result("t1", "k1", details: details)])
-                == ["call:k2", "call:k1", "call:k3"])
+                == ["call:k1", "call:k2", "call:k3"])
     }
 
     @Test("the viewer starts on the tapped page; the tapped frame's own image stands in for an evicted one")

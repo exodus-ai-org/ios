@@ -51,7 +51,24 @@ struct MapItineraryCardModel: Equatable, Sendable {
         var mappedStops: [Stop] { stops.filter { $0.coordinate != nil } }
     }
 
-    /// The transcript shows the map and this many stops; the rest are behind "+N more".
+    /// The line that names a day over its stops, so a time under it reads as a time of that day.
+    struct DayHeader: Equatable, Sendable {
+        let label: String
+        let title: String?
+    }
+
+    /// What the transcript's card lists for the day picked in it: one day, never the trip's stops laid end to end.
+    struct InlineDay: Equatable, Sendable {
+        let index: Int
+        /// Nil for a trip of one day that has no title: there is no other day to tell it from.
+        let header: DayHeader?
+        let summary: String?
+        /// The day's first stops; the rest are behind "+N more".
+        let stops: [Stop]
+        let moreCount: Int
+    }
+
+    /// The transcript shows this many stops of a day; the rest are behind "+N more".
     static let inlineStopCount = 4
 
     let title: String?
@@ -81,10 +98,22 @@ struct MapItineraryCardModel: Equatable, Sendable {
     var stopCount: Int { days.reduce(0) { $0 + $1.stops.count } }
     var hasMap: Bool { region != nil }
 
-    /// The first stops of the trip, in order across its days.
-    var inlineStops: [Stop] { Array(allStops.prefix(Self.inlineStopCount)) }
-    /// What "+N more" counts: every stop the transcript does not list.
-    var moreCount: Int { max(0, stopCount - Self.inlineStopCount) }
+    /// A trip of several days is looked at a day at a time.
+    var showsDayPicker: Bool { days.count > 1 }
+
+    /// What the transcript lists for day `index`; for a day that is not there, the first.
+    func inline(day index: Int) -> InlineDay {
+        guard let day = days.indices.contains(index) ? days[index] : days.first else {
+            return InlineDay(index: 0, header: nil, summary: nil, stops: [], moreCount: 0)
+        }
+        let title = day.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let header: DayHeader? =
+            showsDayPicker || title != nil ? DayHeader(label: MapItineraryText.dayLabel(day), title: title) : nil
+        return InlineDay(
+            index: day.index, header: header, summary: day.summary?.nilIfEmpty,
+            stops: Array(day.stops.prefix(Self.inlineStopCount)),
+            moreCount: max(0, day.stops.count - Self.inlineStopCount))
+    }
 
     func stop(id: String?) -> Stop? {
         guard let id else { return nil }
@@ -158,27 +187,52 @@ enum MapRegionMath {
 /// system colours, skipping any close in hue to the tone so no later day looks like the first. When the days
 /// outnumber the colours, the order repeats with dashed routes.
 enum MapDayPalette {
+    /// Eight designed colours for the days of a trip, in the family of the colour tones (ChatGPT's accent colours,
+    /// the owner's reference) plus a teal and a slate to fill the gaps of the hue circle — not the system's hues,
+    /// which read as "standard". In the order days take them: each far in hue from the one before.
     enum Hue: String, CaseIterable, Sendable {
-        case orange, teal, purple, green, pink, brown, indigo, blue
+        case orange, teal, purple, green, pink, blue, yellow, slate
 
-        /// Nominal hue angle of the system colour, in degrees.
-        var angle: Double {
+        /// The colour as designed, sRGB: what the map's colour for a day is derived from.
+        var reference: ColorTone.RGB {
             switch self {
-            case .orange: 35
-            case .teal: 190
-            case .purple: 285
-            case .green: 135
-            case .pink: 349
-            case .brown: 30
-            case .indigo: 241
-            case .blue: 211
+            case .orange: ColorTone.orange.reference ?? .black
+            case .teal: ColorTone.RGB(hex: 0x45B3A8)
+            case .purple: ColorTone.violet.reference ?? .black
+            case .green: ColorTone.emerald.reference ?? .black
+            case .pink: ColorTone.rose.reference ?? .black
+            case .blue: ColorTone.blue.reference ?? .black
+            case .yellow: ColorTone.yellow.reference ?? .black
+            case .slate: ColorTone.RGB(hex: 0x7D8CA3)
             }
         }
+
+        /// Hue angle (HSB) of the reference, the measure the tones are told apart by.
+        var angle: Double { reference.hueAngle }
+    }
+
+    /// The luminance of the map's tiles under each appearance, which a route has to stand out from.
+    static func tileLuminances(_ scheme: ColorTone.Scheme) -> [Double] {
+        switch scheme {
+        case .light: [0.88]
+        case .dark: [0.03]
+        }
+    }
+
+    /// A day's colour on the map: the reference, lightened a touch for a dark map as the tones are, then moved in
+    /// lightness only as far as it takes to stand out from the tiles at 3:1 (yellow darkens to ochre on light tiles).
+    static func color(_ hue: Hue, _ scheme: ColorTone.Scheme) -> OKLCH {
+        let base = OKLCH(hue.reference)
+        let shade =
+            scheme == .dark
+            ? OKLCH(lightness: min(base.lightness + 0.025, 1), chroma: base.chroma * 0.92, hue: base.hue)
+            : base
+        return shade.readable(on: tileLuminances(scheme), minimum: ColorTone.graphicContrast, in: ColorTone.gamut)
     }
 
     enum Swatch: Equatable, Sendable {
         case accent
-        case system(Hue)
+        case palette(Hue)
     }
 
     struct DayColor: Equatable, Sendable {
@@ -189,26 +243,18 @@ enum MapDayPalette {
     /// Hues this close to the tone's are skipped.
     static let minimumSeparation = 45.0
 
-    /// The hue of the tone as the phone paints it; neutral is the system blue.
-    static func angle(of tone: ColorTone) -> Double {
-        switch tone.systemColor {
-        case nil, .blue?: 211
-        case .green?: 135
-        case .indigo?: 241
-        case .pink?: 349
-        case .orange?: 35
-        case .yellow?: 50
-        }
-    }
+    /// The hue of the tone as the phone paints it; none for neutral, which is black and white.
+    static func angle(of tone: ColorTone) -> Double? { tone.accentHueAngle }
 
     static func hueDistance(_ a: Double, _ b: Double) -> Double {
         let difference = abs(a - b).truncatingRemainder(dividingBy: 360)
         return min(difference, 360 - difference)
     }
 
-    /// The system colours a day after the first can take under `tone`, in order.
+    /// The colours a day after the first can take under `tone`, in order: all of them under neutral, which no colour
+    /// can be mistaken for.
     static func palette(for tone: ColorTone) -> [Hue] {
-        let accent = angle(of: tone)
+        guard let accent = angle(of: tone) else { return Hue.allCases }
         return Hue.allCases.filter { hueDistance($0.angle, accent) >= minimumSeparation }
     }
 
@@ -218,7 +264,7 @@ enum MapDayPalette {
         return (0..<dayCount).map { index in
             if index == 0 { return DayColor(swatch: .accent, dashed: false) }
             let slot = index - 1
-            return DayColor(swatch: .system(palette[slot % palette.count]), dashed: (slot / palette.count) % 2 == 1)
+            return DayColor(swatch: .palette(palette[slot % palette.count]), dashed: (slot / palette.count) % 2 == 1)
         }
     }
 }
@@ -294,4 +340,8 @@ enum MapItineraryExport {
         guard let range = line.range(of: ": ") else { return (line, "") }
         return (String(line[..<range.lowerBound]), String(line[range.upperBound...]))
     }
+}
+
+extension String {
+    fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
 }

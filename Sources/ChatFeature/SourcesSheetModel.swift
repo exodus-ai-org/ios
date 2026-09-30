@@ -4,13 +4,16 @@ import MarkdownKit
 /// What the Sources sheet lists, and which row a tapped citation chip points at.
 struct SourcesSheetModel: Equatable, Identifiable {
     struct Entry: Equatable, Identifiable {
-        /// The position in the turn's own list, so two searches that both return a "rank 1" stay two rows.
+        /// The row's place among the turn's sources, cited ones first: ranks repeat from one search to the next.
         let id: Int
         let title: String
         let hostLine: String?
         let snippet: String?
         /// Where a tap goes: only what the markdown layer's link policy lets out of the app.
         let url: URL?
+        /// The site's icon, where one may be fetched, and what is tried when it does not load.
+        let iconURL: URL?
+        let iconFallbackURL: URL?
         let isHighlighted: Bool
 
         init(id: Int, source: CitationSource, isHighlighted: Bool) {
@@ -24,38 +27,58 @@ struct SourcesSheetModel: Equatable, Identifiable {
             self.title = title.nilIfEmpty ?? siteName ?? host ?? source.link.collapsedWhitespace
             let age = source.age?.collapsedWhitespace ?? ""
             hostLine = [host, age.isEmpty ? nil : age].compactMap { $0 }.joined(separator: Self.separator).nilIfEmpty
-            snippet = source.snippet.collapsedWhitespace.nilIfEmpty
+            // A snippet is the page's or the search engine's own text, markdown and HTML included: shown as words.
+            snippet = MarkdownPlainText.strip(source.snippet).nilIfEmpty
             self.url = url
+            iconURL = SourceIcon.url(for: source)
+            iconFallbackURL = SourceIcon.fallback(for: source)
         }
 
         private static let separator = " \u{00B7} "
     }
 
+    /// What the answer cites, or what else its searches found: the desktop panel's "Citations" and "More".
+    struct Section: Equatable, Identifiable {
+        enum Kind: Equatable, Sendable {
+            case cited, more
+        }
+
+        let kind: Kind
+        let entries: [Entry]
+
+        var id: Kind { kind }
+    }
+
     let id: String
-    let entries: [Entry]
+    /// The cited sources, then the rest; a section with no rows is not there.
+    let sections: [Section]
     /// The row to scroll to and mark, when the sheet was opened from a citation chip.
     let highlightedId: Int?
 
-    /// The turn's own web-search results in the order they were found. A chip's number is resolved the way the chip was
-    /// (the last source with that rank, `AssistantTurn.citation(forMarker:)`); a source cited from an earlier turn's
-    /// search is not in this list, so it is added first rather than the tap doing nothing.
+    var entries: [Entry] { sections.flatMap(\.entries) }
+    /// With one section there is nothing to tell apart.
+    var showsHeaders: Bool { sections.count > 1 }
+
+    /// A chip's number is resolved the way the chip was (`AssistantTurn.citation(forMarker:)`), and its source is
+    /// among the cited ones whether the turn found it itself or an earlier turn did (`TurnSources`).
     init(turn: AssistantTurn, marker: Int? = nil) {
-        var sources = turn.sources
+        let sources = TurnSources(turn: turn, tapped: marker)
+        let tapped = marker.flatMap { turn.citation(forMarker: $0) }.map(TurnSources.page)
+        var next = 0
         var highlighted: Int?
-        if let marker {
-            if let index = sources.lastIndex(where: { $0.rank == marker }) {
-                highlighted = index
-            } else if let earlier = turn.citation(forMarker: marker) {
-                sources.insert(earlier, at: 0)
-                highlighted = 0
+        func entries(_ list: [CitationSource]) -> [Entry] {
+            list.compactMap { source in
+                defer { next += 1 }
+                guard Self.hasContent(source) else { return nil }
+                let marked = highlighted == nil && tapped == TurnSources.page(source)
+                if marked { highlighted = next }
+                return Entry(id: next, source: source, isHighlighted: marked)
             }
         }
         id = "\(turn.id)#\(marker.map(String.init) ?? "all")"
-        entries = sources.enumerated().compactMap { index, source in
-            guard Self.hasContent(source) else { return nil }
-            return Entry(id: index, source: source, isHighlighted: index == highlighted)
-        }
-        highlightedId = entries.first(where: \.isHighlighted)?.id
+        sections = [Section(kind: .cited, entries: entries(sources.cited)), Section(kind: .more, entries: entries(sources.more))]
+            .filter { !$0.entries.isEmpty }
+        highlightedId = highlighted
     }
 
     /// A source with no title, host or link has nothing to show.

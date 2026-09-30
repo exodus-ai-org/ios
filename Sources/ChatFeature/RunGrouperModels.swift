@@ -63,10 +63,60 @@ public struct AssistantTurn: Equatable, Sendable, Identifiable {
         }
     }
 
+    /// A piece of the answer: the model's text, or the card of a tool it called.
+    public enum Block: Equatable, Sendable, Identifiable {
+        case text(TextBlock)
+        case card(ToolCard)
+
+        /// A card is known by its call, so a running card becomes its result in place; a text by its place among the
+        /// texts, so the one that streams stays the same view while it grows.
+        public var id: String {
+            switch self {
+            case .text(let text): text.id
+            case .card(let card): card.renderKey
+            }
+        }
+
+        /// A hand-built turn's layout: its cards, then its text.
+        static func laidOut(cards: [ToolCard], text: String) -> [Block] {
+            numbered(cards.map(Block.card) + (text.isEmpty ? [] : [.text(TextBlock(id: "", text: text))]))
+        }
+
+        /// Text joins the text before it: what no card stands between is one block. The texts are numbered in order.
+        static func numbered(_ blocks: [Block]) -> [Block] {
+            var out: [Block] = []
+            var texts = 0
+            for block in blocks {
+                guard case .text(let next) = block else {
+                    out.append(block)
+                    continue
+                }
+                if case .text(let last)? = out.last {
+                    out[out.count - 1] = .text(TextBlock(id: last.id, text: last.text + TextBlock.separator + next.text))
+                } else {
+                    out.append(.text(TextBlock(id: "text:\(texts)", text: next.text)))
+                    texts += 1
+                }
+            }
+            return out
+        }
+    }
+
+    public struct TextBlock: Equatable, Sendable, Identifiable {
+        static let separator = "\n\n"
+
+        public let id: String
+        public let text: String
+    }
+
     public let runId: String
     public let messageIds: [String]
     public let steps: [Step]
+    /// The answer in the order the model produced it: text, a card where its call was made, text.
+    public let blocks: [Block]
+    /// Every text block joined: what Copy, read-aloud and the Sources sheet take as the answer.
     public let body: String
+    /// The blocks' cards, in their order.
     public let toolCards: [ToolCard]
     public let pendingToolCalls: [PendingToolCall]
     public let sources: [CitationSource]
@@ -78,16 +128,37 @@ public struct AssistantTurn: Equatable, Sendable, Identifiable {
     public internal(set) var occurrence: Int
     /// The run foot as the rows give it; the memories the run read are not in the rows (see `MemoryFootStore`).
     public let foot: RunFoot
+    /// The run's place in a regenerate group, from its user message; nil for an ordinary run.
+    public internal(set) var attempt: TurnAttempt?
 
+    /// A turn from its body and its cards, for fixtures: the cards first, then the text.
     public init(
         runId: String, messageIds: [String] = [], steps: [Step] = [], body: String = "", toolCards: [ToolCard] = [],
         pendingToolCalls: [PendingToolCall] = [], sources: [CitationSource] = [], citations: [CitationSource]? = nil,
         durationMs: Int? = nil, timestampMs: Double? = nil, error: String? = nil, hasContent: Bool? = nil,
         occurrence: Int = 1, foot: RunFoot = RunFoot()
     ) {
+        self.init(
+            runId: runId, messageIds: messageIds, steps: steps, blocks: Block.laidOut(cards: toolCards, text: body),
+            pendingToolCalls: pendingToolCalls, sources: sources, citations: citations, durationMs: durationMs,
+            timestampMs: timestampMs, error: error, hasContent: hasContent, occurrence: occurrence, foot: foot)
+    }
+
+    /// `body` and `toolCards` are read off `blocks`, here and nowhere else.
+    public init(
+        runId: String, messageIds: [String] = [], steps: [Step] = [], blocks: [Block],
+        pendingToolCalls: [PendingToolCall] = [], sources: [CitationSource] = [], citations: [CitationSource]? = nil,
+        durationMs: Int? = nil, timestampMs: Double? = nil, error: String? = nil, hasContent: Bool? = nil,
+        occurrence: Int = 1, foot: RunFoot = RunFoot()
+    ) {
+        let blocks = Block.numbered(blocks)
+        let body = blocks.compactMap { if case .text(let text) = $0 { text.text } else { nil } }
+            .joined(separator: TextBlock.separator)
+        let toolCards = blocks.compactMap { if case .card(let card) = $0 { card } else { nil } }
         self.runId = runId
         self.messageIds = messageIds
         self.steps = steps
+        self.blocks = blocks
         self.body = body
         self.toolCards = toolCards
         self.pendingToolCalls = pendingToolCalls

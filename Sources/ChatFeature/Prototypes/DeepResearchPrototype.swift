@@ -47,7 +47,10 @@ struct ProtoDeepResearchSection: View {
         ProtoInReply(state: "Stalled: still 'streaming', nothing new for 15 min") {
             Self.cards("k4", details: #"{"id":"dr_stall"}"#)
         }
-        ProtoInReply(state: "Failed on the computer") { Self.cards("k5", details: #"{"id":"dr_failed"}"#) }
+        ProtoInReply(state: "Failed: jobStatus 'failed' with its errorMessage") {
+            Self.cards("k5", details: #"{"id":"dr_failed"}"#)
+        }
+        ProtoInReply(state: "Failed: no errorMessage stored") { Self.cards("k9", details: #"{"id":"dr_failed_bare"}"#) }
         ProtoInReply(state: "Gone: deleted on the computer (404)") { Self.cards("k6", details: #"{"id":"dr_gone"}"#) }
         ProtoInReply(state: "Refused: the tool answered {error}") {
             Self.cards("k7", details: #"{"error":"Brave API key is not configured"}"#)
@@ -67,7 +70,13 @@ struct ProtoDeepResearchSection: View {
                     "dr_done", status: "archived", report: ProtoFixtures.researchReport, sources: ProtoFixtures.researchSources),
                 "[]"
             ),
-            "dr_failed": (ProtoFixtures.researchRow("dr_failed", status: "failed"), "[]"),
+            "dr_failed": (
+                ProtoFixtures.researchRow(
+                    "dr_failed", status: "failed",
+                    errorMessage: "APICallError: Rate limit reached for requests. Please try again in 20s."),
+                "[]"
+            ),
+            "dr_failed_bare": (ProtoFixtures.researchRow("dr_failed_bare", status: "failed"), "[]"),
         ]
         let store = DeepResearchStore(
             fetcher: .init(

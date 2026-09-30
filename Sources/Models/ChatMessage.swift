@@ -56,6 +56,13 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
     public var stopReason: String? { raw["stopReason"]?.stringValue }
     public var errorMessage: String? { raw["errorMessage"]?.stringValue }
 
+    /// On a run's user message: the id of the first run of the regenerate group it belongs to (desktop `alternateOf`).
+    public var alternateOf: String? { raw["alternateOf"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } }
+    /// On a run's user message: where the run stands in its group; nil for an ordinary run or a value this app does not know.
+    public var attempt: RunAttempt? { raw["attempt"]?.stringValue.flatMap(RunAttempt.init(rawValue:)) }
+    /// True when the row came from a desktop that has the attempt columns (a null value still counts).
+    public var carriesAttemptColumns: Bool { raw["attempt"] != nil || raw["alternateOf"] != nil }
+
     /// `content` as typed blocks: a string is one text block, and a shape the wire never sends is one `.unknown`.
     public var contentBlocks: [ContentBlock] {
         switch raw["content"] {
@@ -89,4 +96,12 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
             ]
         )
     }
+}
+
+/// A regenerated run's state in its group (desktop `message.attempt`, spec 2026-09-26-regenerate-compare §2).
+public enum RunAttempt: String, Equatable, Sendable {
+    case comparing, chosen, folded, hidden
+
+    /// Folded and hidden runs are never shown in the transcript.
+    public var isVisible: Bool { self == .comparing || self == .chosen }
 }

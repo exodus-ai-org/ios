@@ -190,7 +190,9 @@ struct MessageGalleryFixtureTests {
     func fixturesDecode() {
         for run in MessageGalleryFixtures.runs {
             let segments = MessageGalleryFixtures.segments(run.json)
-            #expect(segments.count == 2, "\(run.title)")
+            // A run is at least a question and its answer; "a second turn citing the first turn's search" is two.
+            #expect(segments.count >= 2 && segments.count % 2 == 0, "\(run.title)")
+            #expect(segments.contains { if case .user = $0 { true } else { false } }, "\(run.title)")
             #expect(lastTurn(segments) != nil, "\(run.title)")
         }
     }

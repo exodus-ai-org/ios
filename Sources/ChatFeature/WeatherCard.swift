@@ -259,7 +259,8 @@ private struct WeatherForecastCard: View {
             }
             .chartXAxis {
                 AxisMarks(values: [0.0, 6, 12, 18]) { value in
-                    AxisValueLabel {
+                    // The first label starts at the plot's edge: centred on it, half of "12 AM" is cut off.
+                    AxisValueLabel(anchor: value.index == 0 ? .topLeading : .top, collisionResolution: .disabled) {
                         if let hours = value.as(Double.self) {
                             Text(verbatim: WeatherClock.format(hours: hours, minutes: false))
                         }
@@ -330,7 +331,7 @@ private struct WeatherForecastCard: View {
                     .frame(maxWidth: .infinity, minHeight: 34)
                     .background {
                         if selected {
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: CardStyle.innerRadius - 3, style: .continuous)
                                 .fill(Color(.systemBackground))
                                 .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
                         }
@@ -343,8 +344,12 @@ private struct WeatherForecastCard: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
-        .padding(4)
-        .background(.fill.quaternary)
+        // A control set into the card, with the card's margin around it — not a band from edge to edge.
+        .padding(3)
+        .background(.fill.tertiary, in: CardStyle.innerShape)
+        .padding(.horizontal, CardStyle.inset - 4)
+        .padding(.top, 2)
+        .padding(.bottom, 10)
     }
 
     private var week: some View {
@@ -356,10 +361,12 @@ private struct WeatherForecastCard: View {
                 } label: {
                     weekRow(forecast, selected: selected)
                         .font(.subheadline)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 8)
                         .padding(.vertical, isLarge ? 8 : 0)
                         .frame(minHeight: 40)
-                        .background(selected ? Color(.tertiarySystemFill) : .clear)
+                        // The selected day is a row set into the card: it keeps the card's margin and its corner.
+                        .background(selected ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.clear), in: CardStyle.innerShape)
+                        .padding(.horizontal, CardStyle.inset - 8)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -440,6 +447,8 @@ private enum WeatherRuns {
 private struct RangeBar: View {
     let bar: WeatherCardModel.Bar?
     let selected: Bool
+    /// A bar is a shape in the tone: its fill.
+    @Environment(\.toneAccent) private var fill
 
     var body: some View {
         GeometryReader { proxy in
@@ -448,7 +457,7 @@ private struct RangeBar: View {
                 .overlay(alignment: .leading) {
                     if let bar {
                         Capsule()
-                            .fill(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary.opacity(0.5)))
+                            .fill(selected ? AnyShapeStyle(fill) : AnyShapeStyle(.primary.opacity(0.3)))
                             .frame(width: proxy.size.width * bar.width)
                             .offset(x: proxy.size.width * bar.start)
                     }
@@ -477,9 +486,7 @@ private struct WeatherFailedCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 FileCardFailedIcon()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Color(.tertiarySystemFill))
+            .cardHeader()
             .accessibilityElement(children: .combine)
             Divider()
             FileCardError(message: message ?? ToolPresentation.failedText("weather"))

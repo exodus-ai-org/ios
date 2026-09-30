@@ -1,15 +1,43 @@
 import Foundation
+import MarkdownKit
 import Models
 
 /// What the action bar under a finished answer offers; the view only draws this.
 struct TurnActionBar: Equatable {
-    /// The turn's markdown source, as the desktop's copy button puts it on the pasteboard.
+    /// The turn the bar stands under: what read-aloud knows its answer by.
+    let turnId: String
+    /// What Copy puts on the pasteboard, as the desktop's does: the turn's markdown, with references where it
+    /// cited (`CopiedAnswer`).
     let copyText: String
+    /// The answer as prose, for read-aloud; empty when there is nothing to say.
+    let speechText: String
     let showsRegenerate: Bool
     let sourceCount: Int
-    let timestampMs: Double?
+    /// The sites the Sources button shows, as the desktop's does: the first three, each once.
+    let sourceIcons: [SourceAvatar]
+
+    /// `speechText` is the answer as prose; left out, it is taken from `copyText`.
+    init(
+        turnId: String = "", copyText: String, speechText: String? = nil, showsRegenerate: Bool, sourceCount: Int,
+        sourceIcons: [SourceAvatar] = []
+    ) {
+        self.turnId = turnId
+        self.copyText = copyText
+        self.speechText = speechText ?? SpeechText.prose(copyText)
+        self.showsRegenerate = showsRegenerate
+        self.sourceCount = sourceCount
+        self.sourceIcons = sourceIcons
+    }
 
     var showsSources: Bool { sourceCount > 0 }
+    var showsReadAloud: Bool { !speechText.isEmpty }
+}
+
+/// One site of the Sources button: its origin, and Google's icon for it (the desktop's `faviconUrl(origin)`). The
+/// default glyph is drawn until the icon comes, and when it does not.
+struct SourceAvatar: Equatable, Identifiable {
+    let id: String
+    let iconURL: URL?
 }
 
 /// Which actions a turn gets, and which turn may be asked again; decided from the transcript, drawn by the views.
@@ -18,9 +46,36 @@ enum TurnActions {
     /// before saying anything), like the desktop's `turn.body.length > 0`.
     static func bar(for turn: AssistantTurn, isStreaming: Bool, canRegenerate: Bool) -> TurnActionBar? {
         guard !isStreaming, turn.body.contains(where: { !$0.isWhitespace }) else { return nil }
+        // What the answer cites and what else it found: a turn that cites an earlier turn's search has sources too.
+        let sources = TurnSources(turn: turn).all
         return TurnActionBar(
-            copyText: turn.body, showsRegenerate: canRegenerate, sourceCount: turn.sources.count,
-            timestampMs: turn.timestampMs)
+            turnId: turn.id, copyText: CopiedAnswer.text(of: turn), speechText: SpeechText.prose(turn.body),
+            showsRegenerate: canRegenerate, sourceCount: sources.count, sourceIcons: sourceIcons(sources))
+    }
+
+    static let sourceIconLimit = 3
+
+    /// The icons of the Sources button, as the desktop's `SourcesButton` has them: the first three sites among the
+    /// sources, each once, in the sources' order — a site being an origin — each with Google's icon for it. Sources
+    /// that name no site leave one default glyph, so the button still has its mark.
+    static func sourceIcons(_ sources: [CitationSource]) -> [SourceAvatar] {
+        guard !sources.isEmpty else { return [] }
+        var seen = Set<String>()
+        var avatars: [SourceAvatar] = []
+        for source in sources {
+            guard let site = site(of: source.link), seen.insert(site.origin).inserted else { continue }
+            avatars.append(SourceAvatar(id: site.origin, iconURL: SourceIcon.google(host: site.host)))
+            if avatars.count == sourceIconLimit { break }
+        }
+        return avatars.isEmpty ? [SourceAvatar(id: "", iconURL: nil)] : avatars
+    }
+
+    /// `https://host[:port]` of a link the app would open, and its host; nil for anything else.
+    private static func site(of link: String) -> (origin: String, host: String)? {
+        guard let url = ExternalLinkPolicy.openableURL(link), let scheme = url.scheme?.lowercased(),
+            scheme == "https" || scheme == "http", let host = url.host()?.lowercased(), !host.isEmpty
+        else { return nil }
+        return (url.port.map { "\(scheme)://\(host):\($0)" } ?? "\(scheme)://\(host)", host)
     }
 
     /// The last turn, once nothing is in flight and there is a question to ask again. The desktop puts Regenerate on
@@ -65,14 +120,5 @@ enum TurnActions {
             case .thinking, .toolCall, .unknown: false
             }
         }
-    }
-
-    /// The time at the end of the bar: today's time, a weekday for the last days, else a date, as the Recents list shows it.
-    static func timeText(
-        _ timestampMs: Double?, now: Date = .now, calendar: Calendar = .current, locale: Locale = .current
-    ) -> String? {
-        guard let timestampMs, timestampMs.isFinite, timestampMs > 0 else { return nil }
-        return RecentTimestamp.format(
-            Date(timeIntervalSince1970: timestampMs / 1000), now: now, calendar: calendar, locale: locale)
     }
 }

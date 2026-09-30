@@ -110,7 +110,7 @@ struct AssistantTurnViewEqualityTests {
         #expect(base != AssistantTurnView(turn: turn, isStreaming: true, error: nil))
         #expect(base != AssistantTurnView(turn: turn, isStreaming: false, error: "boom"))
         #expect(base != AssistantTurnView(turn: turn, isStreaming: false, error: nil, offersRetry: true))
-        let bar = TurnActionBar(copyText: "Answer", showsRegenerate: true, sourceCount: 0, timestampMs: nil)
+        let bar = TurnActionBar(copyText: "Answer", showsRegenerate: true, sourceCount: 0)
         #expect(base != AssistantTurnView(turn: turn, isStreaming: false, error: nil, actionBar: bar))
     }
 
@@ -142,7 +142,7 @@ struct RetryOnErrorRulesTests {
 
     @Test("offered only on an error with no action bar, and only where Regenerate may run")
     func rule() {
-        let bar = TurnActionBar(copyText: "x", showsRegenerate: true, sourceCount: 0, timestampMs: nil)
+        let bar = TurnActionBar(copyText: "x", showsRegenerate: true, sourceCount: 0)
         #expect(TurnActions.showsRetryOnError(hasError: true, bar: nil, canRegenerate: true))
         #expect(!TurnActions.showsRetryOnError(hasError: true, bar: bar, canRegenerate: true))
         #expect(!TurnActions.showsRetryOnError(hasError: true, bar: nil, canRegenerate: false))

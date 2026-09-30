@@ -50,7 +50,7 @@ private struct SidebarRow: ViewModifier {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(
                         isPressed ? Color.primary.opacity(0.06)
-                            : isSelected ? Color.accentColor.opacity(0.12) : Color.clear
+                            : isSelected ? Color.primary.opacity(0.08) : Color.clear
                     )
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
@@ -65,6 +65,14 @@ private struct SidebarRow: ViewModifier {
 /// the title and the search button are native; the bottom bar is a `safeAreaBar` of its own, because a
 /// bottom-bar toolbar item cannot show a labelled button. Rows have no swipe actions (a left swipe
 /// closes the drawer); a chat is deleted from its long-press menu.
+/// What "Copy Conversation ID" puts on the pasteboard: the id the computer knows the conversation by, and nothing
+/// else. It is pasted into another chat, for the model to look that conversation up.
+enum ConversationID {
+    static func copyText(for chat: ChatSummary) -> String {
+        chat.id.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 public struct ChatSidebarView<Workspaces: View>: View {
     @State private var list: ChatListViewModel
     @State private var search: ChatSearchViewModel
@@ -78,6 +86,8 @@ public struct ChatSidebarView<Workspaces: View>: View {
     /// they cannot disagree about whether it is on screen.
     @State private var renamingChat: ChatSummary?
     @State private var renameText = ""
+    /// Bumped when a conversation's id has been put on the pasteboard: the only sign that it was.
+    @State private var copiedTrigger = 0
 
     private let activeChatId: String
     private let isOpen: Bool
@@ -227,6 +237,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 !old && new ? .error : nil
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: deletedTrigger)
+            .sensoryFeedback(.success, trigger: copiedTrigger)
         }
     }
 
@@ -257,6 +268,12 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 renamingChat = chat
             } label: {
                 Label("chat:sidebar.history.rename", systemImage: "pencil")
+            }
+            Button {
+                UIPasteboard.general.string = ConversationID.copyText(for: chat)
+                copiedTrigger += 1
+            } label: {
+                Label("ios:chat.sidebar.copyConversationId", systemImage: "doc.on.doc")
             }
             Button(role: .destructive) {
                 Task {

@@ -1,11 +1,11 @@
 import Models
 import SwiftUI
 
-/// The run's foot, drawn from `RunFoot` only: `media` under the answer (search images and videos), `memory` under the
-/// action bar (the used-memories line, then the memory strip), as on the desktop.
+/// The run's foot, drawn from `RunFoot` only: `media` under the answer (search images and videos); the line saying
+/// which memories the run read and the strip of what it changed, over the action row (`TurnFoot`).
 struct RunFootView: View {
     enum Section {
-        case media, memory
+        case media, usedMemories, memoryChanges
     }
 
     let foot: RunFoot
@@ -21,13 +21,17 @@ struct RunFootView: View {
             if !foot.gallery.isEmpty {
                 SearchMediaSection(gallery: foot.gallery)
             }
-        case .memory:
+        case .usedMemories:
             if let memoryFoot {
-                let run = memoryFoot.run(runId)
-                UsedMemoriesLine(run: run, store: memoryFoot)
-                if let changes = RunMemoryChanges(foot.memoryUpdates) {
-                    MemoryChangeStrip(runId: runId, changes: changes, active: isStreaming, run: run, store: memoryFoot)
-                }
+                UsedMemoriesLine(run: memoryFoot.run(runId), store: memoryFoot)
+            }
+        case .memoryChanges:
+            if let memoryFoot, let changes = RunMemoryChanges(foot.memoryUpdates) {
+                MemoryChangeStrip(
+                    runId: runId, changes: changes, active: isStreaming, run: memoryFoot.run(runId), store: memoryFoot
+                )
+                .padding(.top, TurnFootMetrics.blockGap)
+                .padding(.bottom, TurnFootMetrics.cardBottom)
             }
         }
     }

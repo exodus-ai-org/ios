@@ -1,3 +1,4 @@
+import MarkdownKit
 import Models
 import NetworkingKit
 import SwiftUI
@@ -23,8 +24,14 @@ public struct ChatDetailView: View {
     @FocusState private var isComposerFocused: Bool
     /// The Sources sheet, from an answer's Sources button or a tapped citation chip.
     @State private var sourcesSheet: SourcesSheetModel?
+    /// A folded answer opened from its "other version" link.
+    @State private var otherVersion: OtherVersion?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accentGlyph) private var accentGlyph
+    @Environment(\.colorTone) private var colorTone
+    @Environment(\.toneInk) private var toneInk
+    @Environment(\.toneAccent) private var toneFillColor
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     /// Kept alongside the view model, not just handed to its `init`: a rename from the sidebar
     /// while this chat is the one on screen changes this on a re-render, which `.onChange` below
@@ -54,6 +61,10 @@ public struct ChatDetailView: View {
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
+                // What is scrolled to: the end of the transcript and the room that keeps its last line off the
+                // composer.
+                .padding(.bottom, TranscriptRows.endRoom)
+                .id(TranscriptRows.endID)
                 .environment(\.generatedImageLoader, objects.imageLoader)
                 .environment(\.computerUseFrames, viewModel.computerUseFrames)
                 .environment(\.computerUseRemote, objects.computerUseRemote)
@@ -61,6 +72,8 @@ public struct ChatDetailView: View {
                 .environment(\.runApprovals, viewModel.approvals)
                 .environment(\.memoryFoot, viewModel.memoryFoot)
                 .environment(\.placePhotoLoader, objects.placePhotos)
+                .environment(\.readAloud, viewModel.readAloud)
+                .environment(\.markdownAskAbout, MarkdownAskAction { [viewModel] text in viewModel.askAbout(text) })
             }
             // Pull down to retry a history load that failed (the composer stays disabled until it succeeds).
             .scrollBounceBehavior(.always)
@@ -101,6 +114,21 @@ public struct ChatDetailView: View {
             NoticeStack(notice: viewModel.notice, onDismiss: viewModel.dismissNotice) { composer }
         }
         .sheet(item: $sourcesSheet) { SourcesSheet(model: $0) }
+        .sheet(item: $otherVersion) { version in
+            OtherVersionSheet(version: version) { [viewModel] in
+                Task { await viewModel.choose(runId: version.id) }
+            }
+            .environment(\.generatedImageLoader, objects.imageLoader)
+            .environment(\.computerUseFrames, viewModel.computerUseFrames)
+            .environment(\.computerUseRemote, objects.computerUseRemote)
+            .environment(\.deepResearchJobs, objects.researchJobs)
+            .environment(\.runApprovals, viewModel.approvals)
+            .environment(\.memoryFoot, viewModel.memoryFoot)
+            .environment(\.placePhotoLoader, objects.placePhotos)
+        }
+        .onChange(of: viewModel.choiceCount) {
+            AccessibilityNotification.Announcement(CompareText.chosen).post()
+        }
         // The banner goes after a few seconds; VoiceOver would never reach it, so it is spoken when it arrives.
         .onChange(of: viewModel.notice) { _, notice in
             if let notice { AccessibilityNotification.Announcement(NoticeBanner.announcement(for: notice)).post() }
@@ -116,7 +144,11 @@ public struct ChatDetailView: View {
             if scenePhase == .active, viewModel.memoryFoot.entries != nil {
                 Task { await viewModel.memoryFoot.refreshEntries() }
             }
+            // Nothing is read aloud from behind another app.
+            if scenePhase == .background { viewModel.readAloud.stop() }
         }
+        // Nor from a chat that was left.
+        .onDisappear { viewModel.readAloud.stop() }
         // A rename from the sidebar while this chat is the one open: `title` changing is that
         // signal, since renaming never changes `chatId` and so never recreates this view.
         .onChange(of: title) { _, newTitle in
@@ -139,8 +171,15 @@ public struct ChatDetailView: View {
         .sensoryFeedback(.impact(weight: .light), trigger: viewModel.sendCount)
         .sensoryFeedback(.success, trigger: viewModel.completedTurnCount)
         .sensoryFeedback(.impact(weight: .light), trigger: viewModel.stopCount)
+        .sensoryFeedback(.selection, trigger: viewModel.choiceCount)
         // Once per failure, even when a second failure has the same text.
         .sensoryFeedback(.error, trigger: viewModel.failureCount)
+        // The colour tone is the chat's own: the transcript, the composer and the sheets opened from them.
+        // What tints is the tone's ink, since a tint colours text; a surface in the tone asks for its fill
+        // (`toneFill`). Neutral is black and white, as the desktop's default: nothing here is system blue, and
+        // a link, which the tint alone would no longer set apart from the text around it, is underlined.
+        .tint(toneInk)
+        .environment(\.markdownUnderlinesLinks, colorTone == .neutral)
     }
 
     private var emptyState: some View {
@@ -153,6 +192,27 @@ public struct ChatDetailView: View {
     }
 
     private var composer: some View {
+        @Bindable var viewModel = viewModel
+        return VStack(alignment: .leading, spacing: 8) {
+            if let quote = viewModel.quote {
+                ComposerQuote(text: quote, onRemove: viewModel.removeQuote)
+                    .transition(.opacity)
+            }
+            composerRow
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 6)
+        .padding(.vertical, 10)
+        .glassEffect(.regular, in: .rect(cornerRadius: 26))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
+        // Extends `.snappy`, the curve this app already uses for every other toggle (search mode,
+        // the drawer), rather than inventing a new one.
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: isComposerFocused)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: viewModel.quote)
+    }
+
+    private var composerRow: some View {
         @Bindable var viewModel = viewModel
         return HStack(alignment: .bottom, spacing: 8) {
             TextField("ios:chat.composer.placeholder", text: $viewModel.composerText, axis: .vertical)
@@ -185,15 +245,6 @@ public struct ChatDetailView: View {
             turnButton
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { turnButtonHeight = $0 }
         }
-        .padding(.leading, 16)
-        .padding(.trailing, 6)
-        .padding(.vertical, 10)
-        .glassEffect(.regular, in: .rect(cornerRadius: 26))
-        .padding(.horizontal, 12)
-        .padding(.bottom, 4)
-        // Extends `.snappy`, the curve this app already uses for every other toggle (search mode,
-        // the drawer), rather than inventing a new one.
-        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: isComposerFocused)
     }
 
     /// One button whose icon and action both switch on the same state, not two buttons swapped by
@@ -220,15 +271,31 @@ public struct ChatDetailView: View {
                 Image(systemName: viewModel.isTurnInFlight ? "stop.fill" : "arrow.up") // l10n:ignore: SF Symbol names
             }
             .labelStyle(.iconOnly)
-            .foregroundStyle(accentGlyph)
+            // Stop is neutral whatever the tone, as ChatGPT's: a dark square on a soft tone fill read as a stray
+            // blot, and a stop that differs from send says a reply is running.
+            .foregroundStyle(sendGlyph)
             // The single most-tapped control in the app (apple-design §13: state indication, tens
             // of times a day, so the motion stays fast and subtle, never a showy morph).
             .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
         }
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.circle)
+        // Set on the button itself (an outer `.tint` loses to an inner one): the tone's fill to send, neutral to stop.
+        .tint(sendFill)
         .disabled(!viewModel.isTurnInFlight && !viewModel.canSend)
         .accessibilityIdentifier(viewModel.isTurnInFlight ? "stopButton" : "sendButton") // l10n:ignore: a testing identifier, never shown to the user
+    }
+
+    /// Send, by appearance: in light the tone's ink with a white arrow (a white arrow on the soft fill is 1.6:1 in
+    /// yellow, and a dark one read as a blot), in dark the fill and its glyph. Stop is neutral in both.
+    private var sendFill: Color {
+        if viewModel.isTurnInFlight { return Color(.label) }
+        return colorScheme == .dark ? toneFillColor : toneInk
+    }
+
+    private var sendGlyph: Color {
+        if viewModel.isTurnInFlight { return Color(.systemBackground) }
+        return colorScheme == .dark ? accentGlyph : .white
     }
 
     private var transcriptActions: TranscriptActions {
@@ -238,7 +305,10 @@ public struct ChatDetailView: View {
             regenerate: { [viewModel] in Task { await viewModel.regenerate() } },
             showSources: { [viewModel] turnId, marker in
                 sourcesSheet = viewModel.sourcesSheet(forTurn: turnId, marker: marker)
-            })
+            },
+            canChoose: viewModel.canChoose,
+            choose: { [viewModel] runId in Task { await viewModel.choose(runId: runId) } },
+            showOtherVersion: { [viewModel] runId in otherVersion = viewModel.otherVersion(runId: runId) })
     }
 
     private var scrollKey: TranscriptRules.ScrollKey {
@@ -247,20 +317,14 @@ public struct ChatDetailView: View {
             liveError: viewModel.liveRunError)
     }
 
+    /// To the end of the transcript, its room over the composer included: whatever the last row is — an answer,
+    /// the pending dots, an error line — the end is under it.
     private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
-        let targetId: String? =
-            if viewModel.showsPendingRow {
-                TranscriptRows.typingIndicatorID
-            } else if TranscriptRules.orphanRunError(segments: viewModel.segments, live: viewModel.liveRunError) != nil {
-                TranscriptRows.orphanErrorID
-            } else {
-                viewModel.segments.last?.id
-            }
-        guard let targetId else { return }
+        guard !viewModel.segments.isEmpty || viewModel.showsPendingRow else { return }
         if animated {
-            withAnimation { proxy.scrollTo(targetId, anchor: .bottom) }
+            withAnimation { proxy.scrollTo(TranscriptRows.endID, anchor: .bottom) }
         } else {
-            proxy.scrollTo(targetId, anchor: .bottom)
+            proxy.scrollTo(TranscriptRows.endID, anchor: .bottom)
         }
     }
 }
@@ -304,5 +368,40 @@ final class LazyBox<Value> {
         let made = make()
         stored = made
         return made
+    }
+}
+
+/// The text the next message is about, over the field: ↪, two lines of it, and ✕ to let it go.
+struct ComposerQuote: View {
+    let text: String
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "arrow.turn.down.right")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text(verbatim: text)
+                .lineLimit(2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            // The target reaches into the row's padding: the ✕ lines up with the send button under it.
+            .padding(.vertical, -12)
+            .padding(.trailing, -4)
+            .accessibilityLabel(Text("ios:chat.ask.remove"))
+        }
+        .font(.subheadline)
+        .padding(.trailing, 10)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("ios:chat.ask.quoted"))
+        .accessibilityValue(Text(verbatim: text))
     }
 }

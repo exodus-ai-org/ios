@@ -33,46 +33,29 @@ struct MapDayInk {
     let glyph: Color
     let dashed: Bool
 
-    /// The system colours in their Increase Contrast variant: vivid on both map appearances, never washed out.
+    /// The tone for the first day; the designed palette, as it reads on the map's tiles, for the rest.
     @MainActor
     static func inks(
         for model: MapItineraryCardModel, tone: ColorTone, accent: Color, accentGlyph: Color, scheme: ColorScheme
     ) -> [MapDayInk] {
-        MapDayPalette.colors(dayCount: model.days.count, tone: tone).map { day in
+        let appearance: ColorTone.Scheme = scheme == .dark ? .dark : .light
+        return MapDayPalette.colors(dayCount: model.days.count, tone: tone).map { day in
             switch day.swatch {
             case .accent:
                 return MapDayInk(fill: accent, glyph: accentGlyph, dashed: day.dashed)
-            case .system(let hue):
-                let base = uiColor(hue)
-                let traits = UITraitCollection(userInterfaceStyle: scheme == .dark ? .dark : .light)
-                    .modifyingTraits { @MainActor traits in traits.accessibilityContrast = .high }
-                let resolved = base.resolvedColor(with: traits)
-                let white = ColorTone.glyphIsWhite(on: rgb(resolved))
-                return MapDayInk(fill: Color(uiColor: resolved), glyph: white ? .white : .black, dashed: day.dashed)
+            case .palette(let hue):
+                let color = MapDayPalette.color(hue, appearance)
+                let p3 = color.components(in: .displayP3)
+                let white = ColorTone.glyphIsWhite(on: color.components(in: .sRGB))
+                return MapDayInk(
+                    fill: Color(.displayP3, red: p3.red, green: p3.green, blue: p3.blue),
+                    glyph: white ? .white : .black, dashed: day.dashed)
             }
         }
     }
 
-    static func uiColor(_ hue: MapDayPalette.Hue) -> UIColor {
-        switch hue {
-        case .orange: .systemOrange
-        case .teal: .systemTeal
-        case .purple: .systemPurple
-        case .green: .systemGreen
-        case .pink: .systemPink
-        case .brown: .systemBrown
-        case .indigo: .systemIndigo
-        case .blue: .systemBlue
-        }
-    }
-
-    private static func rgb(_ color: UIColor) -> ColorTone.RGB {
-        var (red, green, blue, alpha): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
-        color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        return ColorTone.RGB(red: Double(red), green: Double(green), blue: Double(blue))
-    }
-
-    static let fallback = MapDayInk(fill: .accentColor, glyph: .white, dashed: false)
+    /// For a day the palette does not know, which does not happen: neutral's black and white.
+    static let fallback = MapDayInk(fill: .primary, glyph: Color(uiColor: .systemBackground), dashed: false)
 }
 
 private struct DayInksReader<Content: View>: View {
@@ -155,32 +138,76 @@ func itineraryMapContent(
 private struct MapItineraryInlineCard: View {
     let model: MapItineraryCardModel
     @State private var focus: MapItineraryFocus?
+    /// The day the card shows: its stops in the list, its route drawn over the others on the map.
+    @State private var dayIndex = 0
+    @State private var position: MapCameraPosition
     @ScaledMetric(relativeTo: .body) private var mapHeight: CGFloat = 190
+    @ScaledMetric(relativeTo: .caption2) private var badgeSide: CGFloat = StopBadge.side
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(model: MapItineraryCardModel) {
+        self.model = model
+        let day = model.days.indices.contains(Self.launchDay) ? Self.launchDay : 0
+        _dayIndex = State(initialValue: day)
+        _position = State(initialValue: MapItineraryFullView.position(for: Self.region(of: day, in: model)))
+    }
+
+    /// `-MapItineraryDay <n>` (DEBUG): the day a card shows at first, for screenshots of another day than the first.
+    private static var launchDay: Int {
+        #if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if let index = arguments.firstIndex(of: "-MapItineraryDay"), index + 1 < arguments.count {
+                return Int(arguments[index + 1]) ?? 0
+            }
+        #endif
+        return 0
+    }
+
+    /// A day of a trip of several is framed by itself, as on the desktop; a trip of one day as a whole.
+    private static func region(of day: Int, in model: MapItineraryCardModel) -> MapRegion? {
+        guard model.showsDayPicker, model.days.indices.contains(day) else { return model.region }
+        return model.days[day].region ?? model.region
+    }
 
     var body: some View {
+        let day = model.inline(day: dayIndex)
         DayInksReader(model: model) { inks in
             VStack(alignment: .leading, spacing: 0) {
                 MapItineraryHeader(model: model)
                 if let notice = model.notice {
                     MapItineraryNotice(notice: notice)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
                 }
                 if model.hasMap {
                     Button {
-                        focus = MapItineraryFocus(dayIndex: 0, stopId: nil)
+                        focus = MapItineraryFocus(dayIndex: day.index, stopId: nil)
                     } label: {
-                        InlineMap(model: model, inks: inks)
-                            .frame(height: min(max(mapHeight, 170), 260))
+                        InlineMap(
+                            model: model, inks: inks, focusDay: model.showsDayPicker ? day.index : nil,
+                            position: $position
+                        )
+                        .frame(height: min(max(mapHeight, 170), 260))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(Text("ios:chat.card.map.mapLabel"))
                     .accessibilityHint(Text("ios:chat.card.map.openHint"))
                 }
-                if model.days.count > 1 {
-                    DayLegend(model: model, inks: inks)
+                if model.showsDayPicker {
+                    MapDayPicker(model: model, inks: inks, selection: $dayIndex, inset: CardStyle.inset)
+                        .padding(.top, 6)
                 }
-                stops(inks)
+                if let header = day.header {
+                    MapDayHeaderLine(header: header, summary: day.summary, ink: inks[day: day.index])
+                }
+                stops(day, inks)
             }
             .modifier(CardSurface())
+        }
+        .onChange(of: dayIndex) {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.45)) {
+                position = MapItineraryFullView.position(for: Self.region(of: dayIndex, in: model))
+            }
         }
         .fullScreenCover(item: $focus) { focus in
             MapItineraryFullView(model: model, start: focus)
@@ -188,33 +215,31 @@ private struct MapItineraryInlineCard: View {
     }
 
     @ViewBuilder
-    private func stops(_ inks: [MapDayInk]) -> some View {
-        if model.stopCount == 0 {
+    private func stops(_ day: MapItineraryCardModel.InlineDay, _ inks: [MapDayInk]) -> some View {
+        if day.stops.isEmpty {
             Text("ios:chat.card.map.noStops")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .padding(12)
+                .padding(CardStyle.inset)
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(model.inlineStops) { stop in
+                ForEach(day.stops) { stop in
                     Button {
                         focus = MapItineraryFocus(dayIndex: stop.dayIndex, stopId: stop.id)
                     } label: {
-                        MapStopRow(
-                            stop: stop, ink: inks[day: stop.dayIndex],
-                            dayLabel: model.days.count > 1 ? MapItineraryText.dayLabel(model.days[stop.dayIndex]) : nil)
+                        MapStopRow(stop: stop, ink: inks[day: stop.dayIndex], dayLabel: day.header?.label)
                     }
                     .buttonStyle(.plain)
-                    if stop.id != model.inlineStops.last?.id || model.moreCount > 0 {
-                        Divider().padding(.leading, 44)
+                    if stop.id != day.stops.last?.id || day.moreCount > 0 {
+                        Divider().padding(.leading, MapStopRow.textLeading(badge: badgeSide))
                     }
                 }
-                if model.moreCount > 0 {
+                if day.moreCount > 0 {
                     Button {
-                        focus = MapItineraryFocus(dayIndex: 0, stopId: nil)
+                        focus = MapItineraryFocus(dayIndex: day.index, stopId: nil)
                     } label: {
                         HStack(spacing: 6) {
-                            Text(verbatim: MapItineraryText.more(model.moreCount))
+                            Text(verbatim: MapItineraryText.more(day.moreCount))
                             Image(systemName: "arrow.up.left.and.arrow.down.right")
                                 .imageScale(.small)
                                 .accessibilityHidden(true)
@@ -232,13 +257,100 @@ private struct MapItineraryInlineCard: View {
     }
 }
 
+/// The line that names the day over its stops: every time under it is a time of that day.
+private struct MapDayHeaderLine: View {
+    let header: MapItineraryCardModel.DayHeader
+    let summary: String?
+    let ink: MapDayInk
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                DaySwatch(ink: ink)
+                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+                Text(verbatim: MapItineraryText.dayHeader(header))
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let summary {
+                Text(verbatim: summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, CardStyle.inset)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The days of a trip, one picked: the transcript's card and the full-screen map share it.
+struct MapDayPicker: View {
+    let model: MapItineraryCardModel
+    let inks: [MapDayInk]
+    @Binding var selection: Int
+    var inset: CGFloat = 16
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(model.days) { day in
+                        let isSelected = day.index == selection
+                        let ink = inks[day: day.index]
+                        Button {
+                            selection = day.index
+                        } label: {
+                            HStack(spacing: 6) {
+                                DaySwatch(ink: ink)
+                                Text(verbatim: MapItineraryText.dayLabel(day))
+                                    .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .frame(minHeight: 44)
+                            .background(
+                                Capsule().fill(isSelected ? ink.fill.opacity(0.16) : Color(.tertiarySystemFill))
+                                    .frame(minHeight: 34)
+                            )
+                            .overlay(
+                                Capsule().strokeBorder(isSelected ? ink.fill : .clear, lineWidth: 1.5).frame(minHeight: 34)
+                            )
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
+                        .id(day.index)
+                    }
+                }
+                .padding(.horizontal, inset)
+                .padding(.vertical, 4)
+            }
+            .scrollIndicators(.hidden)
+            // The day picked is brought into view: it may have been picked where the chip is off screen.
+            .onChange(of: selection) { _, day in
+                withAnimation(.smooth(duration: 0.3)) { proxy.scrollTo(day, anchor: .center) }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("chat:mapItineraryCard.tabsAriaLabel"))
+    }
+}
+
 private struct InlineMap: View {
     let model: MapItineraryCardModel
     let inks: [MapDayInk]
+    /// The day drawn over the others; nil draws every day alike (a trip of one day).
+    let focusDay: Int?
+    @Binding var position: MapCameraPosition
 
     var body: some View {
-        Map(initialPosition: model.region.map { .region($0.mapKit) } ?? .automatic, interactionModes: []) {
-            itineraryMapContent(model, inks: inks, focusDay: nil, showsTitles: false, casing: Color(.systemBackground))
+        Map(position: $position, interactionModes: []) {
+            itineraryMapContent(model, inks: inks, focusDay: focusDay, showsTitles: false, casing: Color(.systemBackground))
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
         // Still in the transcript: a drag scrolls the chat; the full-screen map is where it moves.
@@ -267,9 +379,7 @@ private struct MapItineraryHeader: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(Color(.tertiarySystemFill))
+        .cardHeader()
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
@@ -294,34 +404,9 @@ struct MapItineraryNotice: View {
         .foregroundStyle(isWarning ? Color.primary : Color.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(isWarning ? Color.orange.opacity(0.12) : Color(.secondarySystemFill))
-    }
-}
-
-/// Which colour is which day, under the map of a trip of several days.
-private struct DayLegend: View {
-    let model: MapItineraryCardModel
-    let inks: [MapDayInk]
-
-    var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 14) {
-                ForEach(model.days) { day in
-                    HStack(spacing: 6) {
-                        DaySwatch(ink: inks[day: day.index])
-                        Text(verbatim: MapItineraryText.dayLabel(day))
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-        }
-        .scrollIndicators(.hidden)
-        // The stop rows name their day; the legend only explains the colours to the eye.
-        .accessibilityHidden(true)
+        .padding(.vertical, 10)
+        // Set into the card, in its inner corner: a band from edge to edge read as a second header.
+        .background(isWarning ? Color.orange.opacity(0.12) : Color(.secondarySystemFill), in: CardStyle.innerShape)
     }
 }
 
@@ -344,8 +429,15 @@ struct MapStopRow: View {
     var dayLabel: String?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    static let badgeGap: CGFloat = 10
+
+    /// Where a row's text starts, from the card's edge: what a separator under it lines up with.
+    static func textLeading(badge: CGFloat) -> CGFloat {
+        CardStyle.inset + min(badge, StopBadge.maxSide) + badgeGap
+    }
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Self.badgeGap) {
             StopBadge(number: stop.number, ink: ink)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
@@ -377,7 +469,7 @@ struct MapStopRow: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, CardStyle.inset)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .contentShape(.rect)
@@ -388,16 +480,19 @@ struct MapStopRow: View {
 }
 
 private struct StopBadge: View {
+    static let side: CGFloat = 22
+    static let maxSide: CGFloat = 34
+
     let number: Int
     let ink: MapDayInk
-    @ScaledMetric(relativeTo: .caption2) private var size: CGFloat = 22
+    @ScaledMetric(relativeTo: .caption2) private var size: CGFloat = StopBadge.side
 
     var body: some View {
         Text(verbatim: "\(number)")
             .font(.caption2.weight(.bold).monospacedDigit())
             .foregroundStyle(ink.glyph)
             .minimumScaleFactor(0.6)
-            .frame(width: min(size, 34), height: min(size, 34))
+            .frame(width: min(size, Self.maxSide), height: min(size, Self.maxSide))
             .background(Circle().fill(ink.fill))
     }
 }
@@ -418,9 +513,7 @@ private struct MapItineraryFailedCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 FileCardFailedIcon()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Color(.tertiarySystemFill))
+            .cardHeader()
             .accessibilityElement(children: .combine)
             FileCardError(message: message ?? ToolPresentation.failedText("map_itinerary"))
         }
@@ -430,87 +523,92 @@ private struct MapItineraryFailedCard: View {
 
 // MARK: - Full-screen map
 
-/// A cover rather than a pushed page: the chat's drawer answers an edge swipe and the transcript is a lazy stack, and
-/// a map needs every drag for itself. The place detail is a sheet over the lower half, leaving the map in view.
+/// The trip, full screen: the map fills the screen, the title and the days float over it on glass, and the stops are
+/// a sheet that is always there — a peek of the day, half the screen, or all of it — so the map stays in view while
+/// the list is read. A stop opens its place in the same sheet. A cover rather than a pushed page: the chat's drawer
+/// answers an edge swipe, and a map needs every drag for itself.
 struct MapItineraryFullView: View {
     let model: MapItineraryCardModel
     let start: MapItineraryFocus
 
     @State private var dayIndex: Int
-    @State private var selection: String?
+    /// The stop open in the sheet, if any: a path of one.
+    @State private var path: [String]
     @State private var position: MapCameraPosition
     @State private var visibleRegion: MapRegion?
+    @State private var detent: PresentationDetent
+    @State private var sheetHeight: CGFloat = 0
+    @State private var topBarHeight: CGFloat = 0
+    @State private var screenHeight: CGFloat = 800
+    @State private var showsStops = true
+    @State private var closing = false
     @State private var copyCount = 0
+    @State private var location = ItineraryLocationAccess()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    static let peekBase: CGFloat = 170
+    @ScaledMetric(relativeTo: .body) private var peekHeight: CGFloat = MapItineraryFullView.peekBase
 
     init(model: MapItineraryCardModel, start: MapItineraryFocus) {
         self.model = model
         self.start = start
         let day = model.days.indices.contains(start.dayIndex) ? start.dayIndex : 0
         _dayIndex = State(initialValue: day)
+        _path = State(initialValue: start.stopId.map { [$0] } ?? [])
+        _detent = State(initialValue: start.stopId == nil ? .height(Self.peekBase) : .medium)
         _position = State(initialValue: Self.position(for: model.days.indices.contains(day) ? model.days[day].region : nil))
     }
 
     private var day: MapItineraryCardModel.Day? { model.days.indices.contains(dayIndex) ? model.days[dayIndex] : nil }
     private var motion: Animation? { reduceMotion ? nil : .smooth(duration: 0.45) }
+    private var peek: PresentationDetent { .height(peekHeight) }
+
+    /// The stop the map marks as picked: the one open in the sheet.
+    private var mapSelection: Binding<String?> {
+        Binding(
+            get: { path.last },
+            set: { id in
+                path = id.map { [$0] } ?? []
+                if id != nil, detent == peek { detent = .medium }
+            })
+    }
 
     var body: some View {
         DayInksReader(model: model) { inks in
-            NavigationStack {
-                VStack(spacing: 0) {
-                    // Above the map, so a place's detail at the medium detent never covers them: switching day
-                    // needs no dragging the sheet down first.
-                    if model.days.count > 1 { dayChips(inks) }
-                    if model.hasMap {
-                        map(inks)
-                            .containerRelativeFrame(.vertical) { height, _ in
-                                height * (dynamicTypeSize.isAccessibilitySize ? 0.34 : 0.46)
-                            }
-                    }
-                    stopList(inks)
+            ZStack(alignment: .top) {
+                if model.hasMap {
+                    map(inks)
+                } else {
+                    Color(.systemGroupedBackground).ignoresSafeArea()
                 }
-                .navigationTitle(Text(verbatim: model.title ?? ToolPresentation.displayName("map_itinerary")))
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { toolbar }
-                .sheet(isPresented: detailIsOpen) {
-                    if let stop = model.stop(id: selection) {
-                        PlaceDetailSheet(
-                            stop: stop, dayLabel: MapItineraryText.dayLabel(model.days[stop.dayIndex]),
-                            total: model.days[stop.dayIndex].stops.count, ink: inks[day: stop.dayIndex]
-                        ) { step in
-                            selection = model.neighbour(of: stop.id, step: step)?.id
-                        }
-                        .presentationDetents([.medium, .large])
-                        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                        .presentationContentInteraction(.scrolls)
-                    }
-                }
+                // Its bottom edge on screen: the map runs under the status bar, so the bar's height alone is short.
+                topBar(inks)
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { topBarHeight = $0 + 8 }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { screenHeight = $0 }
+            .sheet(isPresented: $showsStops, onDismiss: { if closing { dismiss() } }) {
+                stopsSheet(inks)
+                    .presentationDetents([peek, .medium, .large], selection: $detent)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                    .presentationContentInteraction(.scrolls)
+                    .presentationDragIndicator(.visible)
+                    .interactiveDismissDisabled()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { sheetHeight = $0 }
             }
         }
         .onChange(of: dayIndex) {
-            selection = nil
+            path = []
             withAnimation(motion) { position = Self.position(for: day?.region) }
         }
-        .onChange(of: selection) { _, id in
-            guard let stop = model.stop(id: id), let coordinate = stop.coordinate else { return }
+        .onChange(of: path) { _, path in
+            guard let stop = model.stop(id: path.last), let coordinate = stop.coordinate else { return }
             withAnimation(motion) {
                 position = .region(MapRegionMath.centered(on: coordinate, keeping: visibleRegion ?? day?.region).mapKit)
             }
         }
-        .task {
-            // The detail waits for the cover to finish arriving: two presentations at once is refused.
-            guard let stopId = start.stopId else { return }
-            try? await Task.sleep(for: .milliseconds(reduceMotion ? 50 : 450))
-            selection = stopId
-        }
+        .task { location.requestIfNeeded() }
         .sensoryFeedback(.success, trigger: copyCount)
-    }
-
-    private var detailIsOpen: Binding<Bool> {
-        Binding(get: { selection != nil }, set: { if !$0 { selection = nil } })
     }
 
     static func position(for region: MapRegion?) -> MapCameraPosition {
@@ -518,126 +616,139 @@ struct MapItineraryFullView: View {
     }
 
     private func map(_ inks: [MapDayInk]) -> some View {
-        Map(position: $position, selection: $selection) {
+        Map(position: $position, selection: mapSelection) {
+            if location.showsUserLocation { UserAnnotation() }
             itineraryMapContent(model, inks: inks, focusDay: dayIndex, showsTitles: true, casing: Color(.systemBackground))
         }
-        .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
+        .mapControls {
+            if location.showsUserLocation { MapUserLocationButton() }
+            MapCompass()
+            MapScaleView()
+            MapPitchToggle()
+        }
         .onMapCameraChange(frequency: .onEnd) { context in
             let region = context.region
             visibleRegion = MapRegion(
                 center: MapCoordinate(latitude: region.center.latitude, longitude: region.center.longitude),
                 latitudeDelta: region.span.latitudeDelta, longitudeDelta: region.span.longitudeDelta)
         }
+        // The route is framed in what is left between the floating bar and the sheet, up to half the screen: past
+        // that the sheet is being read, not the map.
+        .safeAreaPadding(.top, topBarHeight)
+        .safeAreaPadding(.bottom, min(sheetHeight, screenHeight * 0.5))
+        .ignoresSafeArea()
         .background(Color(.secondarySystemFill))
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("ios:chat.card.map.mapLabel"))
     }
 
-    private func dayChips(_ inks: [MapDayInk]) -> some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                ForEach(model.days) { day in
-                    let isSelected = day.index == dayIndex
-                    let ink = inks[day: day.index]
+    /// Over the map, on glass: close, the trip's name, copy and the route, and the days.
+    private func topBar(_ inks: [MapDayInk]) -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Button {
+                    closing = true
+                    showsStops = false
+                } label: {
+                    Label("common:action.close", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                // On glass of its own: over a busy map a bare title is not read.
+                Text(verbatim: model.title ?? ToolPresentation.displayName("map_itinerary"))
+                    .font(.headline)
+                    .lineLimit(1)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .glassEffect(.regular, in: .capsule)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
+                if let day {
                     Button {
-                        dayIndex = day.index
+                        UIPasteboard.general.string = MapItineraryExport.markdown(day)
+                        copyCount += 1
                     } label: {
-                        HStack(spacing: 6) {
-                            DaySwatch(ink: ink)
-                            Text(verbatim: MapItineraryText.dayLabel(day))
-                                .font(.subheadline.weight(isSelected ? .semibold : .regular))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .frame(minHeight: 44)
-                        .background(
-                            Capsule().fill(isSelected ? ink.fill.opacity(0.16) : Color(.tertiarySystemFill))
-                                .frame(minHeight: 34)
-                        )
-                        .overlay(Capsule().strokeBorder(isSelected ? ink.fill : .clear, lineWidth: 1.5).frame(minHeight: 34))
-                        .contentShape(.rect)
+                        Label("chat:mapItineraryCard.copyMarkdownTitle", systemImage: "doc.on.doc")
+                            .labelStyle(.iconOnly)
+                            .frame(width: 22, height: 22)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    if let url = MapItineraryExport.routeURL(day) {
+                        Button {
+                            openURL(url)
+                        } label: {
+                            Label("chat:mapItineraryCard.openRouteTitle", systemImage: "arrow.triangle.turn.up.right.diamond")
+                                .labelStyle(.iconOnly)
+                                .frame(width: 22, height: 22)
+                        }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                    }
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 4)
+            if model.showsDayPicker {
+                MapDayPicker(model: model, inks: inks, selection: $dayIndex)
+                    .background(.clear)
+                    .glassEffect(.regular, in: .capsule)
+                    .padding(.horizontal, 12)
+            }
         }
-        .scrollIndicators(.hidden)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("chat:mapItineraryCard.tabsAriaLabel"))
+        .padding(.top, 4)
+    }
+
+    private func stopsSheet(_ inks: [MapDayInk]) -> some View {
+        NavigationStack(path: $path) {
+            stopList(inks)
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(for: String.self) { id in
+                    if let stop = model.stop(id: id) {
+                        PlaceDetailPage(
+                            stop: stop, dayLabel: MapItineraryText.dayLabel(model.days[stop.dayIndex]),
+                            total: model.days[stop.dayIndex].stops.count, ink: inks[day: stop.dayIndex]
+                        ) { step in
+                            if let next = model.neighbour(of: stop.id, step: step) { path = [next.id] }
+                        }
+                    }
+                }
+        }
     }
 
     @ViewBuilder
     private func stopList(_ inks: [MapDayInk]) -> some View {
         if let day {
+            let inline = model.inline(day: day.index)
             List {
-                // In the list, not over the map: at large text sizes the notice alone would fill the screen.
-                if let notice = model.notice {
-                    MapItineraryNotice(notice: notice)
-                        .clipShape(.rect(cornerRadius: 10))
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                if let header = inline.header {
+                    MapDayHeaderLine(header: header, summary: inline.summary, ink: inks[day: day.index])
+                        .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 2, trailing: 4))
                         .listRowSeparator(.hidden)
                 }
-                if day.title != nil || day.summary != nil {
-                    VStack(alignment: .leading, spacing: 2) {
-                        if let title = day.title {
-                            Text(verbatim: title).font(.headline)
-                        }
-                        if let summary = day.summary {
-                            Text(verbatim: summary).font(.subheadline).foregroundStyle(.secondary)
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityAddTraits(.isHeader)
-                    .listRowSeparator(.hidden)
+                // Under the header, not over the map: at large text sizes the notice alone would fill the screen.
+                if let notice = model.notice {
+                    MapItineraryNotice(notice: notice)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
                 }
                 if day.stops.isEmpty {
                     Text("ios:chat.card.map.noStops").foregroundStyle(.secondary)
                 }
                 ForEach(day.stops) { stop in
-                    Button {
-                        selection = stop.id
-                    } label: {
+                    NavigationLink(value: stop.id) {
                         MapStopRow(stop: stop, ink: inks[day: day.index])
                     }
-                    .buttonStyle(.plain)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
-                    .listRowBackground(selection == stop.id ? inks[day: day.index].fill.opacity(0.12) : Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 16))
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .padding(.top, 8)
         } else {
-            Spacer()
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button {
-                dismiss()
-            } label: {
-                Label("common:action.close", systemImage: "xmark")
-            }
-        }
-        if let day {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    UIPasteboard.general.string = MapItineraryExport.markdown(day)
-                    copyCount += 1
-                } label: {
-                    Label("chat:mapItineraryCard.copyMarkdownTitle", systemImage: "doc.on.doc")
-                }
-                if let url = MapItineraryExport.routeURL(day) {
-                    Button {
-                        openURL(url)
-                    } label: {
-                        Label("chat:mapItineraryCard.openRouteTitle", systemImage: "arrow.up.forward.square")
-                    }
-                }
-            }
+            Color.clear
         }
     }
 }
@@ -647,7 +758,7 @@ struct MapItineraryFullView: View {
 /// The desktop's place detail: a photo, the day and time, name, rating and type; Overview (notes, address, phone,
 /// website), Reviews and Hours when there are any; and paging through the day's stops. Places photos come through the
 /// computer's proxy, which adds the Google key; the tinted placeholder stays when one cannot be loaded.
-struct PlaceDetailSheet: View {
+struct PlaceDetailPage: View {
     let stop: MapItineraryCardModel.Stop
     let dayLabel: String
     let total: Int
@@ -657,16 +768,30 @@ struct PlaceDetailSheet: View {
     enum Tab: Hashable { case overview, reviews, hours }
 
     @State private var tab = Tab.overview
-    @Environment(\.dismiss) private var dismiss
+    @State private var scene: MKLookAroundScene?
 
     private var place: MapItineraryDetails.Place { stop.place }
 
     var body: some View {
-        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     hero
                     header
+                    if let scene {
+                        // Apple's own street-level view, where it has one: what the place looks like from the street.
+                        LookAroundPreview(initialScene: scene)
+                            .frame(height: 170)
+                            .clipShape(CardStyle.innerShape)
+                    }
+                    if let coordinate = stop.coordinate {
+                        Button {
+                            MapItineraryExport.openInMaps(place.name, at: coordinate)
+                        } label: {
+                            Label("ios:chat.card.map.openInMaps", systemImage: "map")
+                                .frame(maxWidth: .infinity, minHeight: 32)
+                        }
+                        .buttonStyle(.bordered)
+                    }
                     if !place.reviews.isEmpty || !place.openingHours.isEmpty {
                         Picker(selection: $tab) {
                             Text("chat:placeDetail.tabOverview").tag(Tab.overview)
@@ -686,14 +811,8 @@ struct PlaceDetailSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
             }
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Label("common:action.close", systemImage: "xmark")
-                    }
-                }
                 // In the top bar, not a bottom one: at the medium detent a bottom bar floats over the first rows.
                 ToolbarItem(placement: .principal) {
                     Text(verbatim: MapItineraryText.pagination(stop.number, total))
@@ -716,8 +835,12 @@ struct PlaceDetailSheet: View {
                     .disabled(total <= 1)
                 }
             }
-        }
         .onChange(of: stop.id) { tab = .overview }
+        .task(id: stop.id) {
+            scene = nil
+            guard let coordinate = stop.coordinate else { return }
+            scene = try? await MKLookAroundSceneRequest(coordinate: coordinate.location).scene
+        }
     }
 
     private var hero: some View {
@@ -798,7 +921,7 @@ struct PlaceDetailSheet: View {
                         .font(.subheadline)
                         .textSelection(.enabled)
                 }
-                .padding(12)
+                .padding(CardStyle.inset)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(.secondarySystemFill), in: .rect(cornerRadius: 10))
                 .accessibilityElement(children: .combine)
@@ -882,7 +1005,7 @@ struct PlaceDetailSheet: View {
                             .textSelection(.enabled)
                     }
                 }
-                .padding(12)
+                .padding(CardStyle.inset)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(.separator), lineWidth: 0.5))
                 .accessibilityElement(children: .combine)
@@ -919,6 +1042,11 @@ enum MapItineraryText {
         day.label.isEmpty
             ? String(localized: "ios:chat.card.map.dayFallback", defaultValue: "Day \(day.index + 1)", comment: "A day of an itinerary that has no name of its own. %lld is its number.")
             : day.label
+    }
+
+    /// "D1 · Arrival in Kamala": the day's label and, when it has one, its title.
+    static func dayHeader(_ header: MapItineraryCardModel.DayHeader) -> String {
+        [header.label, header.title].compactMap { $0 }.joined(separator: " \u{00B7} ")
     }
 
     static func more(_ count: Int) -> String {
@@ -996,5 +1124,16 @@ enum MapItineraryText {
 
     static func initial(_ author: String?) -> String {
         author?.first.map { String($0).uppercased() } ?? "·"
+    }
+}
+
+extension MapItineraryExport {
+    /// The place in Apple Maps, as a pin with its name.
+    @MainActor
+    static func openInMaps(_ name: String, at coordinate: MapCoordinate) {
+        let item = MKMapItem(
+            location: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude), address: nil)
+        item.name = name
+        item.openInMaps()
     }
 }

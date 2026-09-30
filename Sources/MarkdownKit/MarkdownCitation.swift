@@ -5,12 +5,22 @@ import Foundation
 public struct MarkdownCitation: Equatable, Sendable {
     public let number: Int
     public let title: String?
+    /// The site as the chip names it: its name where the search gave one, else its host.
     public let host: String?
+    /// The site's icon, already judged fetchable by whoever made the citation; drawn when
+    /// `markdownCitationIcons` can load it.
+    public let iconURL: URL?
+    /// Another address for the site's icon, tried when `iconURL` does not load.
+    public let iconFallbackURL: URL?
 
-    public init(number: Int, title: String? = nil, host: String? = nil) {
+    public init(
+        number: Int, title: String? = nil, host: String? = nil, iconURL: URL? = nil, iconFallbackURL: URL? = nil
+    ) {
         self.number = number
         self.title = title
         self.host = host
+        self.iconURL = iconURL
+        self.iconFallbackURL = iconFallbackURL
     }
 
     static let maximumLabelLength = 24

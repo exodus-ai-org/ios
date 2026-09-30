@@ -271,8 +271,8 @@ struct DeepResearchStoreTests {
     func settled() async {
         for (answer, expected) in [
             (FakeComputer.Answer(job: nil, status: 404), DeepResearchJobState.missing),
-            (.init(job: job("failed")), .failed(terminated: false)),
-            (.init(job: job("terminated")), .failed(terminated: true)),
+            (.init(job: job("failed")), .failed(nil)),
+            (.init(job: job("terminated")), .terminated),
             (.init(job: job("paused")), .unknownStatus("paused")),
             (.init(job: job("archived")), .finishedWithoutReport),
         ] {
@@ -282,6 +282,54 @@ struct DeepResearchStoreTests {
             #expect(jobs.entry("dr_1").state == expected)
             #expect(computer.resultCount == 1)
             #expect(computer.messageCount == 0)
+        }
+    }
+
+    @Test("one spinner at a time: the header's until the first step is known, then the step's own")
+    func headerStatus() {
+        #expect(DeepResearchStatus(.loading) == .starting)
+        #expect(DeepResearchStatus(.running(DeepResearchProgress(events: [], startedAt: nil))) == .working)
+        #expect(DeepResearchStatus.starting.spinsInHeader)
+        #expect(!DeepResearchStatus.working.spinsInHeader)
+    }
+
+    @Test("a failed row carries its errorMessage; the card stops polling and never reads the messages")
+    func failedWithMessage() async {
+        let row = job("failed").replacingOccurrences(
+            of: #""jobStatus":"failed""#, with: #""jobStatus":"failed","errorMessage":"APICallError: rate limited""#)
+        let computer = FakeComputer([.init(job: row), .init(job: job("archived", report: sampleReport))])
+        let jobs = store(computer)
+        await jobs.follow("dr_1")
+        #expect(jobs.entry("dr_1").state == .failed("APICallError: rate limited"))
+        #expect(!jobs.entry("dr_1").state.isPolling)
+        #expect(computer.resultCount == 1)
+        #expect(computer.messageCount == 0)
+        #expect(DeepResearchStatus(jobs.entry("dr_1").state) == .failed)
+    }
+
+    @Test("a FailDeepResearch message ends a job the row still calls streaming; no stall wait, no more polling")
+    func failedEvent() async {
+        let messages = "[" + message("m9", #"{"type":6,"error":"TypeError: fetch failed"}"#) + "]"
+        let computer = FakeComputer([.init(job: job("streaming"), messages: messages)])
+        let jobs = store(computer)
+        await jobs.follow("dr_1")
+        #expect(jobs.entry("dr_1").state == .failed("TypeError: fetch failed"))
+        #expect(computer.resultCount == 1)
+        let progress = DeepResearchProgress(
+            events: [messageRow("m0", #"{"type":0}"#), messageRow("m9", #"{"type":6,"error":"boom"}"#)], startedAt: nil)
+        #expect(progress.step == .failed)
+        #expect(progress.failure == "boom")
+        #expect(DeepResearchText.step(.failed) == "Research failed")
+    }
+
+    @Test("an older desktop: still 'streaming' 15 minutes after its last message is stalled, not failed")
+    func olderDesktopStalls() async {
+        let computer = FakeComputer([.init(job: job("streaming"), messages: progressMessages)])
+        let jobs = store(computer, now: iso("2026-09-24T09:15:10.000Z"))
+        await jobs.follow("dr_1")
+        guard case .stalled = jobs.entry("dr_1").state else {
+            Issue.record("an old desktop's dead job must still show as stalled")
+            return
         }
     }
 
@@ -486,7 +534,7 @@ private final class Reports: @unchecked Sendable {
 @MainActor
 @Suite("Deep research: drawn in a window", .serialized)
 struct DeepResearchHostedTests {
-    @Test("running, done, stalled, gone, refused and failed cards draw their own card; the report view draws; no reports")
+    @Test("running, done, stalled, gone, failed (with and without a message), refused and failed-call cards draw; the report view draws; no reports")
     func hosted() async throws {
         let reports = Reports()
         let diagnostics = RenderDiagnostics { scope, message, _ in reports.append("\(scope): \(message)") }
@@ -497,13 +545,15 @@ struct DeepResearchHostedTests {
         jobs.entry("dr_done").state = .done(done)
         jobs.entry("dr_stalled").state = .stalled(DeepResearchProgress(events: [], startedAt: nil))
         jobs.entry("dr_gone").state = .missing
+        jobs.entry("dr_failed").state = .failed("APICallError: rate limited")
+        jobs.entry("dr_failed_bare").state = .failed(nil)
         let all =
-            ["dr_1", "dr_done", "dr_stalled", "dr_gone"].enumerated().flatMap { index, id in
+            ["dr_1", "dr_done", "dr_stalled", "dr_gone", "dr_failed", "dr_failed_bare"].enumerated().flatMap { index, id in
                 cards([user("u"), call("a", "u", "k\(index)"), result("t", "u", "k\(index)", details: #"{"id":"\#(id)"}"#)])
             }
             + cards([user("u"), call("a", "u", "k8"), result("t", "u", "k8", details: #"{"error":"No key"}"#)])
             + cards([user("u"), call("a", "u", "k9"), failedCall("t", "u", "k9", text: "boom")])
-        #expect(all.count == 6)
+        #expect(all.count == 8)
         #expect(all.allSatisfy(ToolCardRegistry.canDraw))
         let root = VStack {
             ForEach(all, id: \.renderKey) { ToolCardView(card: $0) }

@@ -253,6 +253,43 @@ struct ChatDetailViewModelTests {
         #expect(last["timestamp"] is NSNumber)
     }
 
+    @Test("a quote goes with the next message, once, and a quote alone is not sent")
+    func aQuoteIsSentWithTheQuestion() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", reply: helloReply, recorder: recorder)
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+
+        vm.askAbout("  a quoted line ")
+        #expect(vm.quote == "a quoted line")
+        #expect(vm.canSend == false)  // a quote is asked about, not sent by itself
+
+        vm.askAbout("the one that counts")
+        #expect(vm.quote == "the one that counts")  // one at a time: a new one replaces it
+
+        vm.composerText = "why?"
+        await vm.sendMessage()
+        let body = try recorder.onlyJSONBody(forPOST: "/api/v1/chat")
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        #expect(messages.last?["content"] as? String == "> the one that counts\n\nwhy?")
+        #expect(vm.quote == nil)
+    }
+
+    @Test("a quote can be let go of, and asks for the composer's focus when set")
+    func aQuoteCanBeRemoved() async throws {
+        serve(history: "[]", recorder: RequestRecorder())
+        let vm = Harness().makeViewModel()
+        await vm.loadHistory()
+        let focus = vm.composerFocusRequest
+
+        vm.askAbout("line")
+        #expect(vm.composerFocusRequest == focus + 1)
+        vm.removeQuote()
+        #expect(vm.quote == nil)
+        vm.askAbout("   ")
+        #expect(vm.quote == nil)  // nothing selected is nothing to ask about
+    }
+
     @Test("the sent text is trimmed of surrounding whitespace and newlines, and the composer is cleared")
     func theSentTextIsTrimmed() async throws {
         let recorder = RequestRecorder()

@@ -60,22 +60,32 @@ public enum MarkdownPreprocessor {
         let mask = MarkdownScan.codeMask(chars)
         var output = ""
         var citations: [Int] = []
+        /// The citations of a link's text, by where the link ends: a link cannot hold a link, so a marker written
+        /// inside one follows it.
+        var deferred: [Int: String] = [:]
         var index = 0
         while index < chars.count {
+            if let late = deferred.removeValue(forKey: index) { output += late }
             if chars[index] == MarkdownScan.citationOpen, !mask[index], let found = citation(in: chars, at: index) {
-                // "!" + "[1](…)" would be image syntax; the desktop keeps the "!" as text.
-                if endsWithUnescapedBang(output) {
-                    output.removeLast()
-                    output += "\\!"
-                }
-                output += found.numbers.map { "[\($0)](\(citationScheme)://\($0))" }.joined()
+                let links = found.numbers.map { "[\($0)](\(citationScheme)://\($0))" }.joined()
                 citations += found.numbers
+                if let link = MarkdownScan.enclosingLink(of: index..<found.end, in: chars, mask: mask) {
+                    deferred[link.end, default: ""] += links
+                } else {
+                    // "!" + "[1](…)" would be image syntax; the desktop keeps the "!" as text.
+                    if endsWithUnescapedBang(output) {
+                        output.removeLast()
+                        output += "\\!"
+                    }
+                    output += links
+                }
                 index = found.end
             } else {
                 output.append(chars[index])
                 index += 1
             }
         }
+        if let late = deferred.removeValue(forKey: index) { output += late }
         return (output, citations)
     }
 

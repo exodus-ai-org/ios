@@ -14,6 +14,9 @@ public final class ChatDetailViewModel {
     @ObservationIgnored private var segmentCache = RunGrouper.Cache()
     public private(set) var status: ChatStatus = .idle
     public var composerText: String = ""
+    /// "Ask about this": text the user selected in a message of this chat, shown over the composer and sent with the
+    /// next message as a quote (`QuotedText`). One at a time; it belongs to this chat and goes with it.
+    public private(set) var quote: String?
     /// Bumped to ask the composer to take focus ("This is wrong" under a used memory).
     public private(set) var composerFocusRequest = 0
     public private(set) var chatTitle: String?
@@ -64,6 +67,11 @@ public final class ChatDetailViewModel {
     /// sends one for a stop too, see `ChatStreamManager.cancel`) is not counted as a normal
     /// completion. Reset at the start of every new send.
     private var turnWasStopped = false
+    /// True once the history came from a desktop with regenerate groups (its rows carry the attempt columns): only then
+    /// does the phone apply the group's transitions itself instead of waiting for them.
+    public private(set) var supportsAttempts = false
+    /// Bumped each time an answer of a comparison is kept, for the haptic and the VoiceOver announcement.
+    public private(set) var choiceCount = 0
 
     private let apiClient: APIClient
     /// The frames of computer_use sessions streamed here, kept for the finished card's filmstrip.
@@ -72,6 +80,8 @@ public final class ChatDetailViewModel {
     @ObservationIgnored let approvals: RunApprovalStore
     /// Which memories each run read, the memory list the strips compare with, and Undo; the run's foot reads its own run.
     @ObservationIgnored let memoryFoot: MemoryFootStore
+    /// Read aloud for this chat's answers.
+    @ObservationIgnored let readAloud: ReadAloudModel
     private let streamManager: ChatStreamManager
     private let serverConfig: ServerConfigStore
     private let noticeLifetime: Duration
@@ -79,10 +89,21 @@ public final class ChatDetailViewModel {
     @ObservationIgnored private var noticeClearTask: Task<Void, Never>?
 
     /// `noticeLifetime` is how long a notice stays up; `noticeSleep` waits it out — a test hands in one it controls.
-    public init(
+    public convenience init(
         chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
         serverConfig: ServerConfigStore, noticeLifetime: Duration = .seconds(6),
         noticeSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
+        self.init(
+            chatId: chatId, title: title, apiClient: apiClient, streamManager: streamManager,
+            serverConfig: serverConfig, noticeLifetime: noticeLifetime, noticeSleep: noticeSleep, readAloud: nil)
+    }
+
+    /// `readAloud`: a test's stand-in for the computer's speech and the phone's audio.
+    init(
+        chatId: String, title: String?, apiClient: APIClient, streamManager: ChatStreamManager,
+        serverConfig: ServerConfigStore, noticeLifetime: Duration,
+        noticeSleep: @escaping @Sendable (Duration) async throws -> Void, readAloud: ReadAloudModel?
     ) {
         self.chatId = chatId
         self.chatTitle = Self.oneLine(title)
@@ -93,8 +114,24 @@ public final class ChatDetailViewModel {
         self.noticeSleep = noticeSleep
         self.approvals = RunApprovalStore(apiClient: apiClient)
         self.memoryFoot = MemoryFootStore(apiClient: apiClient)
+        self.readAloud = readAloud ?? ReadAloudModel(apiClient: apiClient)
         memoryFoot.onWrong = { [weak self] text in self?.prefillComposer(text) }
+        // Shown as every other action's failure is: the alert, with the computer's own words.
+        self.readAloud.onFailure = { [weak self] message in
+            self?.errorMessage = message
+            self?.failureCount += 1
+        }
     }
+
+    /// Sets the text the next message is about, replacing any before it, and asks for the composer's focus.
+    public func askAbout(_ selection: String) {
+        let text = selection.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        quote = text
+        composerFocusRequest += 1
+    }
+
+    public func removeQuote() { quote = nil }
 
     /// Puts `text` in the composer, replacing what was there (as the desktop does), and asks for focus.
     func prefillComposer(_ text: String) {
@@ -188,6 +225,7 @@ public final class ChatDetailViewModel {
         do {
             let rows: [ChatMessage] = try await apiClient.get("/api/v1/chat/\(chatId)")
             messages = ChatHistoryRows.uiMessages(from: rows)
+            if rows.contains(where: \.carriesAttemptColumns) { supportsAttempts = true }
             memoryFoot.prune(keeping: Set(messages.map { $0.runId ?? $0.id }))
             clearRunError()
             // Only the first load says what this chat was; a later pull-to-refresh sees the turns
@@ -204,9 +242,12 @@ public final class ChatDetailViewModel {
 
     public func sendMessage() async {
         guard canSend else { return }
-        let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typed = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = quote.map { QuotedText.compose(quote: $0, text: typed) } ?? typed
         composerText = ""
+        quote = nil
 
+        if supportsAttempts { messages = RunAttempts.autoChoose(messages) }
         await startTurn(
             with: .userMessage(id: Self.newMessageId(), text: text, timestampMs: Self.nowMs))
     }
@@ -215,10 +256,63 @@ public final class ChatDetailViewModel {
     /// run) carrying the same content is appended, and the transcript so far — the previous answer included — is what is
     /// sent. Nothing is removed: the previous answer stays on screen and in the database, and the new one follows it.
     /// Does nothing while a turn is in flight, before the history is known, or when there is no question to repeat.
+    ///
+    /// The new run names its group (`alternateOf`: the last run's own group, or that run), so the desktop shows the two
+    /// answers side by side; the phone compares them too once it knows the desktop keeps groups.
     public func regenerate() async {
         guard canRegenerate, let question = TurnActions.resendableUserMessage(in: segments) else { return }
-        await startTurn(
-            with: .userMessage(id: Self.newMessageId(), content: question.content, timestampMs: Self.nowMs))
+        var copy = ChatMessage.userMessage(id: Self.newMessageId(), content: question.content, timestampMs: Self.nowMs)
+        let group = RunAttempts.regenerateGroup(in: messages)
+        if let group { copy.raw["alternateOf"] = .string(group) }
+        await startTurn(with: copy) { messages in
+            guard self.supportsAttempts, let group else { return messages }
+            return RunAttempts.regenerate(messages, newRunId: copy.id, group: group)
+        }
+    }
+
+    /// Whether a compared answer may be kept now.
+    public var canChoose: Bool { hasLoadedHistory && !isTurnInFlight }
+
+    /// Keeps one answer of a comparison (or swaps in the folded one): shown at once, and put back as it was when the
+    /// computer refuses. A 409 means a later message exists; a 404 that the run is gone. Either way the transcript is
+    /// read again so it shows what the computer has.
+    public func choose(runId: String) async {
+        guard canChoose, let next = RunAttempts.choose(messages, runId: runId) else { return }
+        guard next != messages else { return }
+        let previous = messages
+        messages = next
+        do {
+            try await apiClient.post("/api/v1/chat/\(chatId)/choose", body: ChooseBody(runId: runId))
+            choiceCount += 1
+        } catch {
+            guard !isCancellation(error) else { return }
+            if messages == next { messages = previous }
+            let http = error as? HTTPError
+            let message: String
+            if http?.code == "ATTEMPT_LOCKED" {
+                message = CompareText.locked
+            } else if http?.code == "RUN_NOT_FOUND" {
+                message = CompareText.missing
+            } else {
+                message = error.localizedDescription
+            }
+            if http?.statusCode == 409 || http?.statusCode == 404 { await loadHistory() }
+            errorMessage = message
+            failureCount += 1
+        }
+    }
+
+    /// The answer a chosen one was compared with, read-only, and whether it may still be swapped in.
+    func otherVersion(runId: String) -> OtherVersion? {
+        let rows = messages.filter { $0.role != "user" && $0.runId == runId }
+        guard !rows.isEmpty else { return nil }
+        let turn = RunGrouper.buildTurn(runId: runId, messages: rows)
+        let canSwap = segments.contains { segment in
+            guard case .assistantTurn(let chosen) = segment, case .chosen(let others, let canSwap)? = chosen.attempt
+            else { return false }
+            return canSwap && others.contains(runId)
+        }
+        return OtherVersion(turn: turn, canSwap: canSwap && canChoose)
     }
 
     /// The Sources sheet's content for one of the transcript's turns, at a citation chip's source when it names one.
@@ -238,8 +332,10 @@ public final class ChatDetailViewModel {
         notice = nil
     }
 
-    private func startTurn(with userMessage: ChatMessage) async {
-        messages.append(userMessage)
+    private func startTurn(
+        with userMessage: ChatMessage, arranging arrange: ([ChatMessage]) -> [ChatMessage] = { $0 }
+    ) async {
+        messages = arrange(messages + [userMessage])
         turnWasStopped = false
         clearRunError()
         dismissNotice()
@@ -339,4 +435,8 @@ public final class ChatDetailViewModel {
         guard title.count > displayTitleLimit else { return title }
         return title.prefix(displayTitleLimit).trimmingCharacters(in: .whitespaces) + "…"
     }
+}
+
+private struct ChooseBody: Encodable, Sendable {
+    let runId: String
 }

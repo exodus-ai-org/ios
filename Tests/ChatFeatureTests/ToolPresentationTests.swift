@@ -104,7 +104,8 @@ struct TimelineHeaderTests {
         guard case .toolCall(let call)? = terminal.steps.last else { throw CocoaError(.coderValueNotFound) }
         #expect(ToolPresentation.callText(call) == "Terminal")
         #expect(call.codeArgument == "ls -la")
-        #expect(ToolPresentation.itineraryText(ItineraryScale(days: 3, stops: 12)) == "Days: 3, stops: 12")
+        #expect(ToolPresentation.itineraryText(ItineraryScale(days: 3, stops: 12)) == "3 days, 12 stops")
+        #expect(ToolPresentation.itineraryText(ItineraryScale(days: 1, stops: 1)) == "1 day, 1 stop")
     }
 
     @Test("a thinking step without a title of its own reads Thinking; no steps yet reads Thinking… or Working…")

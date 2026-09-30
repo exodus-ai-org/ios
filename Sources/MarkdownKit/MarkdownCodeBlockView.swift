@@ -1,6 +1,14 @@
 import SwiftUI
 import UIKit
 
+/// The shape of a block that is set apart from the text around it — code, a table, an image's frame: a quiet
+/// fill, no edge, the transcript cards' continuous corner a step smaller.
+enum MarkdownBlockShape {
+    static let radius: CGFloat = 14
+    static let inset: CGFloat = 14
+    static var shape: RoundedRectangle { RoundedRectangle(cornerRadius: radius, style: .continuous) }
+}
+
 struct MarkdownCodeBlockView: View {
     let language: String?
     let code: String
@@ -30,25 +38,23 @@ struct MarkdownCodeBlockView: View {
                 .buttonStyle(.borderless)
                 .contentTransition(.symbolEffect(.replace))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-
-            Divider()
+            .padding(.horizontal, MarkdownBlockShape.inset)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
 
             ScrollView(.horizontal) {
                 Text(verbatim: code)
                     .font(.callout.monospaced())
                     .fixedSize(horizontal: true, vertical: true)
                     .textSelection(.enabled)
-                    .padding(12)
+                    .padding(.horizontal, MarkdownBlockShape.inset)
+                    .padding(.top, 6)
+                    .padding(.bottom, 14)
             }
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             .markdownTrailingFade()
         }
-        .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10).strokeBorder(Color(uiColor: .separator), lineWidth: 0.5)
-        }
+        .background(Color(uiColor: .secondarySystemBackground), in: MarkdownBlockShape.shape)
     }
 
     private func copy() {

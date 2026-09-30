@@ -336,8 +336,9 @@ struct RichTurnRenderCountTests {
         let settledAfter = try #require(turns(previous).first)
         #expect(
             settledBefore.toolCards.map(\.toolName)
-                == ["terminal", "weather", "edit_file", "read_file", "map_itinerary", "image_generation"])
-        #expect(settledBefore.toolCards[4].content.mapItinerary?.model?.stopCount == 3)
+                == ["terminal", "weather", "edit_file", "read_file", "image_generation", "map_itinerary"],
+            "in the order the calls were made")
+        #expect(settledBefore.toolCards[5].content.mapItinerary?.model?.stopCount == 3)
         #expect(settledBefore.foot.memoryUpdates.count == 1)
         #expect(settledBefore.foot.searchMedia.count == 2)
         let before = AssistantTurnView(

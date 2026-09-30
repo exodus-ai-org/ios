@@ -1,23 +1,37 @@
 import SwiftUI
 
 /// Spacing, heading fonts and list markers, in body-size units ("em") so they follow Dynamic Type.
-/// The rhythm follows the desktop's `.markdown` CSS: one uniform gap between blocks, a larger lead-in
-/// before a heading, a small gap after it, tight spacing inside list items.
+/// One uniform gap between blocks, a larger lead-in before a heading, a small gap after it, tight spacing
+/// inside list items. The measure is a reading one: paragraphs stand a full line apart and the lines of
+/// running text about 1.6 em from each other, which is what Chinese and Japanese need to be read at length
+/// and does Latin text no harm; a heading's own lines stay close, since they are one thought.
 enum MarkdownLayoutRules {
-    static let blockGap: CGFloat = 0.75
-    static let listGap: CGFloat = 0.35
-    static let afterHeadingGap: CGFloat = 0.45
-    static let ruleGap: CGFloat = 1.0
+    /// ChatGPT's measure (owner's reference, 2026-09-30): paragraphs 45.5 pt apart baseline to baseline at a 16 pt
+    /// body whose lines are 23.5 pt apart.
+    static let blockGap: CGFloat = 1.8
+    static let listGap: CGFloat = 0.5
+    static let afterHeadingGap: CGFloat = 0.6
+    static let ruleGap: CGFloat = 1.4
+
+    /// The room added between two lines of one block, as a fraction of its font size.
+    static func lineGap(for spec: MarkdownFontSpec) -> CGFloat {
+        switch spec.style {
+        case .largeTitle, .title, .title2, .title3: 0.16
+        case .headline: 0.24
+        case .body, .callout: 0.42
+        default: 0.34
+        }
+    }
 
     static func gap(after previous: MarkdownBlock.Kind?, before next: MarkdownBlock.Kind, inList: Bool) -> CGFloat {
         guard let previous else { return 0 }
         if case .heading(let level, _) = next {
             if inList { return listGap }
             switch level {
-            case 1: return 1.3
-            case 2: return 1.2
-            case 3: return 1.0
-            default: return 0.85
+            case 1: return 2.3
+            case 2: return 2.1
+            case 3: return 1.95
+            default: return 1.85
             }
         }
         if case .heading = previous { return inList ? listGap : afterHeadingGap }

@@ -96,9 +96,12 @@ extension ProtoFixtures {
 extension ProtoFixtures {
     static let researchSubject = "How are European cities cutting car traffic, and what worked?"
 
-    static func researchRow(_ id: String, status: String, report: String? = nil, sources: String = "null") -> String {
+    static func researchRow(
+        _ id: String, status: String, report: String? = nil, sources: String = "null", errorMessage: String? = nil
+    ) -> String {
         let reportJSON = report.map { String(data: try! JSONEncoder().encode($0), encoding: .utf8)! } ?? "null"
-        return #"{"id":"\#(id)","toolCallId":"k","title":"\#(researchSubject)","jobStatus":"\#(status)","finalReport":\#(reportJSON),"webSources":\#(sources),"startTime":"2026-09-24T09:00:00.000Z","endTime":"2026-09-24T09:12:40.000Z"}"#
+        let errorJSON = errorMessage.map { String(data: try! JSONEncoder().encode($0), encoding: .utf8)! } ?? "null"
+        return #"{"id":"\#(id)","toolCallId":"k","title":"\#(researchSubject)","jobStatus":"\#(status)","finalReport":\#(reportJSON),"webSources":\#(sources),"startTime":"2026-09-24T09:00:00.000Z","endTime":"2026-09-24T09:12:40.000Z","errorMessage":\#(errorJSON)}"#
     }
 
     private static func researchMessage(_ id: Int, _ data: String) -> String {
@@ -256,6 +259,34 @@ extension ProtoFixtures {
           {"label":"Thu","routeMode":"transit","places":[
             {"name":"Zentralfriedhof","lat":48.1522,"lng":16.4406,"type":"Cemetery"},
             {"name":"Prater","lat":48.2166,"lng":16.3955,"type":"Park"}]}]}
+        """#)
+
+    /// A week in Phuket: seven days, so the day picker scrolls; times that only make sense under their day's name.
+    static let phuket = json(#"""
+        {"type":"mapItinerary","title":"Phuket, seven days","days":[
+          {"label":"D1","title":"Arrival in Kamala","summary":"Land, check in, sunset on the beach.","places":[
+            {"name":"Phuket International Airport","lat":8.1132,"lng":98.3169,"type":"Airport","timeLabel":"15:10"},
+            {"name":"Kamala Beach","lat":7.9530,"lng":98.2830,"type":"Beach","timeLabel":"17:45"},
+            {"name":"Cafe del Mar Phuket","lat":7.9589,"lng":98.2823,"type":"Beach club","timeLabel":"19:00","rating":4.4,"reviewCount":5120}]},
+          {"label":"D2","title":"Old Town","places":[
+            {"name":"Thalang Road","lat":7.8852,"lng":98.3885,"type":"Street","timeLabel":"10:00"},
+            {"name":"Soi Romanee","lat":7.8858,"lng":98.3879,"type":"Street","timeLabel":"11:00"},
+            {"name":"Khao Rang Viewpoint","lat":7.8934,"lng":98.3797,"type":"Viewpoint","timeLabel":"afternoon"}]},
+          {"label":"D3","title":"Phi Phi by boat","routeMode":"transit","places":[
+            {"name":"Rassada Pier","lat":7.8581,"lng":98.4156,"type":"Pier","timeLabel":"08:30"},
+            {"name":"Maya Bay","lat":7.6781,"lng":98.7656,"type":"Bay","timeLabel":"all day"}]},
+          {"label":"D4","title":"Big Buddha and Chalong","places":[
+            {"name":"Big Buddha","lat":7.8276,"lng":98.3128,"type":"Monument","timeLabel":"09:00"},
+            {"name":"Wat Chalong","lat":7.8467,"lng":98.3369,"type":"Temple","timeLabel":"11:00"}]},
+          {"label":"D5","title":"Kata and Karon","places":[
+            {"name":"Kata Beach","lat":7.8205,"lng":98.2976,"type":"Beach","timeLabel":"all day"},
+            {"name":"Karon Viewpoint","lat":7.7986,"lng":98.3062,"type":"Viewpoint","timeLabel":"17:30"}]},
+          {"label":"D6","title":"Phang Nga Bay","places":[
+            {"name":"Ao Po Grand Marina","lat":8.0689,"lng":98.4446,"type":"Marina","timeLabel":"08:00"},
+            {"name":"James Bond Island","lat":8.2745,"lng":98.5012,"type":"Island","timeLabel":"11:30"}]},
+          {"label":"D7","title":"Departure","places":[
+            {"name":"Naka Weekend Market","lat":7.8787,"lng":98.3732,"type":"Market","timeLabel":"morning"},
+            {"name":"Phuket International Airport","lat":8.1132,"lng":98.3169,"type":"Airport","timeLabel":"18:20"}]}]}
         """#)
 
     /// A single lookup: one day, one stop.

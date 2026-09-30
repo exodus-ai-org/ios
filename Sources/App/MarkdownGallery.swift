@@ -1,10 +1,13 @@
 #if DEBUG
+import ChatFeature
 import MarkdownKit
 import SwiftUI
 import UIKit
 
 /// DEBUG-only visual check of `MarkdownView`: `-MarkdownGallery` shows it, `-MarkdownGallerySection N`
 /// scrolls to section N, `-MarkdownGalleryStream` shows only the streaming section, looping it.
+/// `-MarkdownGalleryArriving` draws every block as one still being written — by `Text`, not in a text view: two
+/// screenshots, with and without it, show whether a block's text moves when the block settles.
 enum MarkdownGalleryLaunch {
     static var isEnabled: Bool {
         let arguments = ProcessInfo.processInfo.arguments
@@ -12,6 +15,7 @@ enum MarkdownGalleryLaunch {
     }
 
     static var streams: Bool { ProcessInfo.processInfo.arguments.contains("-MarkdownGalleryStream") }
+    static var arriving: Bool { ProcessInfo.processInfo.arguments.contains("-MarkdownGalleryArriving") }
 
     static var section: Int? {
         guard let index = ProcessInfo.processInfo.arguments.firstIndex(of: "-MarkdownGallerySection"),
@@ -65,6 +69,8 @@ struct MarkdownGalleryView: View {
                 proxy.scrollTo(section, anchor: .top)
             }
         }
+        .environment(\.markdownCitationIcons, GalleryIcons.markdown)
+        .environment(\.markdownDrawsAsArriving, MarkdownGalleryLaunch.arriving)
     }
 }
 
@@ -113,9 +119,12 @@ private struct MarkdownGalleryStream: View {
 
 enum MarkdownGalleryDocuments {
     static let citations = [
-        MarkdownCitation(number: 1, title: "Swift.org", host: "www.swift.org"),
-        MarkdownCitation(number: 2, title: "Apple Developer Documentation", host: "developer.apple.com"),
+        MarkdownCitation(number: 1, title: "Swift.org", host: "www.swift.org", iconURL: GalleryIcons.url("swift.org")),
+        MarkdownCitation(
+            number: 2, title: "Apple Developer Documentation", host: "Apple Developer",
+            iconURL: GalleryIcons.url("developer.apple.com")),
         MarkdownCitation(number: 3, title: "A very long article title that must be truncated in the chip", host: nil),
+        MarkdownCitation(number: 4, title: "Storms cross East Texas", host: "Lufkin Daily News"),
     ]
 
     private static let open = "\u{3010}"
@@ -375,7 +384,41 @@ enum MarkdownGalleryDocuments {
             """
         ),
         ("Long document (~2 000 tokens)", longDocument(minimumLength: 8_000)),
+        ("Chinese, with citations", chineseSample),
+        (
+            "A chip at the end of a line goes to the next line whole",
+            """
+            Storms crossed East Texas late on Sunday \(cite("4,1,2")) and the power was out by morning.
+
+            Storms crossed East Texas late on Sunday night \(cite("4,1,2")) and the power was out by morning.
+
+            Storms crossed East Texas late on a Sunday night \(cite("4,1,2")) and the power was out by morning.
+
+            Storms crossed all of East Texas late on a Sunday night \(cite("4,1,2")) and the power was out.
+            """
+        ),
+        (
+            "An HTML line break is a line break",
+            """
+            Day one: the old town<br>Day two: the coast<BR/>Day three: the hills
+
+            <br>
+
+            The paragraph above this one was nothing but a break, and is not drawn. In code, `<br>` is text.
+            """
+        ),
     ]
+
+    /// Han text sets differently from Latin (no spaces, full-width punctuation), and chips must sit well in both.
+    private static let chineseSample = [
+        "早上好。要给你一份贴合持仓的简报，我先拉几组最新数据：美股大盘走势、日元汇率与美联储利率路径，以及半导体供应链的最新动态。",  // l10n:ignore: gallery fixture
+        "",
+        "## 大盘：波动周，周五收复失地",  // l10n:ignore: gallery fixture
+        "本周美股经历了一波债券收益率驱动的抛售，10 年期美债收益率一度触及 2007 年以来最高水平\(cite("1"))\(cite("2"))。但周五三大指数收高，道指涨 0.93%，标普 500 涨 0.51%\(cite("1,2"))。芯片股在周五普涨提振了市场情绪\(cite("3"))。",  // l10n:ignore: gallery fixture
+        "",
+        "- **美联储**：10 月再次加息的概率一度接近 70%\(cite("2"))。",  // l10n:ignore: gallery fixture
+        "- **日元**：美元兑日元在 150 附近反复。",  // l10n:ignore: gallery fixture
+    ].joined(separator: "\n")
 
     private static func longDocument(minimumLength: Int) -> String {
         let pieces = [

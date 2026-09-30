@@ -31,6 +31,9 @@ enum ChatHistoryRows {
         switch row.role {
         case "user":
             role = "user"
+            // Kept as the row has them, null included: a null still says this desktop knows regenerate groups.
+            if let alternateOf = row.raw["alternateOf"] { out["alternateOf"] = alternateOf }
+            if let attempt = row.raw["attempt"] { out["attempt"] = attempt }
         case "assistant":
             role = "assistant"
             out["usage"] = row.raw["usage"] ?? .null

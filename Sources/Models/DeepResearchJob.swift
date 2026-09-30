@@ -27,8 +27,9 @@ public struct DeepResearchSource: JSONValueDecodable {
     }
 }
 
-/// The job's row. `jobStatus` is `streaming` until the report is written, then `archived`; `failed` and `terminated`
-/// are in the schema though nothing on the desktop writes them yet.
+/// The job's row. `jobStatus` is `streaming` until the report is written, then `archived`, or `failed` with
+/// `errorMessage` when a step threw (desktops before that fix leave such a job `streaming`); `terminated` is in the
+/// schema though nothing writes it yet.
 public struct DeepResearchJob: JSONValueDecodable {
     public enum Status: Equatable, Sendable {
         case streaming, archived, failed, terminated
@@ -52,6 +53,8 @@ public struct DeepResearchJob: JSONValueDecodable {
     public let webSources: [DeepResearchSource]
     public let startTime: Date?
     public let endTime: Date?
+    /// Why a `failed` job failed: a short, secret-scrubbed summary.
+    public let errorMessage: String?
 
     public init?(json: JSONValue) {
         guard let fields = JSONFields(json), let id = fields.nonEmpty("id"), let status = fields.nonEmpty("jobStatus")
@@ -63,6 +66,7 @@ public struct DeepResearchJob: JSONValueDecodable {
         webSources = fields.list("webSources")
         startTime = fields.string("startTime").flatMap(DeepResearchDate.parse)
         endTime = fields.string("endTime").flatMap(DeepResearchDate.parse)
+        errorMessage = fields.nonEmpty("errorMessage")
     }
 }
 
@@ -86,6 +90,7 @@ public enum DeepResearchEvent: Equatable, Sendable {
     case learned([String])
     case writing
     case completed(query: String)
+    case failed(error: String)
     case unknown
 
     init(_ fields: JSONFields) {
@@ -100,6 +105,7 @@ public enum DeepResearchEvent: Equatable, Sendable {
             self = .learned((fields.array("learnings") ?? []).compactMap { JSONFields($0)?.nonEmpty("learning") })
         case 4: self = .writing
         case 5: self = .completed(query: fields.string("query") ?? "")
+        case 6: self = .failed(error: fields.string("error") ?? "")
         default: self = .unknown
         }
     }
