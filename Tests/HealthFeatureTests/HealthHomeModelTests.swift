@@ -120,8 +120,35 @@ struct HealthHomeModelTests {
         #expect(await summaries.calls == 2)
     }
 
+    @Test func revokingConsentForgetsTheReport() async {
+        await withData()
+        prefs.summaryConsent = true
+        let m = model()
+        await m.load()
+        #expect(m.suggestion != nil)
+        #expect(FileManager.default.fileExists(atPath: cache.fileURL.path()))
+
+        m.revokeConsent()
+        #expect(!prefs.summaryConsent)
+        #expect(!m.hasConsent)
+        #expect(m.report == .needsConsent)
+        #expect(m.suggestion == nil)
+        #expect(!FileManager.default.fileExists(atPath: cache.fileURL.path()))
+
+        await m.load(force: true)
+        #expect(m.report == .needsConsent)
+        #expect(await summaries.calls == 1)
+    }
+
+    @Test func clearingAnEmptyCacheIsFine() throws {
+        try cache.clear()
+        #expect(cache.load(date: "2026-10-01") == nil)
+    }
+
     @Test func errorsMapToStates() {
         #expect(HealthHomeModel.reportState(for: URLError(.cannotConnectToHost)) == .offline)
+        // A timeout is usually a slow model, not a missing computer.
+        #expect(HealthHomeModel.reportState(for: URLError(.timedOut)) == .failed)
         #expect(HealthHomeModel.reportState(for: HTTPError(statusCode: 400, code: "CONFIG_MISSING_PROVIDER", message: "")) == .needsModel)
         #expect(HealthHomeModel.reportState(for: HTTPError(statusCode: 404, code: "SETTING_NOT_FOUND", message: "")) == .needsModel)
         #expect(HealthHomeModel.reportState(for: HTTPError(statusCode: 0, code: "INVALID_BASE_URL", message: "")) == .offline)

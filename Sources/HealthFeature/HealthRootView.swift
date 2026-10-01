@@ -43,19 +43,42 @@ public struct HealthRootView: View {
         }
         .task { await model.load() }
         .onChange(of: scenePhase) { if scenePhase == .active { Task { await model.load() } } }
-        #if DEBUG
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    // Consent can be taken back here; onboarding is where it is first asked.
+                    if !model.needsOnboarding {
+                        Toggle(isOn: notesBinding) {
+                            Label(Self.notesText, systemImage: "text.bubble")
+                        }
+                    }
+                    #if DEBUG
                     Button {
                         Task {
                             try? await HealthKitSource().writeSampleData(now: Date())
                             await model.load(force: true)
                         }
-                    } label: { Text(verbatim: "Write sample health data") }
-                } label: { Image(systemName: "ladybug") }
+                    } label: { Label { Text(verbatim: "Write sample health data") } icon: { Image(systemName: "ladybug") } }
+                    #endif
+                } label: {
+                    Label(Self.menuText, systemImage: "ellipsis")
+                }
+                .accessibilityIdentifier("healthMenu")
             }
         }
-        #endif
     }
+
+    private var notesBinding: Binding<Bool> {
+        Binding(
+            get: { model.hasConsent },
+            set: { on in
+                if on { Task { await model.grantConsent() } } else { model.revokeConsent() }
+            })
+    }
+
+    private static let notesText = LocalizedStringResource(
+        "ios:health.settings.notes", defaultValue: "Write daily notes",
+        comment: "Health menu toggle: send the day's summary to the AI provider for a written note.")
+    private static let menuText = LocalizedStringResource(
+        "ios:health.settings.menu", defaultValue: "Health options", comment: "Health toolbar menu, VoiceOver label.")
 }

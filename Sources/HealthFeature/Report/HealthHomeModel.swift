@@ -26,6 +26,8 @@ public final class HealthHomeModel {
     public let preferences: HealthPreferences
     /// Observed mirror of the stored flag, so finishing onboarding swaps the screen.
     public private(set) var hasOnboarded: Bool
+    /// Observed mirror of the stored consent, for the menu's toggle.
+    public private(set) var hasConsent: Bool
 
     @ObservationIgnored private let source: any HealthDataSource
     @ObservationIgnored private let summaries: any HealthSummaryService
@@ -49,6 +51,7 @@ public final class HealthHomeModel {
         self.cache = cache
         self.preferences = preferences
         self.hasOnboarded = preferences.hasOnboarded
+        self.hasConsent = preferences.summaryConsent
         self.builder = SnapshotBuilder(source: source, calendar: calendar)
         self.now = now
         self.locale = locale
@@ -136,7 +139,22 @@ public final class HealthHomeModel {
 
     public func grantConsent() async {
         preferences.summaryConsent = true
+        hasConsent = true
         await load()
+    }
+
+    /// Stops the daily note: forgets today's report on disk and on screen, and drops a note still being written, so
+    /// nothing more about the day goes to the computer until consent is given again.
+    public func revokeConsent() {
+        preferences.summaryConsent = false
+        hasConsent = false
+        running?.cancel()
+        running = nil
+        generation += 1
+        isLoading = false
+        try? cache.clear()
+        suggestion = nil
+        report = .needsConsent
     }
 
     /// Onboarding shows until the user has been through both asks; a device without Health has nothing to ask for.
@@ -184,7 +202,10 @@ public final class HealthHomeModel {
     func historyLoader(calendar: Calendar = .current) -> HealthHistoryLoader { HealthHistoryLoader(source: source, calendar: calendar) }
 
     public static func reportState(for error: Error) -> Report {
-        if error is URLError { return .offline }
+        if let url = error as? URLError {
+            // A timeout is usually the model taking too long, not a missing computer.
+            return url.code == .timedOut ? .failed : .offline
+        }
         // Status 0 is no usable address: no computer is paired or configured.
         if let http = error as? HTTPError, http.statusCode == 0 { return .offline }
         if let http = error as? HTTPError, http.code.hasPrefix("CONFIG_") || http.code == "SETTING_NOT_FOUND" {

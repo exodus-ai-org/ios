@@ -34,6 +34,12 @@ public struct ReportCache: Sendable {
         return report
     }
 
+    /// Forgets the stored report (consent withdrawn). Nothing stored is fine.
+    public func clear() throws {
+        guard FileManager.default.fileExists(atPath: fileURL.path()) else { return }
+        try FileManager.default.removeItem(at: fileURL)
+    }
+
     public func save(_ report: CachedReport) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try HealthWire.encoder().encode(report).write(to: fileURL, options: [.atomic, .completeFileProtection])

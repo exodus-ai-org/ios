@@ -13,8 +13,8 @@ public struct LiveHealthSummaryService: HealthSummaryService {
     public init(apiClient: APIClient) { self.apiClient = apiClient }
 
     public func summary(for snapshot: HealthSnapshot) async throws -> HealthSummary {
-        // A memory read and a model call: give it longer than a plain request.
-        try await apiClient.post("/api/v1/health/summary", body: snapshot, timeout: 90)
+        // A memory read and a model call (a slow local model can take a while): give it longer than a plain request.
+        try await apiClient.post("/api/v1/health/summary", body: snapshot, timeout: 120)
     }
 }
 
