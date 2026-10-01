@@ -23,6 +23,12 @@ public struct APIClient: Sendable {
         try await send(path: path, query: query, method: "GET", body: Optional<String>.none)
     }
 
+    /// A GET whose answer is a file served as it is (the artifact sandbox's page and assets), with the type the
+    /// server gave it.
+    public func file(_ path: String, query: [URLQueryItem] = []) async throws -> FetchedFile {
+        try await send(path: path, query: query, method: "GET", body: Optional<String>.none)
+    }
+
     public func post<Body: Encodable, T: Decodable>(
         _ path: String, body: Body, timeout: TimeInterval? = nil
     ) async throws -> T {
@@ -166,6 +172,10 @@ public struct APIClient: Sendable {
             return EmptyResponse() as! T
         }
         if let raw = data as? T, T.self == Data.self { return raw }
+        if T.self == FetchedFile.self {
+            let type = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
+            return FetchedFile(data: data, contentType: type) as! T
+        }
         return try JSONDecoder().decode(T.self, from: data)
     }
 
@@ -241,6 +251,22 @@ public struct APIClient: Sendable {
 }
 
 private struct EmptyResponse: Decodable {}
+
+/// A file's bytes and its `Content-Type`, as `APIClient.file` read them. Never decoded from JSON: `Decodable` only so
+/// it can travel the same request path as every other answer.
+public struct FetchedFile: Decodable, Sendable, Equatable {
+    public let data: Data
+    public let contentType: String?
+
+    public init(data: Data, contentType: String?) {
+        self.data = data
+        self.contentType = contentType
+    }
+
+    public init(from decoder: Decoder) throws {
+        throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "A file is not JSON"))
+    }
+}
 
 extension URLError {
     /// No byte of the request reached the computer at this address: safe to send it anywhere else, whatever it does.
