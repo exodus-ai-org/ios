@@ -12,7 +12,8 @@ struct WaterSurfaceTests {
 
     @Test func tiltSlopesTheSurface() {
         let p = WaterSurface.points(width: 100, height: 200, level: 0.5, tilt: 1, amplitude: 0, phase: 0)
-        #expect(p.last!.y > p.first!.y)
+        // Positive tilt is the phone leaning right: the water stands higher on the right.
+        #expect(p.last!.y < p.first!.y)
         let mid = p.first { abs($0.x - 50) < 0.01 }!
         #expect(abs(mid.y - 100) < 0.001)  // pivots about the middle: volume stays put
     }
