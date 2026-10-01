@@ -76,10 +76,24 @@ enum CategoryValue {
         case .recovery:
             guard let r = s.recovery else { return nil }
             switch r.level {
-            case .good: return String(localized: "ios:health.value.recoveryGood", defaultValue: "Good")
-            case .fair: return String(localized: "ios:health.value.recoveryFair", defaultValue: "Fair")
-            case .low: return String(localized: "ios:health.value.recoveryLow", defaultValue: "Low")
-            case nil: return r.restingHr.map { "\(Int($0)) bpm" }
+            case .good:
+                return String(
+                    localized: "ios:health.value.recoveryGood", defaultValue: "Good",
+                    comment: "Card value: recovery is good.")
+            case .fair:
+                return String(
+                    localized: "ios:health.value.recoveryFair", defaultValue: "Fair",
+                    comment: "Card value: recovery is fair.")
+            case .low:
+                return String(
+                    localized: "ios:health.value.recoveryLow", defaultValue: "Low",
+                    comment: "Card value: recovery is low.")
+            case nil:
+                guard let hr = r.restingHr, hr.isFinite else { return nil }
+                let n = Int(hr)
+                return String(
+                    localized: "ios:health.value.bpm", defaultValue: "\(n) bpm",
+                    comment: "Card value: resting heart rate.")
             }
         case .body:
             guard let cups = s.body?.waterCups else { return nil }

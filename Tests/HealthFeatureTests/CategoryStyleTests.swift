@@ -28,7 +28,12 @@ struct CategoryStyleTests {
             sleep: HealthRulesTests.sleep(372), activity: HealthRulesTests.steps(5840),
             recovery: HealthRulesTests.recovery(.low),
             body: .init(waterCups: 3, weightKg: nil, weightTrend30d: nil, mood: nil))
-        #expect(CategoryValue.text(.sleep, in: s) == "6h 12m")
+        #expect(CategoryValue.text(.sleep, in: s) 
+            == Duration.seconds(372 * 60).formatted(.units(allowed: [.hours, .minutes], width: .narrow)))
+        #expect(CategoryValue.text(.recovery, in: s) != nil)
+        #expect(CategoryValue.text(.body, in: s) == CategoryValue.cups(3))
+        let noLevel = HealthRulesTests.snapshot(recovery: HealthRulesTests.recovery(nil))
+        #expect(CategoryValue.text(.recovery, in: noLevel)?.contains("60") == true)
         #expect(CategoryValue.text(.activity, in: s)?.contains("5") == true)
         #expect(CategoryValue.text(.body, in: s) != nil)
         #expect(CategoryValue.text(.sleep, in: HealthRulesTests.snapshot()) == nil)
