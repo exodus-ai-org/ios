@@ -24,16 +24,18 @@ public struct AskSmallView: View {
                     .lineLimit(1).minimumScaleFactor(0.8)
                     .privacySensitive()
             }
-            // Side by side, so Ody never sits on the words; the words shrink before they spill.
+            // Side by side, so Ody never sits on the words; each line shrinks rather than wrap, so the greeting
+            // reads as two lines.
             HStack(alignment: .top, spacing: 4) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(WidgetStrings.greeting(WidgetPresentation.period(at: date, calendar: calendar)))
+                        .lineLimit(1)
                     Text("ios:widget.greeting.question", bundle: .main)
+                        .lineLimit(1)
                 }
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(ink)
-                .lineLimit(2)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.6)
                 Spacer(minLength: 0)
                 WidgetOdy(expression: WidgetStrings.expression(health?.mood))
                     .frame(width: 48, height: 54)

@@ -19,6 +19,8 @@ public struct AskMediumView: View {
     public var body: some View {
         let health = WidgetPresentation.health(of: snapshot, at: date, calendar: calendar)
         let ink = WidgetInk.color(at: date, calendar: calendar)
+        // Light ink: the sky is dark.
+        let isNight = WidgetInk.isLight(at: date, calendar: calendar)
         GeometryReader { proxy in
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -29,7 +31,14 @@ public struct AskMediumView: View {
                     }
                     if let suggestion = health?.suggestion {
                         Link(destination: DeepLink.health(ask: suggestion).url) {
-                            Chip(text: suggestion, ink: ink, fill: OdyPalette.marigold.opacity(0.22)).privacySensitive()
+                            // Marigold tints the day's sky; over the night's navy it turns brown, so at night the
+                            // chip is the other chips' frost and the marigold is its glyph.
+                            Chip(
+                                text: suggestion, ink: ink,
+                                fill: isNight ? Color.white.opacity(0.14) : OdyPalette.marigold.opacity(0.22),
+                                glyph: isNight ? "sparkle" : nil
+                            )
+                            .privacySensitive()
                         }
                     }
                     let planDay = String(
@@ -52,16 +61,23 @@ public struct AskMediumView: View {
     }
 }
 
-/// A question to start from, cut to one line.
+/// A question to start from, cut to one line; a marigold glyph before it when it has one.
 private struct Chip: View {
     let text: String
     let ink: Color
     let fill: Color
+    var glyph: String?
 
     var body: some View {
-        Text(verbatim: text).font(.caption).foregroundStyle(ink).lineLimit(1)
-            .padding(.vertical, 6).padding(.horizontal, 10)
-            .background(fill, in: .rect(cornerRadius: 12))
+        HStack(spacing: 5) {
+            if let glyph {
+                Image(systemName: glyph).font(.caption2.weight(.bold)).foregroundStyle(OdyPalette.marigold)
+                    .accessibilityHidden(true)
+            }
+            Text(verbatim: text).font(.caption).foregroundStyle(ink).lineLimit(1)
+        }
+        .padding(.vertical, 6).padding(.horizontal, 10)
+        .background(fill, in: .rect(cornerRadius: 12))
     }
 }
 
