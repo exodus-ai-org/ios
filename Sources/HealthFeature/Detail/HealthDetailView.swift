@@ -10,6 +10,7 @@ struct HealthDetailView: View {
     let model: HealthHomeModel
     let onAsk: (String) -> Void
     @State private var data: HealthHistoryData?
+    @State private var failed = false
     /// Cups tapped, cups written to the store, and how many were written when the shown data was read: the glass
     /// rises on the tap, not after the round trip, and never counts a cup twice.
     @State private var tapped = 0
@@ -24,11 +25,27 @@ struct HealthDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header(style, mood: mood)
                 if let data {
-                    switch category {
-                    case .sleep: SleepDetail(data: data, baseline: model.day?.snapshot.sleep?.baselineMin)
-                    case .activity: ActivityDetail(data: data, goal: model.day?.snapshot.activity?.stepGoal ?? 8000)
-                    case .recovery: RecoveryDetail(data: data, snapshot: model.day?.snapshot.recovery)
-                    case .body: BodyDetail(data: data, cups: data.waterCups + tapped - readWithWritten, onLogWater: logWater)
+                    if Self.isEmpty(category, data) {
+                        note(Text(Self.emptyText))
+                    } else {
+                        switch category {
+                        case .sleep: SleepDetail(data: data, baseline: model.day?.snapshot.sleep?.baselineMin)
+                        case .activity: ActivityDetail(data: data, goal: model.day?.snapshot.activity?.stepGoal ?? 8000)
+                        case .recovery: RecoveryDetail(data: data, snapshot: model.day?.snapshot.recovery)
+                        case .body: BodyDetail(data: data, cups: data.waterCups + tapped - readWithWritten, onLogWater: logWater)
+                        }
+                    }
+                } else if failed {
+                    note(Text(Self.failedText)) {
+                        Button { Task { await reload() } } label: { Text(Self.retryText) }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                            .tint(OdyPalette.marigold)
+                    }
+                    if category == .body {
+                        // The glass still works from the day the home read; each cup it logs reloads that day.
+                        let cups = (model.day?.snapshot.body?.waterCups ?? 0) + tapped - written
+                        BodyDetail(data: HealthHistoryData(waterCups: cups), cups: cups, onLogWater: logWater)
                     }
                 } else {
                     ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
@@ -49,8 +66,9 @@ struct HealthDetailView: View {
     private func header(_ style: CategoryStyle, mood: OdyMood) -> some View {
         ZStack(alignment: .bottomLeading) {
             LinearGradient(colors: style.gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
-            if category == .recovery {
-                HeartbeatWave(bpm: model.day?.snapshot.recovery?.restingHr ?? 60, color: .white)
+            // No resting heart rate, no beat: the wave never animates a made-up pulse.
+            if category == .recovery, let bpm = model.day?.snapshot.recovery?.restingHr, bpm.isFinite, bpm > 0 {
+                HeartbeatWave(bpm: bpm, color: .white)
                     .frame(height: 90)
                     .frame(maxHeight: .infinity, alignment: .center)
                     .opacity(0.85)
@@ -91,15 +109,52 @@ struct HealthDetailView: View {
         }
     }
 
-    /// Only the newest read lands, so a slow earlier one can't take the glass back down.
+    /// Only the newest read lands, so a slow earlier one can't take the glass back down. A failed read keeps what is
+    /// on screen; with nothing on screen it says so and offers a retry.
     private func reload() async {
         generation += 1
         let mine = generation
         let writtenAtRead = written
-        guard let loaded = try? await model.historyLoader().load(category, now: Date()), mine == generation else { return }
+        let loaded = try? await model.historyLoader().load(category, now: Date())
+        guard mine == generation else { return }
+        guard let loaded else {
+            failed = true
+            return
+        }
+        failed = false
         data = loaded
         readWithWritten = writtenAtRead
     }
+
+    /// A one-line card for when there is nothing to chart, with an optional action under it.
+    private func note(_ text: Text, @ViewBuilder action: () -> some View = { EmptyView() }) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            text.font(.subheadline).foregroundStyle(.secondary)
+            action()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(HealthSurface.card, in: .rect(cornerRadius: 18))
+    }
+
+    /// Body always has its glass, so it is never empty.
+    static func isEmpty(_ c: HealthCategory, _ d: HealthHistoryData) -> Bool {
+        switch c {
+        case .sleep: (d.lastNight?.stages.isEmpty ?? true) && d.nights.isEmpty
+        case .activity: d.hourlySteps.isEmpty && d.dailySteps.isEmpty && d.workouts.isEmpty
+        case .recovery: d.hrv.isEmpty && d.restingHr.isEmpty && d.respRate.isEmpty
+        case .body: false
+        }
+    }
+
+    static let emptyText = LocalizedStringResource(
+        "ios:health.detail.empty", defaultValue: "Nothing recorded here yet.",
+        comment: "Detail page: the category has no data in Apple Health.")
+    static let failedText = LocalizedStringResource(
+        "ios:health.detail.loadFailed", defaultValue: "Couldn't read your health data. Try again.",
+        comment: "Detail page: reading the history from Apple Health failed.")
+    static let retryText = LocalizedStringResource(
+        "ios:health.detail.retry", defaultValue: "Try again", comment: "Detail page: retry reading the history.")
 
     private var weekJSON: String? {
         guard let data,

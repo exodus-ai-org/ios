@@ -13,17 +13,17 @@ struct RecoveryDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             if !data.hrv.isEmpty {
-                chart("ios:health.recovery.hrv", data.hrv, unit: "ms", baseline: snapshot?.hrvBaselineMs, color: OdyPalette.hex(0xF0567A))
+                chart("ios:health.recovery.hrv", data.hrv, value: Self.ms, baseline: snapshot?.hrvBaselineMs, color: OdyPalette.hex(0xF0567A))
             }
             if !data.restingHr.isEmpty {
                 chart(
-                    "ios:health.recovery.restingHr", data.restingHr, unit: "bpm", baseline: snapshot?.restingHrBaseline,
+                    "ios:health.recovery.restingHr", data.restingHr, value: Self.bpm, baseline: snapshot?.restingHrBaseline,
                     color: OdyPalette.hex(0xE5392E))
             }
             if let resp = snapshot?.respRate ?? data.respRate.last?.value {
                 DetailSection("ios:health.recovery.respRate") {
                     HStack(alignment: .center, spacing: 12) {
-                        Text(verbatim: resp.formatted(.number.precision(.fractionLength(1))) + " /min")
+                        Text(verbatim: Self.perMinute(resp))
                             .font(.title2.weight(.heavy).monospacedDigit())
                         if data.respRate.count > 1 {
                             Chart(data.respRate) { p in
@@ -47,12 +47,12 @@ struct RecoveryDetail: View {
         }
     }
 
-    private func chart(_ title: LocalizedStringResource, _ points: [DayPoint], unit: String, baseline: Double?, color: Color)
+    private func chart(_ title: LocalizedStringResource, _ points: [DayPoint], value: (Double) -> String, baseline: Double?, color: Color)
         -> some View
     {
         DetailSection(title) {
             if let last = points.last {
-                Text(verbatim: "\(Int(last.value.rounded())) \(unit)")
+                Text(verbatim: value(last.value))
                     .font(.title2.weight(.heavy).monospacedDigit())
             }
             Chart {
@@ -87,5 +87,21 @@ struct RecoveryDetail: View {
             .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) }
             .frame(height: chartHeight)
         }
+    }
+
+    static func ms(_ v: Double) -> String {
+        Measurement(value: v.rounded(), unit: UnitDuration.milliseconds)
+            .formatted(.measurement(width: .abbreviated, usage: .asProvided, numberFormatStyle: .number.precision(.fractionLength(0))))
+    }
+
+    static func bpm(_ v: Double) -> String {
+        let n = Int(v.rounded())
+        return String(localized: "ios:health.value.bpm", defaultValue: "\(n) bpm", comment: "Card value: resting heart rate.")
+    }
+
+    static func perMinute(_ v: Double) -> String {
+        let n = v.formatted(.number.precision(.fractionLength(1)))
+        return String(
+            localized: "ios:health.unit.breathsPerMin", defaultValue: "\(n) /min", comment: "Breaths per minute; the number is pre-formatted.")
     }
 }

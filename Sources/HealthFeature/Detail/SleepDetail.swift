@@ -33,12 +33,14 @@ struct SleepDetail: View {
     private func hypnogram(_ night: SleepNight) -> some View {
         let lit = selectedStage
         return VStack(alignment: .leading, spacing: 10) {
-            Chart(night.stages, id: \.start) { s in
-                RectangleMark(
-                    xStart: .value("start", s.start), xEnd: .value("end", s.end),
-                    y: .value("stage", Self.label(s.stage)), height: .ratio(0.7))
-                .foregroundStyle(Self.color(s.stage).opacity(lit == nil || lit == s ? 1 : 0.3))
-                .clipShape(.rect(cornerRadius: 3))
+            Chart {
+                ForEach(night.stages, id: \.start) { s in
+                    RectangleMark(
+                        xStart: .value("start", s.start), xEnd: .value("end", s.end),
+                        y: .value("stage", Self.label(s.stage)), height: .ratio(0.7))
+                    .foregroundStyle(Self.color(s.stage).opacity(lit == nil || lit == s ? 1 : 0.3))
+                    .clipShape(.rect(cornerRadius: 3))
+                }
                 if let selected {
                     RuleMark(x: .value("now", selected))
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
@@ -110,7 +112,7 @@ struct SleepDetail: View {
         .chartYAxis {
             AxisMarks(position: .leading) { value in
                 AxisGridLine()
-                AxisValueLabel { if let h = value.as(Double.self) { Text(verbatim: "\(Int(h)) h") } }
+                AxisValueLabel { if let h = value.as(Double.self) { Text(verbatim: Duration.seconds(h * 3600).formatted(.units(allowed: [.hours], width: .narrow))) } }
             }
         }
         .frame(height: monthHeight)

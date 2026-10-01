@@ -19,18 +19,18 @@ struct BodyDetail: View {
         VStack(alignment: .leading, spacing: 16) {
             water
             if !data.weights.isEmpty {
+                let weights = Self.localWeights(data.weights)
                 DetailSection("ios:health.body.weight") {
-                    if let last = data.weights.last {
-                        Text(verbatim: Measurement(value: last.value, unit: UnitMass.kilograms)
-                            .formatted(.measurement(width: .abbreviated, usage: .asProvided, numberFormatStyle: .number.precision(.fractionLength(1)))))
+                    if let last = weights.last {
+                        Text(verbatim: Self.weight(last.value))
                             .font(.title2.weight(.heavy).monospacedDigit())
                     }
-                    Chart(data.weights) { p in
-                        LineMark(x: .value("day", p.day, unit: .day), y: .value("kg", p.value))
+                    Chart(weights) { p in
+                        LineMark(x: .value("day", p.day, unit: .day), y: .value("weight", p.value))
                             .interpolationMethod(.catmullRom)
                             .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
                             .foregroundStyle(Self.teal)
-                        PointMark(x: .value("day", p.day, unit: .day), y: .value("kg", p.value))
+                        PointMark(x: .value("day", p.day, unit: .day), y: .value("weight", p.value))
                             .symbolSize(24)
                             .foregroundStyle(Self.teal)
                     }
@@ -102,6 +102,18 @@ struct BodyDetail: View {
             }
         }
         .frame(height: moodHeight)
+    }
+
+    /// The weight unit people here weigh themselves in (kilograms, pounds, stones), so US users see lb.
+    private static let weightUnit = UnitMass(forLocale: .current, usage: .personWeight)
+
+    static func localWeights(_ kg: [DayPoint]) -> [DayPoint] {
+        kg.map { DayPoint(day: $0.day, value: Measurement(value: $0.value, unit: UnitMass.kilograms).converted(to: weightUnit).value) }
+    }
+
+    static func weight(_ v: Double) -> String {
+        Measurement(value: v, unit: weightUnit)
+            .formatted(.measurement(width: .abbreviated, usage: .asProvided, numberFormatStyle: .number.precision(.fractionLength(1))))
     }
 
     static func valence(_ label: MoodLabel) -> Int {
