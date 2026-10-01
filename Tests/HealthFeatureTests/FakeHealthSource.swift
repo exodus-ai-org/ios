@@ -18,7 +18,7 @@ actor FakeHealthSource: HealthDataSource {
     var moodList: [MoodSample] = []
     var loggedWater: [Double] = []
     var failure: Error?
-    /// Delays the first read of a load, so a test can act while it is in flight.
+    /// Delays the water read of a load (after it has read, so the answer is stale), so a test can act while it is in flight.
     var slowMs = 0
 
     func set(_ change: @Sendable (isolated FakeHealthSource) -> Void) { change(self) }
@@ -28,12 +28,13 @@ actor FakeHealthSource: HealthDataSource {
 
     func sleepSamples(from start: Date, to end: Date) async throws -> [SleepSample] {
         if let failure { throw failure }
-        if slowMs > 0 { try? await Task.sleep(for: .milliseconds(slowMs)) }
         return sleep.filter { $0.end > start && $0.start < end }
     }
 
     func dailySums(_ metric: SumMetric, from start: Date, to end: Date) async throws -> [DayValue] {
-        (sums[metric] ?? []).filter { $0.day >= start && $0.day < end }
+        let answer = (sums[metric] ?? []).filter { $0.day >= start && $0.day < end }
+        if metric == .waterMl, slowMs > 0 { try? await Task.sleep(for: .milliseconds(slowMs)) }
+        return answer
     }
 
     func hourlySums(_ metric: SumMetric, on day: Date) async throws -> [DayValue] { hourly[metric] ?? [] }
