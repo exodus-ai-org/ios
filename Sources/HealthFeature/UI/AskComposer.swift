@@ -18,6 +18,8 @@ struct AskComposer: View {
     @State private var text = ""
     @State private var attach: Bool
     @FocusState private var focused: Bool
+    /// The send button as the system draws it: a bordered circle is padded past its 30 pt label.
+    @State private var buttonHeight: CGFloat = 0
 
     init(
         suggestions: [LocalizedStringResource], canAttach: Bool, attachedLabel: LocalizedStringResource,
@@ -66,9 +68,9 @@ struct AskComposer: View {
                     .focused($focused)
                     .submitLabel(.send)
                     .onSubmit { send(text) }
-                    // As tall as the send button, so one line (and the placeholder) centres on it; more lines grow
-                    // the field upward while the button stays at the bottom.
-                    .frame(minHeight: 30, alignment: .center)
+                    // As tall as the send button as drawn, so one line (and the placeholder) centres on it; more
+                    // lines grow the field upward while the button stays at the bottom.
+                    .frame(minHeight: max(buttonHeight, 30), alignment: .center)
                 Button { send(text) } label: {
                     Image(systemName: "arrow.up").font(.body.weight(.bold)).frame(width: 30, height: 30)
                 }
@@ -77,6 +79,7 @@ struct AskComposer: View {
                 .tint(OdyPalette.marigold)
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityLabel(Text("ios:health.ask.send"))
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { buttonHeight = $0 }
             }
             .padding(.leading, 16)
             .padding(.trailing, 8)
