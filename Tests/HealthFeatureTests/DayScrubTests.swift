@@ -13,22 +13,31 @@ struct DayScrubTests: Sendable {
         #expect(scrub.now == 15)
     }
 
-    @Test func dragRightGoesBackInTime() {
-        #expect(scrub.hour(from: 15, translation: 300, width: 300) == 5)
-        #expect(scrub.hour(from: 5, translation: -150, width: 300) == 10)
+    /// The knob runs earliest-left to now-right, and follows the finger.
+    @Test func dragLeftGoesBackInTimeAndRightComesForward() {
+        #expect(scrub.hour(from: 15, translation: -300, width: 300) == 5)
+        #expect(scrub.hour(from: 5, translation: 150, width: 300) == 10)
     }
 
     @Test func pastTheEndsItResists() {
-        let past = scrub.hour(from: 15, translation: -300, width: 300)  // 10 h into the future
+        let past = scrub.hour(from: 15, translation: 300, width: 300)  // 10 h into the future
         #expect(past > 15 && past < 18)  // rubber(10, 4) ≈ 2.3 h
-        let before = scrub.hour(from: -6, translation: 300, width: 300)
+        let before = scrub.hour(from: -6, translation: -300, width: 300)
         #expect(before < -6 && before > -9)
     }
 
+    @Test func throwSpeedHasTheDragsSign() {
+        #expect(DayScrub.hoursPerSecond(velocity: 300, width: 300) == 10)
+        #expect(DayScrub.hoursPerSecond(velocity: -150, width: 300) == -5)
+        #expect(DayScrub.hoursPerSecond(velocity: 300, width: 0) == 0)
+    }
+
     @Test func releaseProjectsAndClamps() {
-        let flung = scrub.release(at: 10, velocity: 3000, width: 300, reduceMotion: false)  // fast, rightward
+        let flung = scrub.release(at: 10, velocity: -3000, width: 300, reduceMotion: false)  // fast, leftward
         #expect(flung < 10)
         #expect(flung >= -6)
+        let forward = scrub.release(at: 10, velocity: 3000, width: 300, reduceMotion: false)  // fast, rightward
+        #expect(forward > 10 && forward <= 15)
         #expect(scrub.release(at: 16, velocity: 0, width: 300, reduceMotion: false) == 15)
     }
 
@@ -39,7 +48,7 @@ struct DayScrubTests: Sendable {
     }
 
     @Test func reduceMotionHasNoMomentum() {
-        #expect(scrub.release(at: 10, velocity: 3000, width: 300, reduceMotion: true) == 10)
+        #expect(scrub.release(at: 10, velocity: -3000, width: 300, reduceMotion: true) == 10)
     }
 
     @Test func earlyMorningRangeIsValid() {

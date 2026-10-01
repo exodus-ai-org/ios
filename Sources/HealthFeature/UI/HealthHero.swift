@@ -8,7 +8,7 @@ enum HealthCoordinateSpace {
     static let home = "healthHome"
 }
 
-/// The home's head: the sky at an hour, and Ody living through it. Drag right to go back through last night — the
+/// The home's head: the sky at an hour, and Ody living through it. Drag left to go back through last night — the
 /// sky darkens, stars come out, Ody lies on its pillow and sinks deeper in deep sleep; let go and it carries on, or
 /// tap "Back to now". Laid out in the prototype's 300 × 236 space and scaled by its width; the top `HeroScene.lift`
 /// of that sky runs up under the toolbar, so the title sits just below it.
@@ -142,7 +142,7 @@ struct HealthHero: View {
         if reduceMotion {
             animation = .easeInOut(duration: 0.2)
         } else {
-            let hoursPerSecond = width > 0 ? -Double(velocity / width) * DayScrub.hoursPerWidth : 0
+            let hoursPerSecond = DayScrub.hoursPerSecond(velocity: velocity, width: width)
             let distance = target - current
             // A fraction of the distance left per second; capped well below the spring's own stiffness, so a hard
             // throw into either end of the range lands without overshooting it.

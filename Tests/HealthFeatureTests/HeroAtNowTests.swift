@@ -9,7 +9,7 @@ struct HeroAtNowTests {
     let scrub = DayScrub(now: TestClock.now, calendar: TestClock.calendar)  // now = 15.0
 
     @Test func aNudgePastNowIsStillNow() {
-        let past = scrub.hour(from: 15, translation: -20, width: 300)  // leftward: rubber-bands into the future
+        let past = scrub.hour(from: 15, translation: 20, width: 300)  // rightward: rubber-bands into the future
         #expect(past > 15.05)
         #expect(HealthHero.isAtNow(hour: past, scrub: scrub))
         #expect(HealthHero.isAtNow(hour: 18, scrub: scrub))

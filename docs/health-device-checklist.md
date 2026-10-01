@@ -4,10 +4,10 @@ Things the simulator cannot show. Run on a real iPhone (iOS 27) with an Apple Wa
 
 - [ ] Poke Ody: soft haptic, squash and spring back; a tired Ody yawns.
 - [ ] A tired Ody's eyes are half-lidded.
-- [ ] Scrub the hero right: sky darkens, Ody lies down and sinks in deep sleep; a selection tick at each stage edge; fling carries on and settles; "Back to now" springs home with a tick.
+- [ ] Scrub the hero left: the knob and the time follow the finger (left = earlier, right = later); sky darkens, Ody lies down and sinks in deep sleep; a selection tick at each stage edge; fling carries on and settles; "Back to now" springs home with a tick.
 - [ ] A tap on "Back to now" works.
 - [ ] Scrubbing the hypnogram horizontally does not fight vertical scrolling of the page.
-- [ ] A right swipe that starts on the hero scrubs; one that starts on the cards opens the drawer.
+- [ ] A right swipe that starts anywhere on the hero (Ody's scene or the stage track) scrubs — rubber-banding at now — and never moves the drawer; one that starts on the cards opens the drawer.
 - [ ] A swipe from the left edge below the hero opens the drawer with no lag.
 - [ ] Pull to refresh: Ody stretches with growing resistance; release writes the note again; success haptic when done.
 - [ ] Remember: card flies into the bindle, bindle bounces, success haptic; Settings → Memory shows the entry.
