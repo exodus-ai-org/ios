@@ -1,4 +1,5 @@
 import ChatFeature
+import HealthFeature
 import NetworkingKit
 import PhilharmonicFeature
 import SettingsFeature
@@ -97,8 +98,7 @@ struct AppShell: View {
         }
         // The workspace actually changing, once (apple-design §13): `workspace` only changes when
         // a row not already selected is tapped, so re-tapping the active row fires nothing. And
-        // today only `.chat` is selectable (`AppWorkspace.isAvailable`), so this fires for nobody
-        // until Philharmonic ships — verified in a disposable export with that gate lifted.
+        // today .chat and .health are selectable (AppWorkspace.isAvailable).
         .sensoryFeedback(.selection, trigger: workspace)
         // The desktop may have picked another tone meanwhile.
         .task { await toneModel?.refresh(apiClient: apiClient) }
@@ -123,6 +123,8 @@ struct AppShell: View {
                     settingsOpensMemory = true
                     showSettings = true
                 })
+        case .health:
+            HealthRootView(apiClient: apiClient)
         case .philharmonic:
             PhilharmonicPlaceholderView()
         }

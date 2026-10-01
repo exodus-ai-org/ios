@@ -54,14 +54,24 @@ let project = Project(
                     "NSLocationWhenInUseUsageDescription":
                         "Exodus uses your location to show your position on the itinerary map and center the map when you tap the location button.",
                     "NSPhotoLibraryAddUsageDescription":
-                        "Exodus saves the images you choose to your photo library."
+                        "Exodus saves the images you choose to your photo library.",
+                    "NSHealthShareUsageDescription":
+                        "Exodus reads your sleep, activity, heart and body data to write your daily health report.",
+                    "NSHealthUpdateUsageDescription":
+                        "Exodus saves the water you log to Apple Health."
                 ]
             ),
             buildableFolders: ["Sources/App", "Resources/App"],
+            entitlements: .dictionary([
+                "com.apple.developer.healthkit": .boolean(true),
+                "com.apple.developer.healthkit.access": .array([])
+            ]),
             dependencies: [
                 .target(name: "ChatFeature"),
                 .target(name: "SettingsFeature"),
                 .target(name: "PhilharmonicFeature"),
+                .target(name: "HealthFeature"),
+                .target(name: "OdyKit"),
                 .target(name: "NetworkingKit"),
                 .target(name: "MarkdownKit")
             ],
@@ -143,6 +153,34 @@ let project = Project(
                 .target(name: "SettingsFeature"), .target(name: "NetworkingKit"), .target(name: "Models")
             ]
         ),
-        moduleTarget(name: "PhilharmonicFeature", dependencies: [.target(name: "Models")])
+        moduleTarget(name: "PhilharmonicFeature", dependencies: [.target(name: "Models")]),
+        moduleTarget(name: "OdyKit"),
+        .target(
+            name: "OdyKitTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "\(bundleIdRoot).OdyKitTests",
+            deploymentTargets: deploymentTargets,
+            buildableFolders: ["Tests/OdyKitTests"],
+            dependencies: [.target(name: "OdyKit")]
+        ),
+        moduleTarget(
+            name: "HealthFeature",
+            dependencies: [
+                .target(name: "Models"), .target(name: "NetworkingKit"), .target(name: "MarkdownKit"),
+                .target(name: "OdyKit")
+            ]
+        ),
+        .target(
+            name: "HealthFeatureTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "\(bundleIdRoot).HealthFeatureTests",
+            deploymentTargets: deploymentTargets,
+            buildableFolders: ["Tests/HealthFeatureTests"],
+            dependencies: [
+                .target(name: "HealthFeature"), .target(name: "NetworkingKit"), .target(name: "Models")
+            ]
+        )
     ]
 )

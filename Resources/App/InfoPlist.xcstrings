@@ -146,6 +146,136 @@
         }
       }
     },
+    "NSHealthShareUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus liest deine Schlaf-, Aktivitäts-, Herz- und Körperdaten, um deinen täglichen Gesundheitsbericht zu erstellen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus reads your sleep, activity, heart and body data to write your daily health report."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus lee tus datos de sueño, actividad, corazón y cuerpo para redactar tu informe de salud diario."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus lit vos données de sommeil, d'activité, de cœur et de corps pour rédiger votre bilan de santé quotidien."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus legge i tuoi dati su sonno, attività, cuore e corpo per scrivere il tuo resoconto di salute giornaliero."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus は、毎日のヘルスレポートを作成するために、睡眠、アクティビティ、心臓、身体のデータを読み取ります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus는 일일 건강 리포트를 작성하기 위해 수면, 활동, 심장 및 신체 데이터를 읽습니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Exodus lê seus dados de sono, atividade, coração e corpo para escrever seu relatório de saúde diário."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 會讀取你的睡眠、活動、心臟與身體資料，用嚟撰寫你嘅每日健康報告。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 會讀取你的睡眠、活動、心臟與身體資料，用來撰寫你的每日健康報告。"
+          }
+        }
+      }
+    },
+    "NSHealthUpdateUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus speichert die Wassermenge, die du erfasst, in Apple Health."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus saves the water you log to Apple Health."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus guarda en Salud el agua que registras."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus enregistre dans Santé l'eau que vous consignez."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus salva in Salute l'acqua che registri."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus は、記録した水分摂取量を「ヘルスケア」に保存します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus는 기록한 물 섭취량을 건강 앱에 저장합니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Exodus salva no Saúde a água que você registra."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 會將你記錄嘅飲水量儲存到「健康」App。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exodus 會將你記錄的飲水量儲存到「健康」App。"
+          }
+        }
+      }
+    },
     "NSLocalNetworkUsageDescription" : {
       "comment" : "Local-network permission prompt. Exodus is the app's name and stays as is.",
       "extractionState" : "manual",
