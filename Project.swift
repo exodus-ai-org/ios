@@ -79,6 +79,7 @@ let project = Project(
                 .target(name: "OdyKit"),
                 .target(name: "WidgetKitShared"),
                 .target(name: "WidgetUI"),
+                .target(name: "ExodusWidgets"),
                 .target(name: "NetworkingKit"),
                 .target(name: "MarkdownKit")
             ],
@@ -88,6 +89,27 @@ let project = Project(
                     "CODE_SIGN_STYLE": "Automatic"
                 ]
             )
+        ),
+        // The widgets and the Control Center control. Links only the widget modules — never NetworkingKit or the
+        // keychain; it reads the App Group snapshot the app writes. The App's string catalog is a member too.
+        .target(
+            name: "ExodusWidgets",
+            destinations: .iOS,
+            product: .appExtension,
+            productName: "ExodusWidgets",
+            bundleId: "\(bundleIdRoot).widgets",
+            deploymentTargets: deploymentTargets,
+            infoPlist: .file(path: "Widgets/Info.plist"),
+            resources: ["Resources/App/Localizable.xcstrings"],
+            buildableFolders: ["Widgets/Sources"],
+            entitlements: .dictionary([
+                "com.apple.security.application-groups": .array([.string("group.app.yancey.exodus")])
+            ]),
+            dependencies: [
+                .target(name: "WidgetKitShared"), .target(name: "WidgetUI"), .target(name: "OdyKit"),
+                .sdk(name: "WidgetKit", type: .framework), .sdk(name: "SwiftUI", type: .framework)
+            ],
+            settings: .settings(base: ["DEVELOPMENT_TEAM": .string(developmentTeam), "CODE_SIGN_STYLE": "Automatic"])
         ),
         .target(
             name: "AppTests",

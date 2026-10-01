@@ -331,7 +331,7 @@ def vendor_errors(strings):
 
 def audit_sources(strings, excluded):
     errors, used = [], set()
-    files = sorted((ROOT / "Sources").rglob("*.swift")) + [ROOT / "Project.swift"]
+    files = sorted((ROOT / "Sources").rglob("*.swift")) + sorted((ROOT / "Widgets").rglob("*.swift")) + [ROOT / "Project.swift"]
     for path in files:
         rel = path.relative_to(ROOT).as_posix()
         if rel in excluded:
