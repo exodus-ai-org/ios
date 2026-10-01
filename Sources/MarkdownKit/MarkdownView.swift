@@ -66,7 +66,8 @@ struct MarkdownRenderContext: Equatable {
 }
 
 /// Consecutive blocks with the desktop's rhythm between them. Each block view is `Equatable`, so a
-/// streaming frame re-evaluates only the block(s) whose value changed.
+/// streaming frame re-evaluates only the block(s) whose value changed — and a run of settled text, only when a
+/// block joins it.
 struct MarkdownBlockStack: View {
     let blocks: [MarkdownBlock]
     let citations: [Int: MarkdownCitation]
@@ -77,15 +78,28 @@ struct MarkdownBlockStack: View {
     @ScaledMetric(relativeTo: .body) private var em: CGFloat = MarkdownFontSpec.bodySize
 
     var body: some View {
+        // Settled text blocks side by side share one text view, so a selection runs across them; not inside a
+        // list, whose items stand beside their markers, nor where every block is drawn as still being written.
+        let segments =
+            context.inList || context.isArriving
+            ? blocks.map(MarkdownTextRuns.Segment.block) : MarkdownTextRuns.segments(blocks, arriving: arriving)
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
-                MarkdownBlockView(block: block, citations: citations, context: context(for: block))
-                    .equatable()
-                    .padding(
-                        .top,
-                        em * MarkdownLayoutRules.gap(
-                            after: index > 0 ? blocks[index - 1].kind : nil, before: block.kind, inList: context.inList)
-                    )
+            ForEach(Array(segments.enumerated()), id: \.element.id) { index, segment in
+                Group {
+                    switch segment {
+                    case .run(let blocks):
+                        MarkdownRunView(blocks: blocks, citations: citations).equatable()
+                    case .block(let block):
+                        MarkdownBlockView(block: block, citations: citations, context: context(for: block))
+                            .equatable()
+                    }
+                }
+                .padding(
+                    .top,
+                    em * MarkdownLayoutRules.gap(
+                        after: index > 0 ? segments[index - 1].lastKind : nil, before: segment.firstKind,
+                        inList: context.inList)
+                )
             }
         }
     }

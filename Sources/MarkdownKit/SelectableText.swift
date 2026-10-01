@@ -4,11 +4,68 @@ import UIKit
 /// The text view a settled text stands in. A long press selects a word, the handles extend the range, and the
 /// system's menu copies it — what `Text` with a custom renderer cannot offer.
 final class MarkdownTextView: UITextView {
+    /// The rules of the quotes in the text, each drawn beside the lines it stands for.
+    var quoteRules: [MarkdownQuoteRule] = [] {
+        didSet { if quoteRules != oldValue { setNeedsLayout() } }
+    }
+    private var ruleViews: [UIView] = []
+
+    /// Set by TextKit 2, as a text view made with no container is. Not `init(usingTextLayoutManager:)`: that is a
+    /// class factory, and leaves the properties of a subclass unmade.
+    init() {
+        super.init(frame: .zero, textContainer: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("made in code")
+    }
+
     /// A selection is copied as its words: a chip among them is a picture, and is left out.
     override func copy(_ sender: Any?) {
         let range = selectedRange
         guard range.length > 0 else { return }
         UIPasteboard.general.string = MarkdownAttributedText.copied(from: attributedText, in: range)
+    }
+
+    /// Select All takes every block the text view holds, as long as there is more to take.
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(selectAll(_:)) { return selectedRange.length < attributedText.length }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layOutQuoteRules()
+    }
+
+    override func tintColorDidChange() {
+        super.tintColorDidChange()
+        for view in ruleViews { view.backgroundColor = tintColor.withAlphaComponent(0.55) }
+    }
+
+    private func layOutQuoteRules() {
+        while ruleViews.count > quoteRules.count { ruleViews.removeLast().removeFromSuperview() }
+        while ruleViews.count < quoteRules.count {
+            let view = UIView()
+            view.isUserInteractionEnabled = false
+            view.backgroundColor = tintColor.withAlphaComponent(0.55)
+            view.layer.cornerRadius = MarkdownQuoteRule.width / 2
+            insertSubview(view, at: 0)
+            ruleViews.append(view)
+        }
+        guard !quoteRules.isEmpty, let manager = textLayoutManager else { return }
+        let lines = MarkdownTextMeasure.lines(in: manager)
+        for (rule, view) in zip(quoteRules, ruleViews) {
+            let spanned = lines.filter { NSIntersectionRange($0.range, rule.range).length > 0 }
+            guard let top = spanned.first?.top, let bottom = spanned.last?.bottom else {
+                view.frame = .zero
+                continue
+            }
+            view.frame = CGRect(
+                x: rule.x, y: top + MarkdownQuoteRule.inset, width: MarkdownQuoteRule.width,
+                height: max(bottom - top - 2 * MarkdownQuoteRule.inset, 0))
+        }
     }
 }
 
@@ -16,6 +73,11 @@ final class MarkdownTextView: UITextView {
 /// is placed here, raised by `lift`.
 final class MarkdownTextHolder: UIView {
     let textView: MarkdownTextView
+    /// The text as it is set at a width, where that differs by width (`MarkdownRunSnap`).
+    var textAtWidth: ((CGFloat) -> NSAttributedString)? {
+        didSet { setNeedsLayout() }
+    }
+    private var setAtWidth: (width: CGFloat, text: NSAttributedString)?
     var lift: CGFloat = 0 {
         didSet { if lift != oldValue { setNeedsLayout() } }
     }
@@ -36,6 +98,16 @@ final class MarkdownTextHolder: UIView {
         super.layoutSubviews()
         let frame = CGRect(x: 0, y: -lift, width: bounds.width, height: bounds.height + lift)
         if textView.frame != frame { textView.frame = frame }
+        if let textAtWidth, bounds.width > 0 {
+            let text = textAtWidth(bounds.width)
+            if setAtWidth?.width != bounds.width || setAtWidth?.text !== text {
+                setAtWidth = (bounds.width, text)
+                textView.attributedText = text
+                textView.setNeedsLayout()
+            }
+        } else {
+            setAtWidth = nil
+        }
     }
 
     /// The text reaches a pixel above the holder where it is raised: a touch there is the text's.
@@ -125,6 +197,44 @@ enum MarkdownTextMeasure {
         return MarkdownTextMeasurement(size: size, firstBaseline: first, lastBaseline: last)
     }
 
+    /// Where each line of a laid out text stands: its characters, the top and bottom of its letters, and where it
+    /// starts.
+    struct Line: Equatable {
+        var range: NSRange
+        var top: CGFloat
+        var bottom: CGFloat
+        var baseline: CGFloat
+        var x: CGFloat
+    }
+
+    static func lines(in manager: NSTextLayoutManager) -> [Line] {
+        guard let content = manager.textContentManager else { return [] }
+        let start = manager.documentRange.location
+        var lines: [Line] = []
+        manager.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
+            let frame = fragment.layoutFragmentFrame
+            let offset = content.offset(from: start, to: fragment.rangeInElement.location)
+            for line in fragment.textLineFragments {
+                let bounds = line.typographicBounds
+                lines.append(
+                    Line(
+                        range: NSRange(location: offset + line.characterRange.location, length: line.characterRange.length),
+                        top: frame.minY + bounds.minY, bottom: frame.minY + bounds.maxY,
+                        baseline: frame.minY + bounds.minY + line.glyphOrigin.y, x: frame.minX + bounds.minX))
+            }
+            return true
+        }
+        return lines
+    }
+
+    /// `lines(in:)` of a text set at `width`, without a text view.
+    static func lines(of text: NSAttributedString, width: CGFloat) -> [Line] {
+        storage.attributedString = text
+        defer { storage.attributedString = nil }
+        container.size = CGSize(width: width, height: 0)
+        return lines(in: manager)
+    }
+
     /// The widest a text is set when it is asked how wide it would be with all the room there is.
     nonisolated static let widest: CGFloat = 100_000
 }
@@ -151,6 +261,12 @@ enum MarkdownTextTap {
 struct SelectableText: UIViewRepresentable {
     let text: NSAttributedString
     var baselines: MarkdownTextBaselines?
+    var quotes: [MarkdownQuoteRule] = []
+    /// As wide as it is offered, not as its widest line: lines set in from the edge (a list's, a quote's) are
+    /// measured without the room before them, and a text view that narrow would break them sooner.
+    var fillsWidth = false
+    /// Its blocks are moved to where they stood one under another, at the width it is laid out at.
+    var snapsBlocks = false
 
     @MainActor
     final class Coordinator: NSObject, UITextViewDelegate {
@@ -158,6 +274,17 @@ struct SelectableText: UIViewRepresentable {
         var openURL: OpenURLAction?
         var askAbout: MarkdownAskAction?
         var measured: [CGFloat: MarkdownTextMeasurement] = [:]
+        var snapped: [CGFloat: NSAttributedString] = [:]
+
+        /// The text as it is set at `width`: as given, or with its blocks snapped.
+        func text(at width: CGFloat, scale: CGFloat, snaps: Bool) -> NSAttributedString? {
+            guard let shown else { return nil }
+            guard snaps else { return shown }
+            if let text = snapped[width] { return text }
+            let text = MarkdownRunSnap.snapped(shown, width: width, scale: scale)
+            snapped[width] = text
+            return text
+        }
 
         func textView(
             _ textView: UITextView, primaryActionFor textItem: UITextItem, defaultAction: UIAction
@@ -200,7 +327,7 @@ struct SelectableText: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> MarkdownTextHolder {
-        let view = MarkdownTextView(usingTextLayoutManager: true)
+        let view = MarkdownTextView()
         view.isEditable = false
         view.isSelectable = true
         view.isScrollEnabled = false
@@ -223,10 +350,21 @@ struct SelectableText: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.openURL = context.environment.openURL
         coordinator.askAbout = context.environment.markdownAskAbout
+        holder.textView.quoteRules = quotes
         if let shown = coordinator.shown, shown === text || shown.isEqual(to: text) { return }
         coordinator.shown = text
         coordinator.measured.removeAll()
-        holder.textView.attributedText = text
+        coordinator.snapped.removeAll()
+        if snapsBlocks {
+            let scale = context.environment.displayScale
+            holder.textAtWidth = { [weak coordinator] width in
+                coordinator?.text(at: width, scale: scale, snaps: true) ?? text
+            }
+        } else {
+            holder.textAtWidth = nil
+            holder.textView.attributedText = text
+            holder.textView.setNeedsLayout()
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView holder: MarkdownTextHolder, context: Context) -> CGSize? {
@@ -238,7 +376,8 @@ struct SelectableText: UIViewRepresentable {
 
         let scale = context.environment.displayScale
         if coordinator.measured[width] == nil {
-            coordinator.measured[width] = MarkdownTextMeasure.measure(text, width: width)
+            let set = coordinator.text(at: width, scale: scale, snaps: snapsBlocks) ?? text
+            coordinator.measured[width] = MarkdownTextMeasure.measure(set, width: width)
         }
         guard let measured = coordinator.measured[width] else { return .zero }
         let reported = measured.reported(scale: scale, within: width)
@@ -247,6 +386,7 @@ struct SelectableText: UIViewRepresentable {
             baselines.last = reported.lastBaseline
         }
         holder.lift = measured.lift(scale: scale)
+        if fillsWidth, proposed.isFinite { return CGSize(width: width, height: reported.size.height) }
         return reported.size
     }
 }

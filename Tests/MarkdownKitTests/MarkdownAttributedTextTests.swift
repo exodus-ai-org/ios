@@ -204,7 +204,7 @@ struct MarkdownAttributedTextTests {
         renderer.scale = 3
         let drawn = try #require(renderer.uiImage)
 
-        let view = MarkdownTextView(usingTextLayoutManager: true)
+        let view = MarkdownTextView()
         view.isScrollEnabled = false
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
@@ -251,7 +251,7 @@ struct MarkdownAttributedTextTests {
         renderer.scale = 3
         let drawn = try #require(renderer.uiImage)
 
-        let view = MarkdownTextView(usingTextLayoutManager: true)
+        let view = MarkdownTextView()
         view.isScrollEnabled = false
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
@@ -293,7 +293,7 @@ struct MarkdownAttributedTextTests {
     )
     func measured(sample: String) throws {
         let text = built(sample)
-        let view = MarkdownTextView(usingTextLayoutManager: true)
+        let view = MarkdownTextView()
         view.isScrollEnabled = false
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0

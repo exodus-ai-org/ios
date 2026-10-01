@@ -196,7 +196,8 @@ enum MarkdownAttributedText {
     }
 
     /// What Copy takes of `range`: the words, without the chips among them. Where a chip stood between two words
-    /// that white space kept apart, one space does; a mark that followed a chip follows the word before it.
+    /// that white space kept apart, one space does; a mark that followed a chip follows the word before it. A list
+    /// item's marker is copied as itself and a space.
     static func copied(from text: NSAttributedString, in range: NSRange) -> String {
         let whole = NSRange(location: 0, length: text.length)
         let range = NSIntersectionRange(range, whole)
@@ -217,6 +218,12 @@ enum MarkdownAttributedText {
                 return
             }
             if attributes[.markdownChipJoint] != nil { return }
+            if let marker = attributes[.markdownListMarker] as? String {
+                copied += marker + " "
+                owesSpace = false
+                afterChip = false
+                return
+            }
             let words = (text.string as NSString).substring(with: piece)
                 .replacingOccurrences(of: "\u{FFFC}", with: "")
                 .replacingOccurrences(of: lineBreak, with: "\n")
