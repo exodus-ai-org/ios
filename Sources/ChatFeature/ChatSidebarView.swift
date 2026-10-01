@@ -65,7 +65,7 @@ private struct SidebarRow: ViewModifier {
 /// the title and the search button are native; the bottom bar is a `safeAreaBar` of its own, because a
 /// bottom-bar toolbar item cannot show a labelled button. Rows have no swipe actions (a left swipe
 /// closes the drawer); a chat is deleted from its long-press menu.
-/// What "Copy Conversation ID" puts on the pasteboard: the id the computer knows the conversation by, and nothing
+/// What "Copy Chat ID" puts on the pasteboard: the id the computer knows the conversation by, and nothing
 /// else. It is pasted into another chat, for the model to look that conversation up.
 enum ConversationID {
     static func copyText(for chat: ChatSummary) -> String {

@@ -19959,7 +19959,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Copy Conversation ID"
+            "value" : "Copy Chat ID"
           }
         },
         "es" : {
@@ -19971,7 +19971,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Copier l’ID de la conversation"
+            "value" : "Copier l’ID du chat"
           }
         },
         "it" : {
