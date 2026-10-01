@@ -68,4 +68,44 @@ struct SleepAnalyzerTests {
         let awakeOnly = [s(t(1, 2, 0), t(1, 3, 0), .awake)]
         #expect(SleepAnalyzer.night(from: awakeOnly, endingOn: TestClock.today, calendar: cal) == nil)
     }
+
+    @Test func windowFollowsTheWallClockAcrossDST() {
+        var ny = Calendar(identifier: .gregorian)
+        ny.timeZone = TimeZone(identifier: "America/New_York")!
+        for (y, m, d, before) in [(2026, 3, 8, 7), (2026, 11, 1, 31)] {
+            let day = ny.date(from: DateComponents(year: y, month: m, day: d))!
+            let w = SleepAnalyzer.window(endingOn: day, calendar: ny)
+            let from = ny.dateComponents([.day, .hour, .minute], from: w.start)
+            let to = ny.dateComponents([.day, .hour, .minute], from: w.end)
+            #expect(from.day == before && from.hour == 18 && from.minute == 0)
+            #expect(to.day == d && to.hour == 12 && to.minute == 0)
+        }
+    }
+
+    @Test func overlapsWithinOneSourceCountOnce() throws {
+        let samples = [
+            s(t(30, 23, 0), t(1, 7, 0), .unspecified, "watch"),
+            s(t(1, 1, 0), t(1, 2, 0), .deep, "watch"),
+            s(t(1, 3, 0), t(1, 4, 0), .rem, "watch"),
+        ]
+        let night = try #require(SleepAnalyzer.night(from: samples, endingOn: TestClock.today, calendar: cal))
+        #expect(night.asleepMin == 480)
+        #expect(night.deepMin == 60)
+        #expect(night.remMin == 60)
+        #expect(night.coreMin == 360)
+        #expect(night.stages.count == 5)
+    }
+
+    @Test func asleepBeatsAwakeWhereTheyOverlap() throws {
+        let samples = [s(t(1, 0, 0), t(1, 4, 0), .core), s(t(1, 1, 0), t(1, 2, 0), .awake)]
+        let night = try #require(SleepAnalyzer.night(from: samples, endingOn: TestClock.today, calendar: cal))
+        #expect(night.asleepMin == 240)
+        #expect(night.awakeMin == 0)
+    }
+
+    @Test func aFullTieChoosesTheSourceByName() throws {
+        let samples = [s(t(1, 0, 0), t(1, 2, 0), .core, "b"), s(t(1, 3, 0), t(1, 5, 0), .core, "a")]
+        let night = try #require(SleepAnalyzer.night(from: samples, endingOn: TestClock.today, calendar: cal))
+        #expect(night.stages.allSatisfy { $0.source == "a" })
+    }
 }
