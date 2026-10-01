@@ -102,10 +102,9 @@ Each category card picks its own small Ody from its own data (`noData` when `nil
 **Flow**
 
 1. If memory is enabled for chat, `loadRelevantMemories(question, …)` with a question built from "daily health report" + a one-line snapshot digest; session id `health:<date>`.
-2. One `callLlm` with the active provider/model/key. System prompt: warm, brief, in `locale`; only the given numbers, quoted exactly; no diagnosis; a memory suggestion only for a **lasting pattern**, never a one-day event, never a duplicate of an existing memory.
-3. Validate with the schema; on failure retry once; then `502 SUMMARY_UNAVAILABLE`.
-4. Record token usage with source `health`.
-5. No database writes; logs carry duration and outcome only, never health values.
+2. One `callLlm` with the active provider/model/key. System prompt: warm, brief, in `locale` (one of the app's ten languages); only the given numbers, quoted exactly; no diagnosis; a memory suggestion only for a **lasting pattern**, never a one-day event, never a duplicate of an existing memory.
+3. Validate with the schema; on failure retry once; then `AIError(AI_GENERATION_FAILED)` (HTTP 500).
+4. No database writes (token usage is not recorded: the desktop derives usage from assistant messages and Health writes none); logs carry duration and outcome only, never health values.
 
 **Response**
 
@@ -114,15 +113,15 @@ Each category card picks its own small Ody from its own data (`noData` when `nil
   "headline": "有点没睡饱",
   "summary": "昨晚只睡了 **6 小时 12 分**……",          // markdown, rendered by MarkdownKit
   "categories": { "sleep": "…", "activity": "…", "recovery": "…", "body": null },
-  "memorySuggestion": { "section": "health", "key": "weekday-sleep", "summary": "工作日平均只睡 6 小时左右" } // or null
+  "memorySuggestion": { "section": "profile", "key": "weekday-sleep", "summary": "工作日平均只睡 6 小时左右" } // or null
 }
 ```
 
 | Failure | UI |
 |---|---|
-| No provider / key configured | `noData` Ody, "Set up a model on your computer" |
+| No provider / key configured (`CONFIG_*` / `SETTING_NOT_FOUND`) | `noData` Ody, "Set up a model on your computer" |
 | Desktop unreachable | `offline` Ody; cards still show |
-| `502 SUMMARY_UNAVAILABLE` | "The report couldn't be written" — pull to retry |
+| `AI_GENERATION_FAILED` (500) | "The report couldn't be written" — pull to retry |
 
 **Cache.** Today's report + the snapshot it was written from are cached in Application Support with `isExcludedFromBackup`. Regenerated on the first open of a day, on pull-to-refresh, and when the hero Ody state differs from the cached one.
 
@@ -179,9 +178,9 @@ Only Health uses OdyKit in v1; its public API lets pairing, empty states and Cha
 
 **iOS (Swift Testing), HealthKit behind a fake `HealthDataSource`:** snapshot windows, sleep source dedupe, baselines (< 7 days → `nil`), recovery thresholds at their edges, hero/card Ody-state priority, `HealthContext` compose/split vectors, summary decoding (incl. `null` categories and suggestion), dismissed-suggestion store, cache expiry and `isExcludedFromBackup`.
 
-**Desktop (vitest):** request validation, `null` categories, memory disabled → no memory read, invalid model output → one retry → 502, no DB writes, logs free of health values.
+**Desktop (vitest):** request validation, `null` categories, memory disabled → no memory read, invalid model output → one retry → `AI_GENERATION_FAILED`, no DB writes, logs free of health values.
 
-**Shared vectors:** one JSON vector file each for the snapshot schema and the health block, run by both repos.
+**Shared vectors:** like `QuotedText`, the same example snapshot and summary JSON appear verbatim in both repos' tests (iOS `HealthWireTests`, desktop `health-schema.test.ts`).
 
 **Visual:** `HealthGallery` (like `SettingsGallery` / `MarkdownGallery`) lays out every scene and state with fake data, reachable by launch argument for simulator screenshots. DEBUG builds get a "Write sample health data" action to seed the simulator's Health app.
 
