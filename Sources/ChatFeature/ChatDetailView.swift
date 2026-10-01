@@ -142,9 +142,10 @@ public struct ChatDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.onAppear()
-            if let initialMessage, viewModel.hasLoadedHistory {
-                await viewModel.sendInitial(initialMessage)
+            if let initialMessage {
+                // Handed over now, not when the reply ends: the question is this chat's from here on.
                 onInitialMessageSent?()
+                await viewModel.sendInitial(initialMessage)
             }
         }
         // Apart from `onAppear`, which waits out a turn it re-attaches to.

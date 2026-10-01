@@ -1004,9 +1004,24 @@ struct ChatDetailViewModelTests {
         await vm.sendInitial(text)
         await vm.sendInitial(text)
         #expect(recorder.lines.filter { $0 == "POST /api/v1/chat" }.count == 1)
+        // The request carries the new message alone (`message`) or the whole transcript (`messages`), last.
         let body = try recorder.onlyJSONBody(forPOST: "/api/v1/chat")
-        let message = try #require(body["message"] as? [String: Any])
-        #expect(message["content"] as? String == text)
+        let sent = try #require(body["message"] ?? (body["messages"] as? [Any])?.last)
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: sent), as: UTF8.self)
+        #expect(json.contains("exodus-health"))
+        #expect(json.contains("Why am I tired?"))
+    }
+
+    @Test("a question handed over from Health waits in the composer when the history failed to load")
+    func sendInitialKeepsTheQuestionWhenHistoryFailed() async {
+        let recorder = RequestRecorder()
+        serve(history: "[]", historyStatus: 500, reply: helloReply, recorder: recorder)
+        let vm = Harness().makeViewModel(chatId: "from-health")
+        await vm.loadHistory()
+        #expect(!vm.hasLoadedHistory)
+        await vm.sendInitial("Why am I tired?")
+        #expect(!recorder.lines.contains("POST /api/v1/chat"))
+        #expect(vm.composerText == "Why am I tired?")
     }
 }
 

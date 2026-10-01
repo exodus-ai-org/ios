@@ -25,10 +25,23 @@ struct HealthContextCard: View {
                             .units(allowed: [.hours, .minutes], width: .narrow))))
             }
             if let a = s.activity { out.append(Chip(systemImage: "figure.walk", text: a.steps.formatted())) }
-            if let r = s.recovery, let hr = r.restingHr {
-                out.append(Chip(systemImage: "heart.fill", text: "\(Int(hr)) bpm"))  // l10n:ignore: unit
+            if let hr = s.recovery?.restingHr, hr.isFinite {
+                let n = Int(hr)
+                out.append(
+                    Chip(
+                        systemImage: "heart.fill",
+                        text: String(
+                            localized: "ios:chat.health.bpm", defaultValue: "\(n) bpm",
+                            comment: "Health card in a chat: resting heart rate.")))
             }
-            if let b = s.body { out.append(Chip(systemImage: "drop.fill", text: "×\(b.waterCups)")) }  // l10n:ignore: count
+            if let cups = s.body?.waterCups {
+                out.append(
+                    Chip(
+                        systemImage: "drop.fill",
+                        text: String(
+                            localized: "ios:chat.health.cups", defaultValue: "\(cups) cups",
+                            comment: "Health card in a chat: cups of water today.")))
+            }
             return out.isEmpty ? [Chip(systemImage: "heart.text.square", text: s.date)] : out
         }
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -40,12 +53,13 @@ struct HealthContextCard: View {
     }
 
     var body: some View {
+        let chips = Self.chips(json: json)
         VStack(alignment: .leading, spacing: 6) {
             Button {
                 withAnimation(.smooth) { expanded.toggle() }
             } label: {
                 HStack(spacing: 8) {
-                    ForEach(Self.chips(json: json), id: \.systemImage) { chip in
+                    ForEach(chips, id: \.systemImage) { chip in
                         Label(chip.text, systemImage: chip.systemImage).font(.caption.weight(.semibold))
                     }
                     Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption2)
@@ -53,10 +67,24 @@ struct HealthContextCard: View {
                 .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            // What it is, the numbers, and whether everything that was sent is shown.
+            .accessibilityLabel(Text("ios:chat.health.attached"))
+            .accessibilityValue(accessibilityValue(chips))
+            .accessibilityHint(Text(expanded ? "ios:chat.health.collapse" : "ios:chat.health.expand"))
             if expanded {
                 Text(verbatim: json).font(.caption2.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
-        .accessibilityLabel(Text("ios:chat.health.attached"))
+    }
+
+    private func accessibilityValue(_ chips: [Chip]) -> Text {
+        var parts = chips.map(\.text)
+        if expanded {
+            parts.append(
+                String(
+                    localized: "ios:chat.health.expanded", defaultValue: "showing everything sent",
+                    comment: "Health card in a chat, VoiceOver: the full numbers are shown."))
+        }
+        return Text(verbatim: parts.joined(separator: ", "))  // l10n:ignore: list separator
     }
 }

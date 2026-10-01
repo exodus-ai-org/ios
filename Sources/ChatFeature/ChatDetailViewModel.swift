@@ -253,7 +253,8 @@ public final class ChatDetailViewModel {
             with: .userMessage(id: Self.newMessageId(), text: text, timestampMs: Self.nowMs))
     }
 
-    /// A question handed over from another workspace (Health's ask box): sent as if typed, once per chat screen.
+    /// A question handed over from another workspace (Health's ask box): sent as if typed, once per chat screen. When
+    /// it cannot be sent yet (the history failed to load), it waits in the composer rather than being lost.
     public func sendInitial(_ text: String) async {
         guard !sentInitial else { return }
         sentInitial = true
