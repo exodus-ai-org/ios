@@ -14,6 +14,8 @@ struct AskComposer: View {
     let attachByDefault: Bool
     let attachment: () -> String?
     let onSend: (String) -> Void
+    /// A question handed over from a widget: in the box, focused, waiting to be read and sent.
+    let initialText: String?
 
     @State private var text = ""
     @State private var attach: Bool
@@ -23,7 +25,8 @@ struct AskComposer: View {
 
     init(
         suggestions: [LocalizedStringResource], canAttach: Bool, attachedLabel: LocalizedStringResource,
-        attachByDefault: Bool, attachment: @escaping () -> String?, onSend: @escaping (String) -> Void
+        attachByDefault: Bool, attachment: @escaping () -> String?, initialText: String? = nil,
+        onSend: @escaping (String) -> Void
     ) {
         self.suggestions = suggestions
         self.canAttach = canAttach
@@ -31,6 +34,8 @@ struct AskComposer: View {
         self.attachByDefault = attachByDefault
         self.attachment = attachment
         self.onSend = onSend
+        self.initialText = initialText
+        _text = State(initialValue: initialText ?? "")
         _attach = State(initialValue: attachByDefault)
     }
 
@@ -106,6 +111,14 @@ struct AskComposer: View {
         .animation(.smooth(duration: 0.25), value: text.isEmpty)
         // Consent given or taken back from the menu while the box is empty.
         .onChange(of: attachByDefault) { if text.isEmpty { attach = attachByDefault } }
+        .onAppear { if initialText != nil { focused = true } }
+        // A second link while Health is already on screen: the box is already there, so it takes the new question.
+        .onChange(of: initialText) {
+            if let initialText {
+                text = initialText
+                focused = true
+            }
+        }
     }
 
     private func send(_ question: String) {

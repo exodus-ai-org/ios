@@ -253,6 +253,15 @@ public final class ChatDetailViewModel {
             with: .userMessage(id: Self.newMessageId(), text: text, timestampMs: Self.nowMs))
     }
 
+    @ObservationIgnored private var appliedDraft = false
+
+    /// Text handed over from a widget: put in the composer, once per chat screen, never sent by itself.
+    public func applyDraft(_ text: String) {
+        guard !appliedDraft else { return }
+        appliedDraft = true
+        prefillComposer(text)
+    }
+
     /// A question handed over from another workspace (Health's ask box): sent as if typed, once per chat screen. When
     /// it cannot be sent yet (the history failed to load), it waits in the composer rather than being lost.
     public func sendInitial(_ text: String) async {

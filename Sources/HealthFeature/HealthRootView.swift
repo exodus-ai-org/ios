@@ -9,10 +9,14 @@ public struct HealthRootView: View {
     @State private var model: HealthHomeModel
     let onAsk: (String) -> Void
     let onGlanceChange: (HealthGlance?) -> Void
+    /// A question from a widget for the ask box, and how to say it was put there, so a later visit starts empty.
+    let initialAsk: String?
+    let onInitialAskUsed: () -> Void
     @Environment(\.scenePhase) private var scenePhase
 
     public init(
         apiClient: APIClient, onGlanceChange: @escaping (HealthGlance?) -> Void = { _ in },
+        initialAsk: String? = nil, onInitialAskUsed: @escaping () -> Void = {},
         onAsk: @escaping (String) -> Void = { _ in }
     ) {
         let source = HealthKitSource()
@@ -23,12 +27,16 @@ public struct HealthRootView: View {
                 locale: Bundle.main.preferredLocalizations.first ?? "en"))
         self.onAsk = onAsk
         self.onGlanceChange = onGlanceChange
+        self.initialAsk = initialAsk
+        self.onInitialAskUsed = onInitialAskUsed
     }
 
     init(model: HealthHomeModel, onAsk: @escaping (String) -> Void) {
         _model = State(initialValue: model)
         self.onAsk = onAsk
         self.onGlanceChange = { _ in }
+        self.initialAsk = nil
+        self.onInitialAskUsed = {}
     }
 
     #if DEBUG
@@ -41,7 +49,9 @@ public struct HealthRootView: View {
             if model.needsOnboarding {
                 HealthOnboardingView(model: model)
             } else {
-                HealthHomeView(model: model, onAsk: onAsk)
+                HealthHomeView(model: model, initialAsk: initialAsk, onAsk: onAsk)
+                    // Used once the ask box has it — not during onboarding, where there is no box yet.
+                    .onChange(of: initialAsk, initial: true) { if initialAsk != nil { onInitialAskUsed() } }
             }
         }
         .task { await model.load() }

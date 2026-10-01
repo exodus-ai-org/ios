@@ -3,6 +3,7 @@ import MarkdownKit
 import NetworkingKit
 import SettingsFeature
 import SwiftUI
+import WidgetKitShared
 
 @main
 struct ExodusApp: App {
@@ -13,6 +14,8 @@ struct ExodusApp: App {
     private let reporter: LogReporter
     private let widgetWriter: WidgetSnapshotWriter
     @State private var toneModel = ColorToneModel()
+    /// A widget's link, kept while the unlock or pairing gate is up.
+    @State private var pendingLink = PendingLink()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -81,6 +84,7 @@ struct ExodusApp: App {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { reporter.flushSoon() }
             }
+            .onOpenURL { pendingLink.offer($0) }
         }
     }
 
@@ -94,7 +98,7 @@ struct ExodusApp: App {
         UnlockGate(connection: connection) {
             AppShell(
                 apiClient: apiClient, streamManager: streamManager, serverConfig: serverConfig,
-                widgetWriter: widgetWriter)
+                widgetWriter: widgetWriter, pendingLink: pendingLink)
         }
         .launchSplash()
     }

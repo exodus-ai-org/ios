@@ -13,6 +13,8 @@ struct HealthHomeView: View {
 
     @Bindable var model: HealthHomeModel
     let onAsk: (String) -> Void
+    /// A question from a widget, for the ask box.
+    let initialAsk: String?
     @Namespace private var zoom
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -33,8 +35,9 @@ struct HealthHomeView: View {
     @State private var refreshes = 0
     @State private var now = Date()
 
-    init(model: HealthHomeModel, onAsk: @escaping (String) -> Void) {
+    init(model: HealthHomeModel, initialAsk: String? = nil, onAsk: @escaping (String) -> Void) {
         self.model = model
+        self.initialAsk = initialAsk
         self.onAsk = onAsk
     }
 
@@ -123,7 +126,8 @@ struct HealthHomeView: View {
                     "ios:health.ask.suggestion.sleep", "ios:health.ask.suggestion.energy", "ios:health.ask.suggestion.week",
                 ],
                 canAttach: model.day != nil, attachedLabel: "ios:health.ask.attached",
-                attachByDefault: model.hasConsent, attachment: { snapshotJSON }, onSend: onAsk)
+                attachByDefault: model.hasConsent, attachment: { snapshotJSON },
+                initialText: initialAsk, onSend: onAsk)
         }
         .navigationDestination(for: HealthCategory.self) { c in
             HealthDetailView(category: c, model: model, onAsk: onAsk)

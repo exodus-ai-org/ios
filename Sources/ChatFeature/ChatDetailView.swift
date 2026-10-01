@@ -41,12 +41,16 @@ public struct ChatDetailView: View {
     /// A question handed over from Health, sent once the (new) chat's history is known.
     private let initialMessage: String?
     private let onInitialMessageSent: (() -> Void)?
+    /// A prompt handed over from a widget: put in the composer, never sent by itself.
+    private let initialDraft: String?
 
     public init(
         chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
-        serverConfig: ServerConfigStore, initialMessage: String? = nil, onInitialMessageSent: (() -> Void)? = nil
+        serverConfig: ServerConfigStore, initialMessage: String? = nil, onInitialMessageSent: (() -> Void)? = nil,
+        initialDraft: String? = nil
     ) {
         self.title = title
+        self.initialDraft = initialDraft
         self.initialMessage = initialMessage
         self.onInitialMessageSent = onInitialMessageSent
         makeObjects = {
@@ -149,6 +153,7 @@ public struct ChatDetailView: View {
                 onInitialMessageSent?()
                 await viewModel.sendInitial(initialMessage)
             }
+            if let initialDraft { viewModel.applyDraft(initialDraft) }
         }
         // Apart from `onAppear`, which waits out a turn it re-attaches to.
         .task(id: viewModel.hasLoadedHistory) { await viewModel.loadMemoryUsage() }

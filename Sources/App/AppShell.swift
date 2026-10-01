@@ -4,6 +4,7 @@ import NetworkingKit
 import PhilharmonicFeature
 import SettingsFeature
 import SwiftUI
+import WidgetKitShared
 
 /// The chat on screen. A new chat is a fresh lowercased UUID with no title; the server creates the
 /// chat when the first message is sent.
@@ -20,6 +21,8 @@ struct AppShell: View {
     let streamManager: ChatStreamManager
     let serverConfig: ServerConfigStore
     let widgetWriter: WidgetSnapshotWriter
+    /// A widget's link, waiting for the shell: it is taken as soon as the shell is on screen.
+    let pendingLink: PendingLink
 
     @State private var activeChat = ActiveChat.new()
     @State private var isSidebarOpen = false
@@ -31,6 +34,10 @@ struct AppShell: View {
     @State private var recentsReloadToken = 0
     /// A question from Health waiting for its new chat to open and send it.
     @State private var pendingAsk: (chatId: String, text: String)?
+    /// A widget's prompt for its new chat's composer, never sent by itself.
+    @State private var draft: (chatId: String, text: String)?
+    /// A widget's question for Health's ask box.
+    @State private var healthAsk: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @Environment(ColorToneModel.self) private var toneModel: ColorToneModel?
@@ -109,6 +116,13 @@ struct AppShell: View {
         .onChange(of: scenePhase) {
             if scenePhase == .active { Task { await toneModel?.refresh(apiClient: apiClient) } }
         }
+        // The chat screen is made again when the workspace comes back to it: a prompt already used must not return.
+        .onChange(of: workspace) { if workspace != .chat { draft = nil } }
+        // Initial too: a link that arrived behind the unlock or pairing gate is opened once the shell appears.
+        .onChange(of: pendingLink.link, initial: true) {
+            guard let link = pendingLink.take() else { return }
+            open(link)
+        }
     }
 
     @ViewBuilder
@@ -119,7 +133,8 @@ struct AppShell: View {
                 chatId: activeChat.id, title: activeChat.title, apiClient: apiClient,
                 streamManager: streamManager, serverConfig: serverConfig,
                 initialMessage: pendingAsk?.chatId == activeChat.id ? pendingAsk?.text : nil,
-                onInitialMessageSent: { pendingAsk = nil }
+                onInitialMessageSent: { pendingAsk = nil },
+                initialDraft: draft?.chatId == activeChat.id ? draft?.text : nil
             )
             // A different chat is a different view model.
             .id(activeChat.id)
@@ -129,7 +144,10 @@ struct AppShell: View {
                     settings = .memory
                 })
         case .health:
-            HealthRootView(apiClient: apiClient, onGlanceChange: { widgetWriter.healthChanged($0) }) { text in
+            HealthRootView(
+                apiClient: apiClient, onGlanceChange: { widgetWriter.healthChanged($0) }, initialAsk: healthAsk,
+                onInitialAskUsed: { healthAsk = nil }
+            ) { text in
                 let chat = ActiveChat.new()
                 pendingAsk = (chat.id, text)
                 activeChat = chat
@@ -153,6 +171,26 @@ struct AppShell: View {
         activeChat = .new()
         workspace = .chat
         setSidebar(open: false)
+    }
+
+    /// Where a widget's link leads. Settings closes first: whatever the link opens is under it.
+    private func open(_ link: DeepLink) {
+        settings = nil
+        switch link {
+        case .newChat(let prompt):
+            startNewChat()
+            // An empty draft still focuses the composer: the link is "ask something".
+            draft = (activeChat.id, prompt ?? "")
+        case .chat(let id):
+            // The title comes with the history; an unknown id shows the server's error in the chat, and the drawer
+            // still lists the rest.
+            select(id: id, title: nil)
+        case .health(let ask):
+            pendingAsk = nil
+            healthAsk = ask
+            workspace = .health
+            setSidebar(open: false)
+        }
     }
 
     private func setSidebar(open: Bool) {

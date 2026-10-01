@@ -115,6 +115,6 @@ Each write that changes the snapshot calls `WidgetCenter.shared.reloadAllTimelin
 
 ## 5. Testing and verification
 - **`WidgetKitSharedTests`**: snapshot round trip and tolerant decode; store write/read, missing and corrupt file; every `DeepLink` round trip and rejections (unknown path, long prompt, empty id); timeline entries per hour, ink flip at dusk and dawn, stale health hidden; mood rules.
-- **App tests**: the writer writes/clears on chat list change, report, consent withdrawn, unpair; unchanged snapshot not rewritten; `AppShell` deep-link routing (new, pre-filled not sent, health attached only with `health=1`, unknown id → list, waits behind the gates).
+- **App tests**: the writer writes/clears on chat list change, report, consent withdrawn, unpair; unchanged snapshot not rewritten; `AppShell` deep-link routing (new, pre-filled not sent, `exodus://health?ask=…` opens Health's ask box pre-filled and never sent, unknown id → list, waits behind the gates).
 - **Simulator**: a DEBUG `-WidgetGallery` page rendering every family on fixture snapshots at 07:00, 12:00, 18:30, 23:00, the empty state, dark mode and AX5; screenshots to `.superpowers/widget-*.png`. Then the real widgets on the simulator Home Screen, tapping each link.
 - **Device (user)**: add to Home and Lock Screen; chat or refresh Health and see the widget update; Control Center and Action button open a new chat.
