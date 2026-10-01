@@ -19,7 +19,12 @@ static float ecg(float phase) {
     const float beats = 2.5;
     float phase = position.x / size.x * beats + time * bpm / 60.0;
     float y = size.y * (0.6 - 0.45 * ecg(phase));
-    float d = abs(position.y - y);
+    // Perpendicular distance, not vertical: slope in pixels from one pixel either side, so the R spike keeps the line's weight.
+    float perPixel = beats / size.x;
+    float yBefore = size.y * (0.6 - 0.45 * ecg(phase - perPixel));
+    float yAfter = size.y * (0.6 - 0.45 * ecg(phase + perPixel));
+    float slope = (yAfter - yBefore) * 0.5;
+    float d = abs(position.y - y) / sqrt(1.0 + slope * slope);
     float core = smoothstep(2.0, 0.0, d);
     float glow = exp(-d * d / 60.0) * 0.45;
     // Fade in from the left edge so the trace reads as moving toward the right.
