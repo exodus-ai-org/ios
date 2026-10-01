@@ -72,7 +72,21 @@ struct AskComposer: View {
             .glassEffect(.regular, in: .capsule)
         }
         .padding(.horizontal, 12)
+        .padding(.top, 14)
         .padding(.bottom, 8)
+        // One frosted panel behind the whole stack, fading in at its top edge, so what scrolls under it stays
+        // legible without a hard line.
+        .background {
+            Rectangle()
+                .fill(.bar)
+                .mask {
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 18)
+                        Color.black
+                    }
+                }
+                .ignoresSafeArea(edges: .bottom)
+        }
         .animation(.smooth(duration: 0.25), value: focused)
         .animation(.smooth(duration: 0.25), value: text.isEmpty)
     }

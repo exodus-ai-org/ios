@@ -64,11 +64,13 @@ public struct OdyView: View {
     /// A pull can't flip or collapse Ody; below half height `1 / sqrt` would also blow up.
     static func clampedStretch(_ v: CGFloat) -> CGFloat { max(v, 0.5) }
     static func clampedTiredness(_ v: CGFloat) -> CGFloat { min(max(v, 0), 1) }
+    /// How far the eyes can open: fully tired is half-lidded, which still reads at card size.
+    static func eyeCap(tiredness: CGFloat) -> CGFloat { 1 - 0.5 * clampedTiredness(tiredness) }
 
     public var body: some View {
         let figure = TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            let cap = 1 - 0.38 * Self.clampedTiredness(tiredness)
+            let cap = Self.eyeCap(tiredness: tiredness)
             let open = reduceMotion ? cap : blink.openness(at: t) * cap
             let breath = reduceMotion ? 1 : Breath.scale(at: t)
             let stretch = Self.clampedStretch(stretch)

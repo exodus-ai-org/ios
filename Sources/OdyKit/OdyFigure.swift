@@ -148,11 +148,20 @@ public struct OdyFigure: View, Animatable {
         case .open:
             let open = max(0.06, min(openness, face.opennessCap))
             let dx = face.eyeOffset.dx + look.dx * 22
-            let dy = face.eyeOffset.dy + look.dy * 14 + (1 - open) * 18
+            let dy = face.eyeOffset.dy + look.dy * 14
+            let rx = 31 * face.eyeScale, ry = 60 * face.eyeScale
+            // A lid comes down over the eye rather than the eye squashing: half open is a flat-topped half oval,
+            // which reads sleepy; a squashed oval at half height is a round, wide-awake dot.
+            let lid = 522 + dy - ry + 2 * ry * (1 - open)
             for x in [578.0, 696.0] {
-                context.fill(ellipse(x + dx, 522 + dy, 31 * face.eyeScale, 60 * face.eyeScale * open), with: ink)
+                context.drawLayer { eye in
+                    let top = m(x + dx - rx - 2, lid), bottom = m(x + dx + rx + 2, 522 + dy + ry + 2)
+                    eye.clip(to: Path(CGRect(x: top.x, y: top.y, width: bottom.x - top.x, height: bottom.y - top.y)))
+                    eye.fill(ellipse(x + dx, 522 + dy, rx, ry), with: ink)
+                }
                 if open > 0.4 {
-                    context.fill(ellipse(x + 10 + dx, 494 + dy + (1 - open) * 12, 10 * face.eyeScale, 10 * face.eyeScale), with: .color(.white))
+                    let shine = max(494 + dy, lid + 14 * face.eyeScale)
+                    context.fill(ellipse(x + 10 + dx, shine, 10 * face.eyeScale, 10 * face.eyeScale), with: .color(.white))
                 }
             }
         case .sleepyArcs:

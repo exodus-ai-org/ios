@@ -256,15 +256,21 @@ private struct HeroScene: View, Animatable {
             VStack(alignment: .leading, spacing: 2) {
                 Text(dateLine)
                     .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .opacity(0.6)
                 Text(Self.title(hour: settled, scrub: scrub, mood: mood, pose: pose))
                     .font(.title2.weight(.heavy))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.7)
                     .contentTransition(.opacity)
             }
             .foregroundStyle(nightFactor > 0.5 ? OdyPalette.hex(0xF4EFFF) : OdyPalette.hex(0x3A2A00))
-            .frame(maxWidth: 190 * s, alignment: .leading)
+            // The words share a fixed picture with Ody: the left 60%, above the top of Ody's head. Big type wraps to
+            // two lines, then shrinks to fit the box rather than run into Ody. The full title is the hero's
+            // accessibility value, at any size.
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            .frame(maxWidth: 180 * s, maxHeight: 52 * s, alignment: .topLeading)
             .placed(x: 18 * s, y: 46 * s)
         }
         .frame(width: 300 * s, height: 236 * s, alignment: .topLeading)

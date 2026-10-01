@@ -39,5 +39,8 @@ struct BlinkScheduleTests {
         #expect(OdyView.clampedStretch(1.4) == 1.4)
         #expect(OdyView.clampedTiredness(-1) == 0)
         #expect(OdyView.clampedTiredness(3) == 1)
+        #expect(OdyView.eyeCap(tiredness: 0) == 1)
+        #expect(OdyView.eyeCap(tiredness: 1) == 0.5)
+        #expect(OdyView.eyeCap(tiredness: 4) == 0.5)
     }
 }
