@@ -26,7 +26,7 @@ public enum SVGPath {
                 path.move(to: p)
                 current = p
                 start = p
-                command = relative ? "l" : "L"  // further pairs are lines
+                command = relative ? "l" : "L"  // further pairs are lines  // l10n:ignore: SVG command letter
                 continue
             case "L":
                 guard let p = point() else { return path }

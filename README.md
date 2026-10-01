@@ -48,6 +48,11 @@ matches nothing and still prints `** TEST SUCCEEDED **`, so look for a `Test run
 - `NetworkingKit`: REST and SSE clients, `ChatStreamManager` (keeps a reply streaming while you navigate), the stored server address.
 - `ChatFeature`: chat sidebar (Recents, search) and chat detail (history, streaming send, Stop).
 - `SettingsFeature`: server address and AI-provider settings.
+- `OdyKit`: Ody as a living SwiftUI character (breath, blink, poke, eight faces), the ten state scenes, the day sky,
+  confetti and the heartbeat wave — art from the desktop's `brand/art.mjs`.
+- `HealthFeature`: the Health workspace — reads Apple Health through `HealthDataSource`, builds the day's snapshot,
+  asks the computer for a daily note (`POST /api/v1/health/summary`), and hands questions to Chat with the numbers
+  attached. Design: [spec](docs/superpowers/specs/2026-10-01-health-workspace-design.md).
 - `PhilharmonicFeature`: placeholder for a later phase.
 - `App`: composition root, the drawer shell (`SideDrawer`, `AppShell`, and `DrawerPhysics` — the
   drawer's gesture, spring and rubber-band math, tested on its own) and the workspace list.
