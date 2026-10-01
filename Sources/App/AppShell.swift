@@ -159,6 +159,7 @@ struct AppShell: View {
 
     private func select(id: String, title: String?) {
         pendingAsk = nil
+        healthAsk = nil
         activeChat = ActiveChat(id: id, title: title)
         // A chat picked from the drawer is shown, whichever workspace was open.
         workspace = .chat
@@ -167,6 +168,7 @@ struct AppShell: View {
 
     private func startNewChat() {
         pendingAsk = nil
+        healthAsk = nil
         activeChat = .new()
         workspace = .chat
         setSidebar(open: false)
@@ -181,9 +183,9 @@ struct AppShell: View {
             // An empty draft still focuses the composer: the link is "ask something".
             draft = (activeChat.id, prompt ?? "")
         case .chat(let id):
-            // The title comes with the history; an unknown id shows the server's error in the chat, and the drawer
-            // still lists the rest.
-            select(id: id, title: nil)
+            // The title comes with the history (the chat already on screen keeps its own); an unknown id shows the
+            // server's error in the chat, and the drawer still lists the rest.
+            select(id: id, title: id == activeChat.id ? activeChat.title : nil)
         case .health(let ask):
             pendingAsk = nil
             healthAsk = ask
