@@ -348,10 +348,15 @@ struct ArtifactWebView: UIViewRepresentable {
             if isReady { post(render: false) }
         }
 
-        /// The desktop card's two messages (`sendToIframe`), posted from our world to the page's window.
+        /// The desktop card's messages (`sendToIframe`) and the page layout, posted from our world to the page's window.
         private func post(render: Bool) {
             var script = "window.postMessage({ type: 'theme', theme }, '*');"
-            if render { script += " window.postMessage({ type: 'render', code, artifactId }, '*');" }
+            // A page of its own, not a card in a chat: the sandbox drops the outermost card's frame. A computer
+            // without page layout ignores the message.
+            if render {
+                script += " window.postMessage({ type: 'layout', layout: 'page' }, '*');"
+                script += " window.postMessage({ type: 'render', code, artifactId }, '*');"
+            }
             webView?.callAsyncJavaScript(
                 script, arguments: ["theme": theme, "code": code, "artifactId": artifactId], in: nil,
                 in: Self.world, completionHandler: nil)
