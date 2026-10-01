@@ -260,6 +260,8 @@ struct UsedMemoriesLine: View {
     @State private var open = false
     /// What the sheet asked for, done once it has gone: the composer cannot take focus under a sheet.
     @State private var pending: UsedMemoriesSheet.Action?
+    /// Taps on an entry's "Wrong?": a light tap answers each, as the sheet goes.
+    @State private var fixes = 0
     @Environment(\.openMemorySettings) private var openMemorySettings
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -286,10 +288,12 @@ struct UsedMemoriesLine: View {
             .accessibilityAddTraits(.isButton)
             .sheet(isPresented: $open, onDismiss: perform) {
                 UsedMemoriesSheet(used: run.used, store: store, opensSettings: openMemorySettings != nil) { action in
+                    if case .wrong = action { fixes += 1 }
                     pending = action
                     open = false
                 }
             }
+            .sensoryFeedback(.impact(weight: .light), trigger: fixes)
         }
     }
 
@@ -303,7 +307,9 @@ struct UsedMemoriesLine: View {
     }
 }
 
-/// The entries behind the logged ones, as they read now: a deleted entry keeps its logged title, greyed.
+/// The entries behind the logged ones, as they read now: a deleted entry keeps its logged title, greyed. Fixing a
+/// wrong one is the sheet's point: each entry carries a tinted "Wrong?" beside its title, and the foot says in a
+/// sentence what it does; Settings is the secondary way, a link under that.
 struct UsedMemoriesSheet: View {
     enum Action: Equatable {
         case wrong(key: String)
@@ -320,18 +326,27 @@ struct UsedMemoriesSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    Text("chat:usedMemories.intro")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     ForEach(used) { memory in
                         UsedMemoryRow(memory: memory, entries: store.entries) { act(.wrong(key: $0)) }
                     }
-                    if opensSettings {
-                        Button {
-                            act(.openSettings)
-                        } label: {
-                            Label("chat:usedMemories.openSettings", systemImage: "gearshape")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("chat:usedMemories.fixHint")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        if opensSettings {
+                            Button {
+                                act(.openSettings)
+                            } label: {
+                                Text("chat:usedMemories.openSettings").frame(minHeight: 32)
+                            }
+                            .font(.footnote.weight(.medium))
+                            .buttonStyle(.borderless)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
+                    .padding(.top, 4)
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -349,25 +364,48 @@ struct UsedMemoriesSheet: View {
     }
 }
 
+/// What one row of the sheet shows: the entry's title as it reads now, its current text, and whether it can still be
+/// fixed — a deleted entry cannot.
+struct UsedMemoryRowState {
+    let key: String
+    let current: MemoryEntry?
+    let deleted: Bool
+    var offersFix: Bool { !deleted }
+
+    /// `entries` is nil until the list is read: until then an entry is shown as logged, neither deleted nor current.
+    init(memory: UsedMemory, entries: [MemoryEntry]?) {
+        current = entries?.first { $0.id == memory.id }
+        deleted = entries != nil && current == nil
+        key = current?.key ?? memory.key
+    }
+}
+
 struct UsedMemoryRow: View {
     let memory: UsedMemory
     /// Nil until the list is read: until then an entry is shown as logged, neither deleted nor current.
     let entries: [MemoryEntry]?
     let onWrong: (String) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        let current = entries?.first { $0.id == memory.id }
-        let deleted = entries != nil && current == nil
-        let key = current?.key ?? memory.key
+        let state = UsedMemoryRowState(memory: memory, entries: entries)
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(verbatim: key).font(.subheadline.weight(.semibold))
-                if deleted {
-                    Text("chat:usedMemories.deleted").font(.caption).foregroundStyle(.secondary)
+            // At accessibility sizes the button goes under the title rather than squeezing it.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
+            layout {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(verbatim: state.key).font(.subheadline.weight(.semibold))
+                    if state.deleted {
+                        Text("chat:usedMemories.deleted").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                if state.offersFix { wrongButton(state.key) }
             }
-            .accessibilityElement(children: .combine)
-            if let current {
+            if let current = state.current {
                 VStack(alignment: .leading, spacing: 2) {
                     if !current.summary.isEmpty { Text(verbatim: current.summary) }
                     ForEach(current.details, id: \.self) { Text(verbatim: "• \($0)") }
@@ -376,17 +414,22 @@ struct UsedMemoryRow: View {
                 .foregroundStyle(.secondary)
                 .accessibilityElement(children: .combine)
             }
-            if !deleted {
-                Button {
-                    onWrong(key)
-                } label: {
-                    Text("chat:usedMemories.wrong").frame(minHeight: 32)
-                }
-                .font(.footnote.weight(.medium))
-                .buttonStyle(.borderless)
-            }
         }
-        .opacity(deleted ? 0.5 : 1)
+        .opacity(state.deleted ? 0.5 : 1)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A capsule in the tone (`.tint`, which the app sets to the tone's ink): the one thing to do with an entry.
+    private func wrongButton(_ key: String) -> some View {
+        Button {
+            onWrong(key)
+        } label: {
+            Label("chat:usedMemories.wrong", systemImage: "pencil")
+                .font(.footnote.weight(.semibold))
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.small)
+        .fixedSize()
     }
 }

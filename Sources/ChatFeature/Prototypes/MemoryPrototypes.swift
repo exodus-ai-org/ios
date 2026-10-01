@@ -86,7 +86,7 @@ struct ProtoMemorySection: View {
             }
 
             UserBubble(text: "Which laptop should I use for the trip?")
-            ProtoInReply(state: "Used memories (tap: the sheet; \"This is wrong\" fills the composer)") {
+            ProtoInReply(state: "Used memories (tap: the sheet; \"Wrong?\" fills the composer)") {
                 UsedMemoriesLine(run: store.run("used3"), store: store)
             }
             ProtoInReply(state: "One memory") { UsedMemoriesLine(run: store.run("used1"), store: store) }

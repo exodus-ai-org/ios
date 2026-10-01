@@ -5741,6 +5741,138 @@
         }
       }
     },
+    "chat:usedMemories.fixHint" : {
+      "comment" : "The used-memories sheet at a reply's foot: under the entries, how a wrong one gets fixed. Names the per-entry button (chat:usedMemories.wrong).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stimmt eine Erinnerung nicht? Tippen Sie auf „Falsch?“ und korrigieren Sie sie im Chat – Exodus aktualisiert sie."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A memory wrong? Tap Wrong? and fix it in chat — Exodus updates it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Algún recuerdo es incorrecto? Toca «¿Incorrecto?» y corrígelo en el chat: Exodus lo actualizará."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un souvenir est erroné ? Touchez « Erroné ? » et corrigez-le dans le chat — Exodus le met à jour."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una memoria è sbagliata? Tocca «Sbagliata?» e correggila in chat: Exodus la aggiorna."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記憶が違っていたら、「違う？」をタップしてチャットで修正してください。Exodus が記憶を更新します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기억이 틀렸나요? '틀렸나요?'를 탭해 채팅에서 고치면 Exodus가 기억을 업데이트합니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alguma memória errada? Toque em “Errado?” e corrija no chat — o Exodus a atualiza."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記憶有誤？點「有誤」在對話中修正，Exodus 會更新這條記憶。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記憶有誤？點「有誤」在對話中修正，Exodus 會更新這條記憶。"
+          }
+        }
+      }
+    },
+    "chat:usedMemories.intro" : {
+      "comment" : "The used-memories sheet at a reply's foot: its first line, above the entries.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Erinnerungen haben die Antwort geprägt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These shaped this answer."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estos recuerdos dieron forma a la respuesta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ces souvenirs ont guidé cette réponse."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questi ricordi hanno guidato la risposta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この回答はこれらの記憶をもとにしています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 답변은 이 기억들을 바탕으로 했습니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estas memórias orientaram a resposta."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個回答參考了這些記憶。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個回答參考了這些記憶。"
+          }
+        }
+      }
+    },
     "chat:usedMemories.label" : {
       "comment" : "Under a reply that read memory entries. The number is how many (plural); %@ lists their titles.",
       "extractionState" : "manual",
@@ -6042,61 +6174,61 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Das ist falsch"
+            "value" : "Falsch?"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This is wrong"
+            "value" : "Wrong?"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esto es incorrecto"
+            "value" : "¿Incorrecto?"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "C'est inexact"
+            "value" : "Erroné ?"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "È sbagliato"
+            "value" : "Sbagliata?"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "これは間違っています"
+            "value" : "違う？"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "잘못된 내용입니다"
+            "value" : "틀렸나요?"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Isto está errado"
+            "value" : "Errado?"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這是錯的"
+            "value" : "有誤？"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這是錯的"
+            "value" : "有誤？"
           }
         }
       }

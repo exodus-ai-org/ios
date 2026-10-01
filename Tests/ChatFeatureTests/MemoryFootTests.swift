@@ -132,6 +132,20 @@ struct MemoryStripRulesTests {
         #expect(UsedMemoriesText.label(two).hasSuffix("Work setup"))
         #expect(UsedMemoriesText.prefill(key: "Music") == "The memory about 'Music' is wrong: ")
     }
+
+    @Test("a used memory's row: its title as it reads now, and Wrong? on every entry but a deleted one")
+    func usedMemoryRow() {
+        let music = UsedMemory(id: "m1", key: "Music", section: "topic")
+        let gone = UsedMemory(id: "m9", key: "Gone", section: "topic")
+        // The list not read yet: shown as logged, and still fixable.
+        let unread = UsedMemoryRowState(memory: music, entries: nil)
+        #expect(unread.key == "Music" && !unread.deleted && unread.offersFix && unread.current == nil)
+        let entries = [MemoryEntry(id: "m1", section: "topic", key: "Classical music", summary: "Goldberg")]
+        let renamed = UsedMemoryRowState(memory: music, entries: entries)
+        #expect(renamed.key == "Classical music" && renamed.current?.summary == "Goldberg" && renamed.offersFix)
+        let deleted = UsedMemoryRowState(memory: gone, entries: entries)
+        #expect(deleted.key == "Gone" && deleted.deleted && !deleted.offersFix)
+    }
 }
 
 /// A stand-in computer for the store: counts calls, answers after a delay.
