@@ -67,6 +67,9 @@ public struct APIClient: Sendable {
                 timeout: timeout)
             reporter?.noteReachable()
             return result
+        } catch let error as AttemptsError {
+            reportFailure(error.underlying, path: path, attempts: error.attempts)
+            throw error.underlying
         } catch {
             reportFailure(error, path: path)
             throw error
@@ -74,7 +77,7 @@ public struct APIClient: Sendable {
     }
 
     /// Status and path only: never the query, a body, or the server's message (it can echo what was sent).
-    private func reportFailure(_ error: Error, path: String) {
+    private func reportFailure(_ error: Error, path: String, attempts: [String] = []) {
         guard let reporter, path != LogReporter.path else { return }
         if error is CancellationError { return }
         switch error {
@@ -85,9 +88,9 @@ public struct APIClient: Sendable {
                 attributes: ["status": .int(http.statusCode), "path": .string(path)])
         case let url as URLError:
             if url.code == .cancelled { return }
-            reporter.report(
-                .warn, scope: "api", message: "No response \(path)",
-                attributes: ["path": .string(path), "urlError": .int(url.code.rawValue)])
+            var attributes: [String: LogReporter.Value] = ["path": .string(path), "urlError": .int(url.code.rawValue)]
+            if !attempts.isEmpty { attributes["attempts"] = .string(attempts.joined(separator: ", ")) }
+            reporter.report(.warn, scope: "api", message: "No response \(path)", attributes: attributes)
         case let decoding as DecodingError:
             reporter.report(
                 .error, scope: "api", message: "Undecodable response \(path)",
@@ -108,8 +111,11 @@ public struct APIClient: Sendable {
         let bases = serverConfig.baseURLCandidates
         let idempotent = ["GET", "HEAD", "PUT", "DELETE"].contains(method)
         var unreachable: Error?
+        // Each address tried and how it failed, for the report when none answers: which one hung, which refused.
+        var tried: [String] = []
         for (index, base) in bases.enumerated() {
             let url = try makeURL(base: base, path: path, query: query)
+            let started = ContinuousClock.now
             do {
                 return try await attempt(
                     url: url, method: method, body: body, bases: bases, decodeResponse: decodeResponse,
@@ -119,8 +125,12 @@ public struct APIClient: Sendable {
                 && (idempotent ? error.worthRetryingIdempotent : error.requestNeverSent)
             {
                 // A POST or PATCH that may have reached the computer is never sent again elsewhere.
+                tried.append(Self.attemptNote(url: url, error: error, since: started))
                 unreachable = error
                 continue
+            } catch let error as URLError {
+                tried.append(Self.attemptNote(url: url, error: error, since: started))
+                throw AttemptsError(underlying: error, attempts: tried)
             } catch let error as HTTPError where error.code == "APP_LOCKED" {
                 // The computer's own lock, not ours: our token already proves who this device
                 // is, so no PIN is needed to lift it — see `POST /api/v1/lock/unlock` (exodus's
@@ -134,6 +144,15 @@ public struct APIClient: Sendable {
             }
         }
         throw unreachable ?? invalidBaseURL()
+    }
+
+    /// `host:code@ms` — an address, the URLError it ended in, and how long it took to.
+    private static func attemptNote(url: URL, error: URLError, since started: ContinuousClock.Instant) -> String {
+        let elapsed = ContinuousClock.now - started
+        let ms = elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000
+        // A TLS failure's own reason (`-98xx`, Security's SSL codes) rides along under the stream error key.
+        let stream = (error.userInfo["_kCFStreamErrorCodeKey"] as? Int).map { "/\($0)" } ?? ""
+        return "\(url.host ?? "?"):\(error.code.rawValue)\(stream)@\(ms)ms"
     }
 
     private func attempt<Body: Encodable, T: Decodable>(
@@ -283,4 +302,10 @@ extension URLError {
 
     /// The request may have reached the computer, but an idempotent one can be repeated.
     var worthRetryingIdempotent: Bool { requestNeverSent || code == .timedOut || code == .networkConnectionLost }
+}
+
+/// A request that no address answered, with how each one failed: reported, then rethrown as the last URLError.
+struct AttemptsError: Error {
+    let underlying: URLError
+    let attempts: [String]
 }

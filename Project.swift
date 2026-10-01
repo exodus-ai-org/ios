@@ -43,7 +43,16 @@ let project = Project(
                         "UIImageName": "LaunchLogo"
                     ],
                     "NSAppTransportSecurity": [
-                        "NSAllowsLocalNetworking": true
+                        "NSAllowsLocalNetworking": true,
+                        // Away from home the paired computer is reached over Tailscale by its MagicDNS name. Its
+                        // certificate is self-signed and trusted by its pin (PinnedSessionDelegate); ATS honours that
+                        // only where it is relaxed — local networks above, and Tailscale's names here. Nothing else.
+                        "NSExceptionDomains": [
+                            "ts.net": [
+                                "NSIncludesSubdomains": true,
+                                "NSExceptionAllowsInsecureHTTPLoads": true
+                            ]
+                        ]
                     ],
                     "NSLocalNetworkUsageDescription":
                         "Exodus needs local network access to connect to the Exodus service running on your computer.",
