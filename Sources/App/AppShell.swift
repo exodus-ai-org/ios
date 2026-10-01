@@ -24,9 +24,9 @@ struct AppShell: View {
     @State private var activeChat = ActiveChat.new()
     @State private var isSidebarOpen = false
     @State private var workspace: AppWorkspace = .chat
-    @State private var showSettings = false
-    /// Settings opens on its Memory page (from a chat's used-memories sheet).
-    @State private var settingsOpensMemory = false
+    /// Settings, and the page it opens on. One value, so the page arrives with the presentation itself: two flags let
+    /// the first presentation read a stale page and open on the root.
+    @State private var settings: SettingsRoute?
     /// Bumped when Settings closes so the sidebar reloads Recents from the (possibly new) server.
     @State private var recentsReloadToken = 0
     /// A question from Health waiting for its new chat to open and send it.
@@ -44,7 +44,7 @@ struct AppShell: View {
                 reloadToken: recentsReloadToken,
                 onSelectChat: { id, title in select(id: id, title: title) },
                 onNewChat: { startNewChat() },
-                onOpenSettings: { showSettings = true },
+                onOpenSettings: { settings = .root },
                 onDeleteChat: { id in
                     // The deleted chat was the one on screen: leave it for a fresh one, drawer stays open.
                     if id == activeChat.id { activeChat = .new() }
@@ -95,13 +95,10 @@ struct AppShell: View {
             }
         }
         .sheet(
-            isPresented: $showSettings,
-            onDismiss: {
-                recentsReloadToken += 1
-                settingsOpensMemory = false
-            }
-        ) {
-            SettingsView(apiClient: apiClient, serverConfig: serverConfig, opensMemory: settingsOpensMemory)
+            item: $settings,
+            onDismiss: { recentsReloadToken += 1 }
+        ) { route in
+            SettingsView(apiClient: apiClient, serverConfig: serverConfig, opensMemory: route == .memory)
         }
         // The workspace actually changing, once (apple-design §13): `workspace` only changes when
         // a row not already selected is tapped, so re-tapping the active row fires nothing. And
@@ -129,8 +126,7 @@ struct AppShell: View {
             .environment(
                 \.openMemorySettings,
                 OpenMemorySettingsAction {
-                    settingsOpensMemory = true
-                    showSettings = true
+                    settings = .memory
                 })
         case .health:
             HealthRootView(apiClient: apiClient, onGlanceChange: { widgetWriter.healthChanged($0) }) { text in
@@ -162,4 +158,11 @@ struct AppShell: View {
     private func setSidebar(open: Bool) {
         withAnimation(drawerAnimation(reduceMotion: reduceMotion)) { isSidebarOpen = open }
     }
+}
+
+/// Where Settings opens: its root, or the Memory page (from a chat's used-memories sheet).
+enum SettingsRoute: String, Identifiable {
+    case root, memory
+
+    var id: String { rawValue }
 }
