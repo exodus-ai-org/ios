@@ -78,13 +78,16 @@ struct AppShell: View {
                             }
                             .accessibilityIdentifier("sidebarToggle")
                         }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                startNewChat()
-                            } label: {
-                                Label("chat:sidebar.newChat", systemImage: "square.and.pencil")
+                        // Health has its own menu there; a new chat is in the drawer.
+                        if workspace != .health {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button {
+                                    startNewChat()
+                                } label: {
+                                    Label("chat:sidebar.newChat", systemImage: "square.and.pencil")
+                                }
+                                .accessibilityIdentifier("topNewChat")
                             }
-                            .accessibilityIdentifier("topNewChat")
                         }
                     }
             }
@@ -142,12 +145,15 @@ struct AppShell: View {
     private func select(id: String, title: String?) {
         pendingAsk = nil
         activeChat = ActiveChat(id: id, title: title)
+        // A chat picked from the drawer is shown, whichever workspace was open.
+        workspace = .chat
         setSidebar(open: false)
     }
 
     private func startNewChat() {
         pendingAsk = nil
         activeChat = .new()
+        workspace = .chat
         setSidebar(open: false)
     }
 
