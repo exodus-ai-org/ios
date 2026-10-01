@@ -34,6 +34,20 @@ struct ReportStoreTests {
         #expect(values.isExcludedFromBackup == true)
     }
 
+    /// A report cached before the note had insights still loads, as the Markdown note it was.
+    @Test func aReportCachedBeforeTheStoryStillLoads() throws {
+        let cache = tempCache()
+        try FileManager.default.createDirectory(at: cache.directory, withIntermediateDirectories: true)
+        let old = """
+            {"generatedAt":0,"snapshot":{"date":"2026-10-01","localTime":"15:00","locale":"en","odyState":"tired"},
+             "summary":{"categories":{"activity":null,"body":null,"recovery":null,"sleep":null},"headline":"h","summary":"s"}}
+            """
+        try Data(old.utf8).write(to: cache.fileURL)
+        let loaded = try #require(cache.load(date: "2026-10-01"))
+        #expect(loaded.summary.summary == "s")
+        #expect(loaded.summary.insights == nil)
+    }
+
     @Test func aMissingOrCorruptFileIsNoReport() throws {
         let cache = tempCache()
         #expect(cache.load(date: "2026-10-01") == nil)

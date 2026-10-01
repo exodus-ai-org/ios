@@ -93,10 +93,23 @@ public struct PreviewSummaryService: HealthSummaryService {
     /// Says what `HealthPreviewSource` holds: last night 5 h 52 min asleep (deep as usual), 5,840 steps, HRV 38 against
     /// a normal of 44, three cups.
     public static let sample = HealthSummary(
-        headline: "A little under-slept",
-        summary: "You slept **5 h 52 min** last night, shorter than usual, and your HRV is a bit low. Skip the hard workout today — a **20-minute walk** after lunch is plenty.",
+        headline: "A little under-slept, so take it easy.",
+        summary: "A little under-slept, so take it easy.\n\nYou slept **5 h 52 min** last night, about half an hour less than usual.\n\nHRV is **38 ms**, under your normal of 44 — your body is still recovering.\n\n**5,840 steps** so far, 2,160 to go to 8,000.",
         categories: .init(sleep: "A short night, but the deep sleep held up.", activity: "2,160 steps to go.", recovery: "HRV 14 % under your normal.", body: "Three cups so far."),
-        memorySuggestion: .init(section: "profile", key: "weekday-sleep", summary: "On weekdays you usually sleep about six hours."))
+        memorySuggestion: .init(section: "profile", key: "weekday-sleep", summary: "On weekdays you usually sleep about six hours."),
+        headlineHighlight: "under-slept", headlineCategory: "sleep",
+        insights: [
+            .init(
+                category: "sleep", text: "You slept 5 h 52 min last night, about half an hour less than usual.",
+                highlights: ["5 h 52 min"], stat: .init(value: "5:52", unit: "hr", caption: "usual 6:28")),
+            .init(
+                category: "recovery", text: "HRV is 38 ms, under your normal of 44 — your body is still recovering.",
+                highlights: ["38 ms", "still recovering"], stat: .init(value: "38", unit: "ms HRV", caption: "normal 44")),
+            .init(
+                category: "activity", text: "5,840 steps so far, 2,160 to go to 8,000.",
+                highlights: ["5,840 steps"], stat: .init(value: "5,840", unit: "steps", caption: "goal 8,000")),
+        ],
+        nudge: "Skip the hard workout today — a 20-minute walk after lunch is plenty.")
 
     public func summary(for snapshot: HealthSnapshot) async throws -> HealthSummary {
         try await Task.sleep(for: delay)

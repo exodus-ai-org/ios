@@ -4,13 +4,16 @@ import Models
 import OdyKit
 import SwiftUI
 
-/// The day's note: Ody writing while it is written, then the text easing in; or why there is none.
+/// The day's note: Ody writing while it is written, then the note easing in — as insight stories, or as the Markdown
+/// note a report from before them carries; or why there is none.
 struct ReportCard: View {
     let report: HealthHomeModel.Report
     let onConsent: () -> Void
 
     var body: some View {
-        if report != .idle {
+        if case .ready(let summary) = report, let story = ReportStory(summary) {
+            story.transition(.opacity)
+        } else if report != .idle {
             Group {
                 switch report {
                 case .ready(let summary):

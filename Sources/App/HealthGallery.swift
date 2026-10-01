@@ -4,7 +4,8 @@ import Models
 import SwiftUI
 
 /// DEBUG-only visual check of Health: `-HealthGallery <state>` opens the workspace on preview data with the report in
-/// `<state>` (`ready` default, `writing`, `offline`, `needsModel`, `failed`, `consent`, `onboarding`).
+/// `<state>` (`ready` default, `writing`, `offline`, `needsModel`, `failed`, `consent`, `onboarding`). Add
+/// `-HealthGalleryAnchor center|bottom` to open the home scrolled down, for a screenshot of the note below the hero.
 enum HealthGalleryLaunch {
     static var isEnabled: Bool { ProcessInfo.processInfo.arguments.contains("-HealthGallery") }
 
@@ -15,6 +16,16 @@ enum HealthGalleryLaunch {
         }
         return args[i + 1]
     }
+
+    static var anchor: UnitPoint? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-HealthGalleryAnchor"), i + 1 < args.count else { return nil }
+        switch args[i + 1] {
+        case "center": return .center
+        case "bottom": return .bottom
+        default: return nil
+        }
+    }
 }
 
 struct HealthGalleryView: View {
@@ -23,6 +34,7 @@ struct HealthGalleryView: View {
 
     var body: some View {
         NavigationStack { HealthRootView.gallery(model: model) }
+            .defaultScrollAnchor(HealthGalleryLaunch.anchor)
     }
 
     private static func makeModel() -> HealthHomeModel {

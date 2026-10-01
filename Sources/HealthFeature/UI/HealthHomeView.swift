@@ -47,7 +47,8 @@ struct HealthHomeView: View {
                 )
                 .padding(.horizontal, -16)
                 .id(Self.heroID)
-                if let summary = readySummary {
+                // A note told as stories carries its own headline.
+                if let summary = readySummary, ReportText.stories(summary).isEmpty {
                     Text(verbatim: summary.headline).font(.headline).padding(.top, 2)
                 }
                 ReportCard(report: model.report) { Task { await model.grantConsent() } }
