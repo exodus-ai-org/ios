@@ -134,6 +134,10 @@ public struct ConfettiView: View {
         .accessibilityHidden(true)
     }
 
+    // Parsed once: every particle draws one of these, every frame.
+    private static let bindleKnot = SVGPath.path("M-2-5L0-3L2-5")
+    private static let star = SVGPath.path("M0-7L1.7-1.7 7 0 1.7 1.7 0 7-1.7 1.7-7 0-1.7-1.7Z")
+
     private func draw(_ p: ConfettiSystem.Particle, in context: inout GraphicsContext) {
         var c = context
         c.translateBy(x: p.x, y: p.y)
@@ -142,9 +146,9 @@ public struct ConfettiView: View {
         switch p.kind {
         case .bindle:
             c.fill(Path(ellipseIn: CGRect(x: -7, y: -5.5, width: 14, height: 11)), with: .color(OdyPalette.bindle))
-            c.stroke(SVGPath.path("M-2-5L0-3L2-5"), with: .color(OdyPalette.bindleDark), lineWidth: 1.5)
+            c.stroke(Self.bindleKnot, with: .color(OdyPalette.bindleDark), lineWidth: 1.5)
         case .star:
-            c.fill(SVGPath.path("M0-7L1.7-1.7 7 0 1.7 1.7 0 7-1.7 1.7-7 0-1.7-1.7Z"), with: .color(OdyPalette.hex(p.color)))
+            c.fill(Self.star, with: .color(OdyPalette.hex(p.color)))
         case .square:
             c.fill(Path(CGRect(x: -3, y: -3, width: 6, height: 6)), with: .color(OdyPalette.hex(p.color)))
         }

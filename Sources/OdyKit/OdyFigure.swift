@@ -36,6 +36,19 @@ public enum OdyExpression: CaseIterable, Sendable {
     case happy, grin, sleepy, content, curious, down, away, yawn
 }
 
+/// The face's strokes in art units, parsed once rather than every frame Ody blinks.
+enum FaceArt {
+    static let sleepyLeft = SVGPath.path("M548 536Q578 516 608 536")
+    static let sleepyRight = SVGPath.path("M666 536Q696 516 726 536")
+    static let smileLeft = SVGPath.path("M548 530Q578 498 608 530")
+    static let smileRight = SVGPath.path("M666 530Q696 498 726 530")
+    static let smile = SVGPath.path("M614 608Q640 628 664 608")
+    static let smileAside = SVGPath.path("M660 606Q682 620 704 606")
+    static let small = SVGPath.path("M604 630Q624 642 644 630")
+    static let grin = SVGPath.path("M606 600Q640 650 676 600Z")
+    static let tongue = SVGPath.path("M622 622Q640 640 660 622")
+}
+
 /// What a face is made of, per expression — the mockup's `face-*` symbols.
 struct OdyFace: Equatable {
     enum Eyes: Equatable { case open, sleepyArcs, smileArcs }
@@ -136,11 +149,11 @@ public struct OdyFigure: View, Animatable {
 
         let face = OdyFace.of(expression)
         let ink = GraphicsContext.Shading.color(OdyPalette.ink)
-        func stroke(_ d: String, width: CGFloat) {
+        func stroke(_ path: Path, width: CGFloat) {
             var t = CGAffineTransform(translationX: rect.minX, y: rect.minY).scaledBy(x: k, y: k)
             t = t.translatedBy(x: -OdyGeometry.box.minX, y: -OdyGeometry.box.minY)
             context.stroke(
-                SVGPath.path(d).applying(t), with: ink,
+                path.applying(t), with: ink,
                 style: StrokeStyle(lineWidth: width * k, lineCap: .round))
         }
 
@@ -165,17 +178,17 @@ public struct OdyFigure: View, Animatable {
                 }
             }
         case .sleepyArcs:
-            stroke("M548 536Q578 516 608 536", width: 13)
-            stroke("M666 536Q696 516 726 536", width: 13)
+            stroke(FaceArt.sleepyLeft, width: 13)
+            stroke(FaceArt.sleepyRight, width: 13)
         case .smileArcs:
-            stroke("M548 530Q578 498 608 530", width: 13)
-            stroke("M666 530Q696 498 726 530", width: 13)
+            stroke(FaceArt.smileLeft, width: 13)
+            stroke(FaceArt.smileRight, width: 13)
         }
 
         switch face.mouth {
-        case .smile: stroke("M614 608Q640 628 664 608", width: 12)
-        case .smileRight: stroke("M660 606Q682 620 704 606", width: 11)
-        case .small: stroke("M604 630Q624 642 644 630", width: 11)
+        case .smile: stroke(FaceArt.smile, width: 12)
+        case .smileRight: stroke(FaceArt.smileAside, width: 11)
+        case .small: stroke(FaceArt.small, width: 11)
         case .dot: context.fill(ellipse(640, 612, 14, 10), with: ink)
         case .ring:
             context.stroke(ellipse(636, 604, 13, 13), with: ink, lineWidth: 11 * k)
@@ -183,8 +196,8 @@ public struct OdyFigure: View, Animatable {
         case .grin:
             var t = CGAffineTransform(translationX: rect.minX, y: rect.minY).scaledBy(x: k, y: k)
             t = t.translatedBy(x: -OdyGeometry.box.minX, y: -OdyGeometry.box.minY)
-            context.fill(SVGPath.path("M606 600Q640 650 676 600Z").applying(t), with: ink)
-            context.fill(SVGPath.path("M622 622Q640 640 660 622").applying(t), with: .color(OdyPalette.hex(0xFF7E95)))
+            context.fill(FaceArt.grin.applying(t), with: ink)
+            context.fill(FaceArt.tongue.applying(t), with: .color(OdyPalette.hex(0xFF7E95)))
         }
     }
 }
