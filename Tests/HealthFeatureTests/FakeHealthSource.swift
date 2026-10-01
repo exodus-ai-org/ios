@@ -1,0 +1,70 @@
+// Tests/HealthFeatureTests/FakeHealthSource.swift
+import Foundation
+import Models
+
+@testable import HealthFeature
+
+/// A HealthKit stand-in: tests fill in what the store holds.
+actor FakeHealthSource: HealthDataSource {
+    nonisolated let isAvailable = true
+    var requested = true
+    var sleep: [SleepSample] = []
+    var sums: [SumMetric: [DayValue]] = [:]
+    var hourly: [SumMetric: [DayValue]] = [:]
+    var averages: [AverageMetric: [DayValue]] = [:]
+    var stand = 0
+    var goals: ActivityGoals?
+    var workoutList: [WorkoutSample] = []
+    var moodList: [MoodSample] = []
+    var loggedWater: [Double] = []
+    var failure: Error?
+
+    func set(_ change: (isolated FakeHealthSource) -> Void) { change(self) }
+
+    func hasRequestedAuthorization() async -> Bool { requested }
+    func requestAuthorization() async throws { requested = true }
+
+    func sleepSamples(from start: Date, to end: Date) async throws -> [SleepSample] {
+        if let failure { throw failure }
+        return sleep.filter { $0.end > start && $0.start < end }
+    }
+
+    func dailySums(_ metric: SumMetric, from start: Date, to end: Date) async throws -> [DayValue] {
+        (sums[metric] ?? []).filter { $0.day >= start && $0.day < end }
+    }
+
+    func hourlySums(_ metric: SumMetric, on day: Date) async throws -> [DayValue] { hourly[metric] ?? [] }
+
+    func dailyAverages(_ metric: AverageMetric, from start: Date, to end: Date) async throws -> [DayValue] {
+        (averages[metric] ?? []).filter { $0.day >= start && $0.day < end }
+    }
+
+    func standHours(on day: Date) async throws -> Int { stand }
+    func activityGoals(on day: Date) async throws -> ActivityGoals? { goals }
+
+    func workouts(from start: Date, to end: Date) async throws -> [WorkoutSample] {
+        workoutList.filter { $0.start >= start && $0.start < end }
+    }
+
+    func moods(from start: Date, to end: Date) async throws -> [MoodSample] {
+        moodList.filter { $0.date >= start && $0.date < end }
+    }
+
+    func logWater(milliliters: Double, at date: Date) async throws { loggedWater.append(milliliters) }
+}
+
+/// Fixed calendar and clock for every Health test: Taipei, 2026-10-01 15:00.
+enum TestClock {
+    static var calendar: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Taipei")!
+        return c
+    }
+
+    static func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 0, _ min: Int = 0) -> Date {
+        calendar.date(from: DateComponents(year: y, month: m, day: d, hour: h, minute: min))!
+    }
+
+    static let now = date(2026, 10, 1, 15, 0)
+    static var today: Date { calendar.startOfDay(for: now) }
+}
