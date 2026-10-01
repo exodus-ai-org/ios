@@ -8,14 +8,17 @@ import SwiftUI
 /// idea to end on. Colours and icons come from `CategoryStyle`; the model only says which category.
 struct ReportStory: View {
     let summary: HealthSummary
+    private let stories: [(HealthCategory, HealthSummary.Insight)]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .title2) private var headlineSize: CGFloat = 26
     @State private var shown = false
 
     /// Nil when there are no insights this app can draw, so the caller shows the Markdown note instead.
     init?(_ summary: HealthSummary) {
-        guard !ReportText.stories(summary).isEmpty else { return nil }
+        let stories = ReportText.stories(summary)
+        guard !stories.isEmpty else { return nil }
         self.summary = summary
+        self.stories = stories
     }
 
     var body: some View {
@@ -32,29 +35,34 @@ struct ReportStory: View {
             }
             .padding(.bottom, 4)
             .entrance(0, shown: shown, rise: !reduceMotion)
-            ForEach(Array(ReportText.stories(summary).enumerated()), id: \.offset) { index, story in
+            ForEach(Array(stories.enumerated()), id: \.offset) { index, story in
                 InsightCard(category: story.0, insight: story.1)
                     .entrance(index + 1, shown: shown, rise: !reduceMotion)
             }
             if let nudge = summary.nudge, !nudge.isEmpty {
                 NudgeCard(text: nudge)
-                    .entrance(ReportText.stories(summary).count + 1, shown: shown, rise: !reduceMotion)
+                    .entrance(stories.count + 1, shown: shown, rise: !reduceMotion)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { shown = true }
     }
 
+    /// The headline with its phrase in the category's gradient. An AttributedString can't carry a gradient, so the
+    /// pieces are joined as an interpolation built in code: no string literal, so nothing lands in the catalog.
     private var headline: Text {
         guard let phrase = summary.headlineHighlight,
             let category = summary.headlineCategory.flatMap(HealthCategory.init(rawValue:))
         else { return Text(verbatim: summary.headline) }
         let gradient = LinearGradient(
             colors: CategoryStyle.of(category).accentGradient, startPoint: .leading, endPoint: .trailing)
-        return ReportText.runs(summary.headline, highlights: [phrase]).reduce(Text(verbatim: "")) { text, run in
+        let runs = ReportText.runs(summary.headline, highlights: [phrase])
+        var joined = LocalizedStringKey.StringInterpolation(literalCapacity: 0, interpolationCount: runs.count)
+        for run in runs {
             let piece = Text(verbatim: run.text)
-            return Text("\(text)\(run.isHighlight ? piece.foregroundStyle(gradient) : piece)")
+            joined.appendInterpolation(run.isHighlight ? piece.foregroundStyle(gradient) : piece)
         }
+        return Text(LocalizedStringKey(stringInterpolation: joined))
     }
 }
 
@@ -137,9 +145,10 @@ private struct NudgeCard: View {
     }
 }
 
-/// The note's own colours: the green of "today" and of the small idea, and the mint behind it.
+/// The note's own colours: the green of "today" and of the small idea (4.5:1 on the page and the mint), and the
+/// mint behind it.
 enum ReportInk {
-    static let green = Color.adaptive(0x2E9E4F, dark: 0x7FE0A0)
+    static let green = Color.adaptive(0x1F7A3A, dark: 0x7FE0A0)
     static let mint = [Color.adaptive(0xE6F6E9, dark: 0x173322), Color.adaptive(0xF4FBF2, dark: 0x1E2B22)]
 }
 

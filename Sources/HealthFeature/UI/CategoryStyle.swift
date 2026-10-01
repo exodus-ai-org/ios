@@ -10,10 +10,11 @@ struct CategoryStyle {
     let ink: Color
     let title: LocalizedStringResource
     let systemImage: String
-    /// The note's colour for this category, on a card: deepened in Light Mode and lightened in Dark Mode so a
-    /// highlighted phrase stays readable on either surface.
+    /// The note's colour for this category (highlighted phrases, icons): at least 4.5:1 on the card in both modes —
+    /// deep tones on white, light ones on the dark card.
     let accent: Color
-    /// For the big things in the note (the headline's phrase, an insight's number).
+    /// For the big things in the note (the headline's phrase, an insight's number): large text, so each stop is at
+    /// least 3:1 on the card and the cream page.
     let accentGradient: [Color]
     /// The note's icon for this category.
     let symbol: String
@@ -26,31 +27,31 @@ struct CategoryStyle {
                 title: LocalizedStringResource("ios:health.category.sleep", comment: "Sleep category title."),
                 systemImage: "moon.zzz.fill",
                 accent: .adaptive(0x6F5FD0, dark: 0xB9A3FF),
-                accentGradient: [.adaptive(0x6F5FD0, dark: 0xA88BFF), .adaptive(0xA88BFF, dark: 0xD2C4FF)],
+                accentGradient: [.adaptive(0x6F5FD0, dark: 0xA88BFF), .adaptive(0x8F78F0, dark: 0xD2C4FF)],
                 symbol: "moon.zzz.fill")
         case .activity:
             CategoryStyle(
                 gradient: [OdyPalette.hex(0xFFC23D), OdyPalette.hex(0xFF9A1A)], ink: OdyPalette.hex(0x3A2A00),
                 title: LocalizedStringResource("ios:health.category.activity", comment: "Activity category title."),
                 systemImage: "figure.walk",
-                accent: .adaptive(0xE07B00, dark: 0xFFB340),
-                accentGradient: [.adaptive(0xFF9A1A, dark: 0xFFB340), .adaptive(0xFFC23D, dark: 0xFFD98A)],
+                accent: .adaptive(0xA85A00, dark: 0xFFB340),
+                accentGradient: [.adaptive(0xC96A00, dark: 0xFFB340), .adaptive(0xD07A00, dark: 0xFFD98A)],
                 symbol: "figure.walk")
         case .recovery:
             CategoryStyle(
                 gradient: [OdyPalette.hex(0xFFB3C1), OdyPalette.hex(0xFF7E95)], ink: OdyPalette.hex(0x4A0F1C),
                 title: LocalizedStringResource("ios:health.category.recovery", comment: "Heart & recovery category title."),
                 systemImage: "heart.fill",
-                accent: .adaptive(0xE8456B, dark: 0xFF8FA8),
-                accentGradient: [.adaptive(0xFF5C8A, dark: 0xFF8FA8), .adaptive(0xFF9EB3, dark: 0xFFC2CF)],
+                accent: .adaptive(0xC92A52, dark: 0xFF8FA8),
+                accentGradient: [.adaptive(0xE0446E, dark: 0xFF8FA8), .adaptive(0xE8577C, dark: 0xFFC2CF)],
                 symbol: "heart.text.square.fill")
         case .body:
             CategoryStyle(
                 gradient: [OdyPalette.hex(0xA8E6E0), OdyPalette.hex(0x4FC1C9)], ink: OdyPalette.hex(0x063A3E),
                 title: LocalizedStringResource("ios:health.category.body", comment: "Body & mood category title."),
                 systemImage: "drop.fill",
-                accent: .adaptive(0x2A9BA6, dark: 0x6FD6DE),
-                accentGradient: [.adaptive(0x2A9BA6, dark: 0x6FD6DE), .adaptive(0x4FC1C9, dark: 0xA8EEF2)],
+                accent: .adaptive(0x1B7A83, dark: 0x6FD6DE),
+                accentGradient: [.adaptive(0x1E8A94, dark: 0x6FD6DE), .adaptive(0x2A93A0, dark: 0xA8EEF2)],
                 symbol: "drop.fill")
         }
     }
