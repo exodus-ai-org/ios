@@ -82,6 +82,20 @@ public enum DaySky {
         return arc(wrap(h - 18) / 12)
     }
 
+    /// The sun's own fade: in over 06:00–06:36, out over 17:24–18:00, so it never pops at the horizon.
+    public static func sunOpacity(atClockHour hour: Double) -> Double {
+        let h = wrap(hour)
+        return min(max((h - 6) / 0.6, 0), max(min((18 - h) / 0.6, 1), 0), 1)
+    }
+
+    /// The moon's own fade: in over 18:00–18:36, out over 05:24–06:00.
+    public static func moonOpacity(atClockHour hour: Double) -> Double {
+        let h = wrap(hour)
+        if h >= 18 { return min((h - 18) / 0.6, 1) }
+        if h <= 6 { return min(max((6 - h) / 0.6, 0), 1) }
+        return 0
+    }
+
     private static func arc(_ a: Double) -> CGPoint {
         CGPoint(x: 0.067 + 0.866 * a, y: 0.636 - sin(.pi * a) * 0.508)
     }
@@ -101,6 +115,8 @@ public struct DaySkyView: View {
     public var body: some View {
         let colors = DaySky.gradient(atClockHour: hour)
         let night = DaySky.night(atClockHour: hour)
+        let sunOpacity = DaySky.sunOpacity(atClockHour: hour)
+        let moonOpacity = DaySky.moonOpacity(atClockHour: hour)
         Canvas { context, size in
             let rect = CGRect(origin: .zero, size: size)
             context.fill(
@@ -118,21 +134,21 @@ public struct DaySkyView: View {
                 context.fill(
                     Path(ellipseIn: CGRect(x: c.x - r * 2, y: c.y - r * 2, width: r * 4, height: r * 4)),
                     with: .radialGradient(
-                        Gradient(colors: [OdyPalette.sun.opacity(0.9 * (1 - night)), OdyPalette.sun.opacity(0)]),
+                        Gradient(colors: [OdyPalette.sun.opacity(0.9 * sunOpacity), OdyPalette.sun.opacity(0)]),
                         center: c, startRadius: 0, endRadius: r * 2))
-                context.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)), with: .color(OdyPalette.sun.opacity(1 - night)))
+                context.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)), with: .color(OdyPalette.sun.opacity(sunOpacity)))
             }
             if let moon = DaySky.moon(atClockHour: hour) {
                 let c = CGPoint(x: moon.x * size.width, y: moon.y * size.height)
                 var layer = context
-                layer.opacity = night
+                layer.opacity = moonOpacity
                 layer.drawLayer { l in
                     l.fill(Path(ellipseIn: CGRect(x: c.x - r * 0.8, y: c.y - r * 0.8, width: r * 1.6, height: r * 1.6)), with: .color(OdyPalette.hex(0xF4EFFF)))
                     l.blendMode = .destinationOut
                     l.fill(Path(ellipseIn: CGRect(x: c.x - r * 0.4, y: c.y - r * 1.0, width: r * 1.6, height: r * 1.6)), with: .color(.black))
                 }
             }
-            let ground = RGB(hex: 0xF7E2A0).mixed(with: RGB(hex: 0x2B2660), night)
+            let ground = colors.bottom.mixed(with: RGB(hex: 0x000000), 0.15)
             context.fill(
                 Path(ellipseIn: CGRect(x: -size.width * 0.2, y: size.height * 0.83, width: size.width * 1.4, height: size.height * 0.34)),
                 with: .color(ground.color))

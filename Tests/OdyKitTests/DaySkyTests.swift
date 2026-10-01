@@ -36,4 +36,27 @@ struct DaySkyTests {
         #expect(abs(midnight.x - 0.5) < 0.001)
         #expect(DaySky.moon(atClockHour: 12) == nil)
     }
+
+    @Test func bodiesFadeAtTheHorizons() {
+        #expect(DaySky.sunOpacity(atClockHour: 6) == 0 && DaySky.sunOpacity(atClockHour: 18) == 0)
+        #expect(DaySky.sunOpacity(atClockHour: 12) == 1)
+        #expect(DaySky.moonOpacity(atClockHour: 18) == 0 && DaySky.moonOpacity(atClockHour: 6) == 0)
+        #expect(DaySky.moonOpacity(atClockHour: 0) == 1)
+    }
+
+    @Test func everythingIsContinuousThroughTheDay() {
+        func parts(_ h: Double) -> [Double] {
+            let g = DaySky.gradient(atClockHour: h)
+            return [
+                DaySky.sunOpacity(atClockHour: h), DaySky.moonOpacity(atClockHour: h), DaySky.night(atClockHour: h),
+                g.top.r, g.top.g, g.top.b, g.bottom.r, g.bottom.g, g.bottom.b,
+            ]
+        }
+        var previous = parts(0)
+        for i in 1...2400 {
+            let now = parts(Double(i) * 0.01)
+            for (a, b) in zip(previous, now) { #expect(abs(a - b) < 0.15) }
+            previous = now
+        }
+    }
 }
