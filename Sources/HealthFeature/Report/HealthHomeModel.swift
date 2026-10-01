@@ -180,6 +180,9 @@ public final class HealthHomeModel {
         await reload(replacing: true, regenerate: false)
     }
 
+    /// A detail page reads its month from the same store the day came from.
+    func historyLoader(calendar: Calendar = .current) -> HealthHistoryLoader { HealthHistoryLoader(source: source, calendar: calendar) }
+
     public static func reportState(for error: Error) -> Report {
         if error is URLError { return .offline }
         // Status 0 is no usable address: no computer is paired or configured.
