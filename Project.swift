@@ -78,6 +78,7 @@ let project = Project(
                 .target(name: "HealthFeature"),
                 .target(name: "OdyKit"),
                 .target(name: "WidgetKitShared"),
+                .target(name: "WidgetUI"),
                 .target(name: "NetworkingKit"),
                 .target(name: "MarkdownKit")
             ],
@@ -162,6 +163,7 @@ let project = Project(
         moduleTarget(name: "PhilharmonicFeature", dependencies: [.target(name: "Models")]),
         moduleTarget(name: "OdyKit"),
         moduleTarget(name: "WidgetKitShared"),
+        moduleTarget(name: "WidgetUI", dependencies: [.target(name: "WidgetKitShared"), .target(name: "OdyKit")]),
         .target(
             name: "WidgetKitSharedTests",
             destinations: .iOS,
