@@ -71,7 +71,7 @@ enum CategoryValue {
         case .activity:
             guard let steps = s.activity?.steps else { return nil }
             return String(
-                localized: "ios:health.value.steps", defaultValue: "\(steps.formatted()) steps",
+                localized: "ios:health.value.steps", defaultValue: "\(steps) steps",
                 comment: "Card value: today's step count.")
         case .recovery:
             guard let r = s.recovery else { return nil }

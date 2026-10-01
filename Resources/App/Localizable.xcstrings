@@ -8587,6 +8587,72 @@
         }
       }
     },
+    "ios:app.workspace.health" : {
+      "comment" : "Name of the Health workspace in the sidebar.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Health"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Health"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salud"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Santé"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salute"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ヘルスケア"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "건강"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saúde"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "健康"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "健康"
+          }
+        }
+      }
+    },
     "ios:app.workspace.philharmonic" : {
       "comment" : "Product name of the multi-agent workspace; never translated.",
       "extractionState" : "manual",
@@ -15033,67 +15099,163 @@
       }
     },
     "ios:chat.health.cups" : {
-      "comment" : "Health card in a chat: cups of water today.",
+      "comment" : "Health card in a chat: cups of water today; plural on the count.",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Gläser"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Glas"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Gläser"
+                }
+              }
+            }
           }
         },
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld cups"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld cup"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld cups"
+                }
+              }
+            }
           }
         },
         "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld vasos"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld vaso"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld vasos"
+                }
+              }
+            }
           }
         },
         "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld verres"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld verre"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld verres"
+                }
+              }
+            }
           }
         },
         "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld bicchieri"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld bicchiere"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld bicchieri"
+                }
+              }
+            }
           }
         },
         "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 杯"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 杯"
+                }
+              }
+            }
           }
         },
         "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld잔"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld잔"
+                }
+              }
+            }
           }
         },
         "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld copos"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld copo"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld copos"
+                }
+              }
+            }
           }
         },
         "zh-HK" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 杯"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 杯"
+                }
+              }
+            }
           }
         },
         "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 杯"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 杯"
+                }
+              }
+            }
           }
         }
       }
@@ -20048,6 +20210,72 @@
         }
       }
     },
+    "ios:health.ask.attachedWeek" : {
+      "comment" : "Detail page ask box: the category's last seven days go with the question. %@ is the category name.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ dieser Woche angehängt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This week's %@ attached"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ de esta semana adjunto"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ de la semaine joint"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ di questa settimana allegato"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今週の%@を添付済み"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이번 주 %@ 첨부됨"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ desta semana anexado"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已附上今個禮拜嘅%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已附上本週的%@"
+          }
+        }
+      }
+    },
     "ios:health.ask.body.water" : {
       "comment" : "Health body detail: suggested question.",
       "extractionState" : "manual",
@@ -20577,199 +20805,199 @@
       }
     },
     "ios:health.ask.suggestion.energy" : {
-      "comment" : "Health: suggested question.",
+      "comment" : "Health: suggested question about feeling tired today.",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Warum bin ich müde?"
+            "value" : "Warum bin ich heute müde?"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Why do I feel tired?"
+            "value" : "Why do I feel tired today?"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "¿Por qué me siento cansado?"
+            "value" : "¿Por qué estoy cansado hoy?"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pourquoi je me sens fatigué ?"
+            "value" : "Pourquoi je suis fatigué aujourd'hui ?"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Perché mi sento stanco?"
+            "value" : "Perché oggi sono stanco?"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "どうして疲れてるんだろう？"
+            "value" : "今日はどうして疲れてるんだろう？"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "왜 피곤할까?"
+            "value" : "오늘 왜 피곤하지?"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Por que estou cansado?"
+            "value" : "Por que estou cansado hoje?"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "點解我覺得咁攰？"
+            "value" : "點解我今日覺得咁攰？"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "我為什麼覺得累？"
+            "value" : "我今天為什麼覺得累？"
           }
         }
       }
     },
     "ios:health.ask.suggestion.sleep" : {
-      "comment" : "Health: suggested question.",
+      "comment" : "Health: suggested question about last night.",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wie habe ich diese Woche geschlafen?"
+            "value" : "Wie habe ich letzte Nacht geschlafen?"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "How did I sleep this week?"
+            "value" : "How did I sleep last night?"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "¿Cómo dormí esta semana?"
+            "value" : "¿Cómo dormí anoche?"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Comment j'ai dormi cette semaine ?"
+            "value" : "Comment j'ai dormi cette nuit ?"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Come ho dormito questa settimana?"
+            "value" : "Come ho dormito stanotte?"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "今週の睡眠はどうだった？"
+            "value" : "昨夜はよく眠れた？"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이번 주 잠은 어땠어?"
+            "value" : "어젯밤 잠은 어땠어?"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Como dormi esta semana?"
+            "value" : "Como dormi esta noite?"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "我今個禮拜瞓得點？"
+            "value" : "我琴晚瞓成點？"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "我這週睡得怎麼樣？"
+            "value" : "我昨晚睡得怎麼樣？"
           }
         }
       }
     },
     "ios:health.ask.suggestion.week" : {
-      "comment" : "Health: suggested question.",
+      "comment" : "Health: suggested question asking what to do today (key kept from an earlier wording).",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wie war meine Woche?"
+            "value" : "Was sollte ich heute tun?"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "How was my week?"
+            "value" : "What should I do today?"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "¿Qué tal mi semana?"
+            "value" : "¿Qué debería hacer hoy?"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Comment s'est passée ma semaine ?"
+            "value" : "Qu'est-ce que je devrais faire aujourd'hui ?"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Com'è andata la mia settimana?"
+            "value" : "Cosa dovrei fare oggi?"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "今週はどんな一週間だった？"
+            "value" : "今日は何をするといい？"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이번 주는 어땠어?"
+            "value" : "오늘은 뭘 하면 좋을까?"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Como foi minha semana?"
+            "value" : "O que devo fazer hoje?"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "我今個禮拜過得點？"
+            "value" : "我今日應該做咩好？"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "我這週過得怎麼樣？"
+            "value" : "我今天該做些什麼？"
           }
         }
       }
@@ -21963,133 +22191,133 @@
       }
     },
     "ios:health.noData.explain" : {
-      "comment" : "Health home: explains why there is no data.",
+      "comment" : "Health home: why there is no data, and where Health access is turned on (Settings path names as each language shows them).",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hier ist noch nichts. Für Schlaf braucht es eine Apple Watch oder den Schlafmodus; vielleicht darf Exodus Health auch nicht lesen."
+            "value" : "Hier ist noch nichts. Für Schlaf braucht es eine Apple Watch oder den Schlafmodus. Falls du den Health-Zugriff abgelehnt hast, schalte ihn in Einstellungen › Datenschutz & Sicherheit › Health › Exodus ein."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nothing here yet. Sleep needs an Apple Watch or a Sleep Focus; it may also be that Exodus isn't allowed to read Health."
+            "value" : "Nothing here yet. Sleep needs an Apple Watch or a Sleep Focus. If you declined Health access, turn it on in Settings › Privacy & Security › Health › Exodus."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aún no hay nada. El sueño necesita un Apple Watch o el modo Sueño; también puede que Exodus no tenga permiso para leer Salud."
+            "value" : "Aún no hay nada. El sueño necesita un Apple Watch o el modo Sueño. Si rechazaste el acceso a Salud, actívalo en Ajustes › Privacidad y seguridad › Salud › Exodus."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Rien pour l'instant. Le sommeil nécessite une Apple Watch ou le mode Sommeil ; il se peut aussi qu'Exodus n'ait pas accès à Santé."
+            "value" : "Rien pour l'instant. Le sommeil nécessite une Apple Watch ou le mode Sommeil. Si tu as refusé l'accès à Santé, active-le dans Réglages › Confidentialité et sécurité › Santé › Exodus."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ancora niente. Il sonno richiede un Apple Watch o la modalità Sonno; potrebbe anche darsi che Exodus non possa leggere Salute."
+            "value" : "Ancora niente. Il sonno richiede un Apple Watch o la modalità Sonno. Se hai rifiutato l'accesso a Salute, attivalo in Impostazioni › Privacy e sicurezza › Salute › Exodus."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "まだデータがありません。睡眠には Apple Watch か睡眠集中モードが必要です。Exodus にヘルスケアの読み取りが許可されていない可能性もあります。"
+            "value" : "まだデータがありません。睡眠には Apple Watch か睡眠集中モードが必要です。ヘルスケアへのアクセスを許可しなかった場合は、「設定 › プライバシーとセキュリティ › ヘルスケア › Exodus」でオンにしてください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "아직 데이터가 없어요. 수면 기록에는 Apple Watch나 수면 집중 모드가 필요해요. Exodus에 건강 앱 읽기 권한이 없을 수도 있어요."
+            "value" : "아직 데이터가 없어요. 수면 기록에는 Apple Watch나 수면 집중 모드가 필요해요. 건강 접근을 거부했다면 설정 › 개인정보 보호 및 보안 › 건강 › Exodus에서 켜 주세요."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ainda não há nada. O sono precisa de um Apple Watch ou do foco Sono; também pode ser que o Exodus não tenha permissão para ler o Saúde."
+            "value" : "Ainda não há nada. O sono precisa de um Apple Watch ou do foco Sono. Se você recusou o acesso ao Saúde, ative em Ajustes › Privacidade e Segurança › Saúde › Exodus."
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "呢度仲未有資料。睡眠要 Apple Watch 或者睡眠專注模式；亦可能係 Exodus 未有權讀取健康 App。"
+            "value" : "呢度仲未有資料。睡眠要 Apple Watch 或者睡眠專注模式。如果你拒絕咗健康 App 嘅權限，可以喺「設定 › 私隱與保安 › 健康 › Exodus」開返。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這裡還沒有資料。睡眠需要 Apple Watch 或睡眠專注模式；也可能是 Exodus 沒有讀取健康 App 的權限。"
+            "value" : "這裡還沒有資料。睡眠需要 Apple Watch 或睡眠專注模式。如果你拒絕了健康 App 的取用權限，請到「設定 › 隱私權與安全性 › 健康 › Exodus」開啟。"
           }
         }
       }
     },
-    "ios:health.noData.openSettings" : {
-      "comment" : "Health home: opens the Settings app.",
+    "ios:health.noData.openHealth" : {
+      "comment" : "Health home: opens the Health app (falls back to Settings).",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Einstellungen öffnen"
+            "value" : "Health-App öffnen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Open Settings"
+            "value" : "Open the Health app"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir Ajustes"
+            "value" : "Abrir la app Salud"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ouvrir Réglages"
+            "value" : "Ouvrir l'app Santé"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apri Impostazioni"
+            "value" : "Apri l'app Salute"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設定を開く"
+            "value" : "ヘルスケアを開く"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "설정 열기"
+            "value" : "건강 앱 열기"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir Ajustes"
+            "value" : "Abrir o app Saúde"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打開設定"
+            "value" : "打開健康 App"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打開設定"
+            "value" : "打開健康 App"
           }
         }
       }
@@ -22161,67 +22389,67 @@
       }
     },
     "ios:health.onboarding.body" : {
-      "comment" : "Health onboarding, step 1 body.",
+      "comment" : "Health onboarding, step 1 body: what stays on the phone and what may be sent.",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Schlaf-, Aktivitäts-, Herz- und Körperdaten bleiben auf diesem iPhone. Nur eine kurze tägliche Zusammenfassung geht an deinen Computer."
+            "value" : "Deine Gesundheitsdaten bleiben auf diesem iPhone. Eine kurze tägliche Zusammenfassung geht nur mit deiner Erlaubnis an den KI-Anbieter auf deinem Computer. Deine Fragen können die Zahlen des Tages enthalten – die kannst du entfernen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sleep, activity, heart and body data stay on this iPhone. Only a short daily summary is ever sent to your computer."
+            "value" : "Your health data stays on this iPhone. A short daily summary goes to the AI provider set up on your computer only if you allow it. Questions you ask can include the day's numbers, which you can remove."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Los datos de sueño, actividad, corazón y cuerpo se quedan en este iPhone. Solo se envía a tu ordenador un breve resumen diario."
+            "value" : "Tus datos de salud se quedan en este iPhone. Solo si lo permites se envía un breve resumen diario al proveedor de IA configurado en tu ordenador. Tus preguntas pueden incluir las cifras del día, que puedes quitar."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sommeil, activité, cœur et corps restent sur cet iPhone. Seul un court résumé quotidien est envoyé à ton ordinateur."
+            "value" : "Tes données de santé restent sur cet iPhone. Un court résumé quotidien n'est envoyé au fournisseur d'IA configuré sur ton ordinateur que si tu l'autorises. Tes questions peuvent inclure les chiffres du jour, que tu peux retirer."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "I dati su sonno, attività, cuore e corpo restano su questo iPhone. Al tuo computer arriva solo un breve riepilogo giornaliero."
+            "value" : "I tuoi dati sulla salute restano su questo iPhone. Un breve riepilogo giornaliero va al fornitore di IA configurato sul tuo computer solo se lo permetti. Le tue domande possono includere i numeri del giorno, che puoi togliere."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "睡眠、アクティビティ、心臓、体のデータはこの iPhone に残ります。コンピュータに送られるのは毎日の短い要約だけです。"
+            "value" : "ヘルスケアデータはこの iPhone に残ります。許可した場合のみ、毎日の短い要約をコンピュータで設定した AI プロバイダに送ります。質問にはその日の数値を添付できます（外すこともできます）。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "수면, 활동, 심장, 신체 데이터는 이 iPhone에만 남아요. 컴퓨터로는 하루 한 번 짧은 요약만 보내요."
+            "value" : "건강 데이터는 이 iPhone에 남아요. 허용한 경우에만 하루 한 번 짧은 요약을 컴퓨터에 설정된 AI 제공업체로 보내요. 질문에는 그날의 수치를 첨부할 수 있고, 뺄 수도 있어요."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dados de sono, atividade, coração e corpo ficam neste iPhone. Só um resumo diário curto vai para o seu computador."
+            "value" : "Seus dados de saúde ficam neste iPhone. Um resumo diário curto só vai para o provedor de IA configurado no seu computador se você permitir. Suas perguntas podem incluir os números do dia, que você pode remover."
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "睡眠、活動、心臟同身體資料都會留喺呢部 iPhone。淨係每日一份簡短摘要會傳去你部電腦。"
+            "value" : "你嘅健康資料會留喺呢部 iPhone。要你允許，先會將每日一份簡短摘要傳去你電腦設定好嘅 AI 供應商。你問嘅問題可以附上當日嘅數字，亦都可以剔走。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "睡眠、活動、心臟與身體資料都留在這部 iPhone 上。只有每日一份簡短摘要會傳到你的電腦。"
+            "value" : "你的健康資料會留在這部 iPhone 上。只有在你允許時，才會把每日一份簡短摘要傳給你電腦上設定的 AI 供應商。你提出的問題可以附上當天的數字，也可以移除。"
           }
         }
       }
@@ -23212,6 +23440,138 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ody 正在寫今天的小記…"
+          }
+        }
+      }
+    },
+    "ios:health.settings.menu" : {
+      "comment" : "Health toolbar menu, VoiceOver label.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Health-Optionen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Health options"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opciones de Salud"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Options Santé"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opzioni Salute"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ヘルスケアのオプション"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "건강 옵션"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opções de Saúde"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "健康選項"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "健康選項"
+          }
+        }
+      }
+    },
+    "ios:health.settings.notes" : {
+      "comment" : "Health menu toggle: send the day's summary to the AI provider for a written note.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tägliche Notizen schreiben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Write daily notes"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribir notas diarias"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écrire une note par jour"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scrivi note giornaliere"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎日のメモを書く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매일 메모 쓰기"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escrever notas diárias"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "寫每日短評"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撰寫每日短評"
           }
         }
       }
@@ -24273,67 +24633,163 @@
       }
     },
     "ios:health.value.cups" : {
-      "comment" : "Cups of water today (250 ml each).",
+      "comment" : "Cups of water (250 ml each); plural on the count.",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Gläser"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Glas"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Gläser"
+                }
+              }
+            }
           }
         },
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld cups"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld cup"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld cups"
+                }
+              }
+            }
           }
         },
         "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld vasos"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld vaso"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld vasos"
+                }
+              }
+            }
           }
         },
         "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld verres"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld verre"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld verres"
+                }
+              }
+            }
           }
         },
         "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld bicchieri"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld bicchiere"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld bicchieri"
+                }
+              }
+            }
           }
         },
         "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 杯"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 杯"
+                }
+              }
+            }
           }
         },
         "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld잔"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld잔"
+                }
+              }
+            }
           }
         },
         "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld copos"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld copo"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld copos"
+                }
+              }
+            }
           }
         },
         "zh-HK" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 杯"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 杯"
+                }
+              }
+            }
           }
         },
         "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 杯"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 杯"
+                }
+              }
+            }
           }
         }
       }
@@ -24537,67 +24993,163 @@
       }
     },
     "ios:health.value.steps" : {
-      "comment" : "Card value: today's step count (number pre-formatted).",
+      "comment" : "Card value: today's step count; plural on the count.",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ Schritte"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Schritt"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Schritte"
+                }
+              }
+            }
           }
         },
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ steps"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld step"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld steps"
+                }
+              }
+            }
           }
         },
         "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ pasos"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld paso"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld pasos"
+                }
+              }
+            }
           }
         },
         "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ pas"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld pas"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld pas"
+                }
+              }
+            }
           }
         },
         "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ passi"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld passo"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld passi"
+                }
+              }
+            }
           }
         },
         "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 歩"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 歩"
+                }
+              }
+            }
           }
         },
         "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@걸음"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld걸음"
+                }
+              }
+            }
           }
         },
         "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ passos"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld passo"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld passos"
+                }
+              }
+            }
           }
         },
         "zh-HK" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 步"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 步"
+                }
+              }
+            }
           }
         },
         "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 步"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 步"
+                }
+              }
+            }
           }
         }
       }
@@ -41653,72 +42205,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 次觀看"
-          }
-        }
-      }
-    },
-    "ios:app.workspace.health" : {
-      "comment" : "Name of the Health workspace in the sidebar.",
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Health"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Health"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Salud"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Santé"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Salute"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ヘルスケア"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "건강"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saúde"
-          }
-        },
-        "zh-HK" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "健康"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "健康"
           }
         }
       }
