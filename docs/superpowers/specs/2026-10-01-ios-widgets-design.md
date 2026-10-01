@@ -79,7 +79,7 @@ Each write that changes the snapshot calls `WidgetCenter.shared.reloadAllTimelin
 
 ### 2.5 Timeline
 - One entry per hour for the next 12 hours, starting now; policy `.atEnd`. Each entry carries the snapshot and its date.
-- The sky is `DaySky.gradient(atClockHour:)` at the entry's hour; ink is white when `DaySky.night(atClockHour:) >= 0.5`, the dark ink otherwise.
+- The sky is `DaySky.gradient(atClockHour:)` at the entry's hour; ink is white when the sky's top colour has a relative luminance (WCAG: sRGB → linear, 0.2126/0.7152/0.0722) below 0.18, the dark ink otherwise — the sky's own brightness, not `DaySky.night`, which still reads day while the dusk sky is already deep violet.
 - `health` is shown only when `health.day` is the entry's day; otherwise the health parts are hidden (never yesterday's numbers as today's).
 
 ## 3. Widgets

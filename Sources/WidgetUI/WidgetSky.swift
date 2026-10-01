@@ -1,15 +1,42 @@
 import OdyKit
 import SwiftUI
+import WidgetKit
 import WidgetKitShared
 
-/// Text on the sky: white at night, the dark ink by day, as `DaySky.night` decides.
+/// Text on the sky: white on a dark sky, the dark ink on a light one. Decided by the sky's own brightness, not by
+/// the night: at 19:00 the sky is already deep violet while `DaySky.night` is still under a half.
 public enum WidgetInk {
+    /// Where white and the dark ink are about as legible; both keep ≥ 3.8:1 through the hand-off minutes at dawn
+    /// and dusk, and ≥ 4.5:1 the rest of the day.
+    static let threshold = 0.18
+
     public static func isLight(at date: Date, calendar: Calendar) -> Bool {
-        DaySky.night(atClockHour: WidgetPresentation.clockHour(at: date, calendar: calendar)) >= 0.5
+        let top = DaySky.gradient(atClockHour: WidgetPresentation.clockHour(at: date, calendar: calendar)).top
+        return luminance(top) < threshold
     }
 
     static func color(at date: Date, calendar: Calendar) -> Color {
         isLight(at: date, calendar: calendar) ? .white : Color(red: 0.11, green: 0.10, blue: 0.09)
+    }
+
+    /// WCAG relative luminance.
+    static func luminance(_ c: RGB) -> Double {
+        func linear(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
+    }
+}
+
+/// Ody in full colour, or his outline where the Home Screen is tinted or clear and only one tone shows.
+struct WidgetOdy: View {
+    let expression: OdyExpression
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    var body: some View {
+        if renderingMode == .fullColor {
+            OdyFigure(expression: expression)
+        } else {
+            OdyBodyShape().stroke(lineWidth: 2.5).widgetAccentable()
+        }
     }
 }
 

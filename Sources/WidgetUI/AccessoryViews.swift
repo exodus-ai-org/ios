@@ -36,7 +36,7 @@ public struct TodayRectangularView: View {
         {
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: headline).font(.headline).lineLimit(1).widgetAccentable()
-                if let line = WidgetStrings.healthLine(health) {
+                if let line = WidgetStrings.healthLine(health, withGoal: true) {
                     Text(verbatim: line).font(.caption).lineLimit(2).privacySensitive()
                 }
             }

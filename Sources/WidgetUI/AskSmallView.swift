@@ -35,7 +35,7 @@ public struct AskSmallView: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.75)
                 Spacer(minLength: 0)
-                OdyFigure(expression: WidgetStrings.expression(health?.mood))
+                WidgetOdy(expression: WidgetStrings.expression(health?.mood))
                     .frame(width: 48, height: 54)
                     .accessibilityHidden(true)
             }
