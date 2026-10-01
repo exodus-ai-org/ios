@@ -53,6 +53,16 @@ matches nothing and still prints `** TEST SUCCEEDED **`, so look for a `Test run
 - `HealthFeature`: the Health workspace — reads Apple Health through `HealthDataSource`, builds the day's snapshot,
   asks the computer for a daily note (`POST /api/v1/health/summary`), and hands questions to Chat with the numbers
   attached. Design: [spec](docs/superpowers/specs/2026-10-01-health-workspace-design.md).
+- `WidgetKitShared`: what the app and its widgets share — the snapshot (`WidgetSnapshot`: up to three recent chat
+  titles and today's health glance, never a message) kept in the App Group `group.app.yancey.exodus`, the
+  `exodus://` links a widget opens (`DeepLink`: a new chat, pre-filled but never sent; a chat; Health's ask box)
+  and the rules an entry is drawn by. Design: [spec](docs/superpowers/specs/2026-10-01-ios-widgets-design.md).
+- `WidgetUI`: the widgets' views — the small and medium Home Screen widgets over the Health hero's sky at the
+  entry's hour, the two Lock Screen widgets, and Ody's outline on tinted screens.
+- `ExodusWidgets` (`Widgets/Sources`, embedded in the App): the widget extension — Ask (small, medium), Today (Lock
+  Screen) and the Ask control for Control Center and the Action button. It links only the two widget modules and
+  `OdyKit`, never `NetworkingKit` or the keychain: it reads the snapshot the App writes. Launch the App with
+  `-WidgetGallery` (DEBUG) to see every widget on fixtures; [device checklist](docs/widgets-device-checklist.md).
 - `PhilharmonicFeature`: placeholder for a later phase.
 - `App`: composition root, the drawer shell (`SideDrawer`, `AppShell`, and `DrawerPhysics` — the
   drawer's gesture, spring and rubber-band math, tested on its own) and the workspace list.
