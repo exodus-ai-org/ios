@@ -21,12 +21,12 @@ struct CategoryCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Label { Text(style.title) } icon: { Image(systemName: style.systemImage) }
                     .font(.caption.weight(.bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
                     .opacity(0.75)
                 Text(verbatim: CategoryValue.text(category, in: snapshot) ?? "—")
                     .font(.title3.weight(.heavy))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .contentTransition(.numericText())
                 if let line {
                     Text(verbatim: line).font(.caption2).opacity(0.75).lineLimit(2)

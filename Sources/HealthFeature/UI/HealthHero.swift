@@ -20,7 +20,7 @@ struct HealthHero: View {
     let stretch: CGFloat
     /// Bumped when a memory lands in the bindle: it bounces.
     let bindleBounce: Int
-    /// Where the bindle is, in the home's coordinate space, for the memory card's flight.
+    /// Where the bindle is, in the home's coordinate space, for the memory card's flight; `.zero` while it is hidden.
     @Binding var bindleAnchor: CGRect
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -193,6 +193,8 @@ private struct HeroScene: View, Animatable {
     let onPoke: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Where the bindle is drawn; reported as `bindleAnchor` only while it shows (hidden while Ody sleeps).
+    @State private var bindleFrame: CGRect = .zero
 
     nonisolated var animatableData: Double {
         get { hour }
@@ -225,8 +227,10 @@ private struct HeroScene: View, Animatable {
                 .frame(width: 40 * s, height: 68 * s)
                 .placed(x: 56 * s, y: 128 * s)
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(HealthCoordinateSpace.home)) } action: {
-                    bindleAnchor = $0
+                    bindleFrame = $0
+                    bindleAnchor = pose.asleep ? .zero : $0
                 }
+                .onChange(of: pose.asleep) { _, asleep in bindleAnchor = asleep ? .zero : bindleFrame }
                 .opacity(pose.asleep ? 0 : 1)
                 .animation(.easeInOut(duration: 0.3), value: pose.asleep)
             OdyView(
@@ -265,6 +269,12 @@ private struct HeroScene: View, Animatable {
         }
         .frame(width: 300 * s, height: 236 * s, alignment: .topLeading)
         .clipped()
+        // The sky carries on above the hero, under the status bar and into a pull's overscroll.
+        .background(alignment: .top) {
+            DaySky.gradient(atClockHour: hour).top.color
+                .frame(height: 1000)
+                .offset(y: -999)
+        }
     }
 
     private var dateLine: String {

@@ -6,6 +6,8 @@ import SwiftUI
 /// Ask about the day. The question goes to a new chat with the numbers attached (removable).
 struct AskComposer: View {
     let suggestions: [LocalizedStringResource]
+    /// Whether there is anything to attach; the block itself is only built when sending.
+    let canAttach: Bool
     let attachment: () -> String?
     let onSend: (String) -> Void
 
@@ -13,8 +15,12 @@ struct AskComposer: View {
     @State private var attach = true
     @FocusState private var focused: Bool
 
-    init(suggestions: [LocalizedStringResource], attachment: @escaping () -> String?, onSend: @escaping (String) -> Void) {
+    init(
+        suggestions: [LocalizedStringResource], canAttach: Bool = true, attachment: @escaping () -> String?,
+        onSend: @escaping (String) -> Void
+    ) {
         self.suggestions = suggestions
+        self.canAttach = canAttach
         self.attachment = attachment
         self.onSend = onSend
     }
@@ -35,7 +41,7 @@ struct AskComposer: View {
                 .scrollClipDisabled()
                 .transition(.opacity)
             }
-            if attach, focused || !text.isEmpty, attachment() != nil {
+            if attach, canAttach, focused || !text.isEmpty {
                 Button { withAnimation(.smooth) { attach = false } } label: {
                     Label("ios:health.ask.attached", systemImage: "xmark.circle.fill").font(.caption.weight(.semibold))
                 }
