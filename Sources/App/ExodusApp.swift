@@ -51,6 +51,8 @@ struct ExodusApp: App {
                     MessageGalleryView().chatTone(toneModel)
                 } else if SettingsGalleryLaunch.isEnabled {
                     SettingsGalleryView()
+                } else if OdyGalleryLaunch.isEnabled {
+                    OdyGalleryView()
                 } else if CardPrototypesLaunch.isEnabled {
                     CardPrototypesView(embedded: false).chatTone(toneModel)
                 } else {
