@@ -81,14 +81,16 @@ private struct RecentColumn: View {
                 ForEach(Array(chats.enumerated()), id: \.element.id) { index, chat in
                     if index > 0 { Divider().overlay(ink.opacity(0.12)) }
                     Link(destination: DeepLink.chat(id: chat.id).url) {
-                        // The time keeps its width; the title gives way.
+                        // The time keeps its width, in its shortest words; the title gives way.
                         HStack(spacing: 6) {
                             Text(verbatim: chat.title).font(.caption.weight(.semibold)).foregroundStyle(ink)
                                 .lineLimit(1).privacySensitive()
                             Spacer(minLength: 0)
-                            Text(chat.updatedAt, format: .relative(presentation: .named))
+                            Text(chat.updatedAt, format: .relative(presentation: .named, unitsStyle: .narrow))
                                 .font(.caption2).foregroundStyle(ink.opacity(0.55))
                                 .lineLimit(1).fixedSize()
+                                // At the largest sizes the title, not the time, gets the room it gains.
+                                .dynamicTypeSize(...DynamicTypeSize.large)
                         }
                         .padding(.vertical, 6)
                     }

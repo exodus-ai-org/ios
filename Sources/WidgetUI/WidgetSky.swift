@@ -56,8 +56,9 @@ public struct WidgetSky: View {
         ZStack {
             LinearGradient(colors: [sky.top.color, sky.bottom.color], startPoint: .top, endPoint: .bottom)
             if DaySky.night(atClockHour: hour) >= 0.5 {
+                // In the margins (14pt of the small widget's 170), so a star never reads as a stop after a word.
                 Canvas { context, size in
-                    for (x, y) in [(0.72, 0.12), (0.88, 0.3), (0.58, 0.36), (0.94, 0.08)] {
+                    for (x, y) in [(0.62, 0.04), (0.8, 0.055), (0.93, 0.03), (0.975, 0.22)] {
                         let r = CGRect(x: x * size.width, y: y * size.height, width: 2, height: 2)
                         context.fill(Path(ellipseIn: r), with: .color(.white.opacity(0.8)))
                     }
