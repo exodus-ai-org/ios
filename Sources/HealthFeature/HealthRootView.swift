@@ -2,10 +2,6 @@ import Models
 import NetworkingKit
 import SwiftUI
 
-enum HealthFeatureInfo {
-    static let name = "Health"
-}
-
 /// The Health workspace: onboarding the first time, then the daily report. Owns the home model; reloads when the app
 /// comes back to the foreground (the health store is only readable while unlocked).
 public struct HealthRootView: View {
