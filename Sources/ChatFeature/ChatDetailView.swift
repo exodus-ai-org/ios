@@ -77,6 +77,7 @@ public struct ChatDetailView: View {
                 .environment(\.runApprovals, viewModel.approvals)
                 .environment(\.memoryFoot, viewModel.memoryFoot)
                 .environment(\.placePhotoLoader, objects.placePhotos)
+                .environment(\.artifactSandbox, objects.artifactSandbox)
                 .environment(\.readAloud, viewModel.readAloud)
                 .environment(\.markdownAskAbout, MarkdownAskAction { [viewModel] text in viewModel.askAbout(text) })
             }
@@ -130,6 +131,7 @@ public struct ChatDetailView: View {
             .environment(\.runApprovals, viewModel.approvals)
             .environment(\.memoryFoot, viewModel.memoryFoot)
             .environment(\.placePhotoLoader, objects.placePhotos)
+            .environment(\.artifactSandbox, objects.artifactSandbox)
         }
         .onChange(of: viewModel.choiceCount) {
             AccessibilityNotification.Announcement(CompareText.chosen).post()
@@ -353,6 +355,8 @@ final class ChatScreenObjects {
     let researchJobs: DeepResearchStore
     /// Places photos through the computer's proxy, over the same paired session.
     let placePhotos: PlacePhotoLoader
+    /// The computer's artifact sandbox page, through the same paired session.
+    let artifactSandbox: ArtifactSandboxSource
 
     init(
         chatId: String, title: String?, apiClient: APIClient, streamManager: ChatStreamManager,
@@ -364,6 +368,7 @@ final class ChatScreenObjects {
         computerUseRemote = ComputerUseRemote(apiClient: apiClient)
         researchJobs = DeepResearchStore(apiClient: apiClient)
         placePhotos = PlacePhotoLoader(apiClient: apiClient)
+        artifactSandbox = ArtifactSandboxSource(apiClient: apiClient)
     }
 }
 

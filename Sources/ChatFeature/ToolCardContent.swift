@@ -22,6 +22,7 @@ enum ToolCardContent: Equatable, Sendable {
     case imageGeneration(ImageGenerationCardModel)
     case mapItinerary(MapItineraryCardState)
     case memoryUpdate(MemoryUpdateResult)
+    case artifact(ArtifactResult)
 
     init(
         toolName: String, arguments: JSONValue?, payload: JSONValue?, isError: Bool = false, errorText: String? = nil,
@@ -73,6 +74,7 @@ enum ToolCardContent: Equatable, Sendable {
                 }
             case "map_itinerary": result(MapItineraryDetails.self).map { .mapItinerary(.itinerary(MapItineraryCardModel($0))) }
             case "update_memory": result(MemoryUpdateResult.self).map(Self.memoryUpdate)
+            case "create_artifact": result(ArtifactResult.self).map(Self.artifact)
             default: ToolCardContent.untyped
             }
         self = content ?? .undecodable
@@ -88,6 +90,7 @@ enum ToolCardContent: Equatable, Sendable {
     var imageGeneration: ImageGenerationCardModel? { if case .imageGeneration(let value) = self { value } else { nil } }
     var mapItinerary: MapItineraryCardState? { if case .mapItinerary(let value) = self { value } else { nil } }
     var memoryUpdate: MemoryUpdateResult? { if case .memoryUpdate(let value) = self { value } else { nil } }
+    var artifact: ArtifactResult? { if case .artifact(let value) = self { value } else { nil } }
 
     /// A failed call of a tool whose card draws failures: its path (the weather's place) and error text. Any other
     /// tool's failure has no content (it is a failed step in the timeline).

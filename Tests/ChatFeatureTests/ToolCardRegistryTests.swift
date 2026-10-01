@@ -144,14 +144,22 @@ struct ToolCardRegistryTests {
         #expect(try #require(issue).message == "Unknown tool name: summon_llama")
     }
 
-    @Test("a known tool without a card of its own yet is generic and quiet")
-    func knownWithoutCard() {
-        let card = ToolCard(id: "t", toolName: "create_artifact", kind: .artifact, payload: value(#"{"id":"d1"}"#))
-        guard case .generic(let issue) = ToolCardRegistry.resolve(card) else {
-            Issue.record("create_artifact has no card yet")
+    @Test("create_artifact draws the artifact card; one without its id is generic and reported")
+    func artifactCard() throws {
+        let payload = value(#"{"type":"artifact","artifactId":"a1","chatId":"c1","title":"Chart","code":"x"}"#)
+        let card = ToolCard(id: "t", toolName: "create_artifact", kind: .artifact, payload: payload)
+        guard case .card = ToolCardRegistry.resolve(card) else {
+            Issue.record("create_artifact drew no card")
             return
         }
-        #expect(issue == nil)
+        #expect(card.content.artifact == ArtifactResult(artifactId: "a1", chatId: "c1", title: "Chart", code: "x"))
+
+        let broken = ToolCard(id: "u", toolName: "create_artifact", kind: .artifact, payload: value(#"{"id":"d1"}"#))
+        guard case .generic(let issue) = ToolCardRegistry.resolve(broken) else {
+            Issue.record("an unreadable create_artifact drew a card")
+            return
+        }
+        #expect(try #require(issue).attributes == ["tool": "create_artifact", "kind": "artifact"])
     }
 
     @Test("terminal, the file cards, weather, image generation, the map, computer use and deep research are registered; which draw failures and running calls")
@@ -160,7 +168,7 @@ struct ToolCardRegistryTests {
             Set(ToolCardRegistry.cards.keys)
                 == [
                     "terminal", "read_file", "write_file", "edit_file", "weather", "image_generation", "map_itinerary",
-                    "computer_use", "deep_research", "update_memory",
+                    "computer_use", "deep_research", "update_memory", "create_artifact",
                 ])
         #expect(ToolCardRegistry.drawsFailures(for: "image_generation"))
         #expect(ToolCardRegistry.drawsPending(for: "image_generation"))
@@ -171,7 +179,7 @@ struct ToolCardRegistryTests {
         #expect(!ToolCardRegistry.drawsPending(for: "map_itinerary"))
         #expect(ToolCardRegistry.hasCard(for: "deep_research"))
         #expect(!ToolCardRegistry.drawsPending(for: "deep_research"))
-        #expect(!ToolCardRegistry.hasCard(for: "create_artifact"))
+        #expect(ToolCardRegistry.hasCard(for: "create_artifact"))
         #expect(
             ["read_file", "write_file", "edit_file", "weather", "map_itinerary", "deep_research"].allSatisfy(
                 ToolCardRegistry.drawsFailures(for:)))

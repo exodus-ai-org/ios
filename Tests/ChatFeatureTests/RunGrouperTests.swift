@@ -306,7 +306,7 @@ struct RunGrouperStepsTests {
             turns(
                 group([
                     user(r1),
-                    toolResult("t1", r1, callId: "c1", name: "create_artifact", details: #"{"type":"artifact","id":"x"}"#),
+                    toolResult("t1", r1, callId: "c1", name: "create_artifact", details: #"{"type":"artifact","artifactId":"x","title":"T","code":"c"}"#),
                     toolResult("t2", r1, callId: "c2", name: "create_artifact", details: #"{"type":"other"}"#),
                     toolResult("t3", r1, callId: "c3", name: "map_itinerary", details: #"{"type":"mapItinerary"}"#),
                     toolResult("t4", r1, callId: "c4", name: "deep_research", details: #"{"id":"d"}"#),

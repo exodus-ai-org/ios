@@ -19,6 +19,7 @@ enum ToolCardRegistry {
             ComputerUseCard(model: $0)
         },
         "deep_research": ToolCardBuilder(\.deepResearch, drawsFailures: true) { DeepResearchCard(model: $0) },
+        "create_artifact": ToolCardBuilder(\.artifact) { ArtifactCard(artifact: $0) },
         // Drawn at the run's foot (`MemoryChangeStrip`), never in the timeline: the entry exists so an unreadable result
         // falls back to the generic card and is reported.
         "update_memory": ToolCardBuilder(\.memoryUpdate) { _ in EmptyView() },

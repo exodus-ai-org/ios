@@ -74,10 +74,6 @@ enum ToolPresentation {
         if ToolCardRegistry.hasCard(for: card.toolName), !ToolCardRegistry.canDraw(card) {
             return ("Unreadable \(tool) card shown as the generic card", ["tool": tool, "kind": "\(card.kind)"])
         }
-        // No card of its own yet, but its result has a shape; one without it is reported like an unreadable card.
-        if card.toolName == "create_artifact", card.kind != .artifact, !card.isError {
-            return ("Unreadable \(tool) card shown as the generic card", ["tool": tool, "kind": "\(card.kind)"])
-        }
         return nil
     }
 
