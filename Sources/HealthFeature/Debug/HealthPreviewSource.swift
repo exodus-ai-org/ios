@@ -90,10 +90,12 @@ public struct PreviewSummaryService: HealthSummaryService {
         self.delay = delay
     }
 
+    /// Says what `HealthPreviewSource` holds: last night 5 h 52 min asleep (deep as usual), 5,840 steps, HRV 38 against
+    /// a normal of 44, three cups.
     public static let sample = HealthSummary(
         headline: "A little under-slept",
-        summary: "You slept **6 h 12 min** last night, with less deep sleep than usual, and your HRV is a bit low. Skip the hard workout today — a **20-minute walk** after lunch is plenty.",
-        categories: .init(sleep: "Less deep sleep than usual.", activity: "2,160 steps to go.", recovery: "HRV 14 % under your normal.", body: "Three cups so far."),
+        summary: "You slept **5 h 52 min** last night, shorter than usual, and your HRV is a bit low. Skip the hard workout today — a **20-minute walk** after lunch is plenty.",
+        categories: .init(sleep: "A short night, but the deep sleep held up.", activity: "2,160 steps to go.", recovery: "HRV 14 % under your normal.", body: "Three cups so far."),
         memorySuggestion: .init(section: "profile", key: "weekday-sleep", summary: "On weekdays you usually sleep about six hours."))
 
     public func summary(for snapshot: HealthSnapshot) async throws -> HealthSummary {
