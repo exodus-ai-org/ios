@@ -10,7 +10,8 @@ enum HealthCoordinateSpace {
 
 /// The home's head: the sky at an hour, and Ody living through it. Drag right to go back through last night — the
 /// sky darkens, stars come out, Ody lies on its pillow and sinks deeper in deep sleep; let go and it carries on, or
-/// tap "Back to now". Laid out in the prototype's 300 × 236 space and scaled by its width.
+/// tap "Back to now". Laid out in the prototype's 300 × 236 space and scaled by its width; the top `HeroScene.lift`
+/// of that sky runs up under the toolbar, so the title sits just below it.
 struct HealthHero: View {
     let day: HealthDay?
     let mood: OdyMood
@@ -92,7 +93,7 @@ struct HealthHero: View {
                         .transition(.scale(0.8).combined(with: .opacity))
                     }
                 }
-                .padding(.top, 44 * s)
+                .padding(.top, (44 - HeroScene.lift) * s)
                 .padding(.trailing, 14)
                 .animation(.spring(Self.spring), value: atNow)
             }
@@ -110,13 +111,13 @@ struct HealthHero: View {
                             hour = scrub.hour(from: dragStart, translation: t, width: proxy.size.width)
                             look = CGVector(
                                 dx: max(-1, min(1, (location.x - 150 * s) / (150 * s))),
-                                dy: max(-1, min(1, (location.y - 150 * s) / (120 * s))))
+                                dy: max(-1, min(1, (location.y - (150 - HeroScene.lift) * s) / (120 * s))))
                         }
                         noteStage()
                     },
                     onEnd: { t, v in release(translation: t, velocity: v, width: proxy.size.width) }))
         }
-        .aspectRatio(300 / 236, contentMode: .fit)
+        .aspectRatio(300 / (236 - HeroScene.lift), contentMode: .fit)
         .sensoryFeedback(.selection, trigger: stageTick)
         .sensoryFeedback(.selection, trigger: atNow) { _, home in home }
     }
@@ -177,6 +178,10 @@ struct HealthHero: View {
 
 /// The hero drawn at an hour. `Animatable` on the hour, so a spring back to now repaints the sky every frame.
 private struct HeroScene: View, Animatable {
+    /// How much of the prototype's sky is drawn above the hero's frame, under the status bar and toolbar. The
+    /// prototype had room for a bar above the title; in the app that room is the toolbar's.
+    static let lift: CGFloat = 40
+
     var hour: Double
     let scrub: DayScrub
     let mood: OdyMood
@@ -210,6 +215,7 @@ private struct HeroScene: View, Animatable {
         let pose = HeroPose.at(hour: settled, scrub: scrub, mood: mood, night: night, today: today)
         let nightFactor = DaySky.night(atClockHour: hour)
         let settle: Animation? = reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 1)
+        let top = Self.lift
         ZStack(alignment: .topLeading) {
             DaySkyView(clockHour: hour)
             // Pillow, under Ody while asleep.
@@ -275,11 +281,13 @@ private struct HeroScene: View, Animatable {
         }
         .frame(width: 300 * s, height: 236 * s, alignment: .topLeading)
         .clipped()
-        // The sky carries on above the hero, under the status bar and into a pull's overscroll.
+        // The hero is the scene less its top `lift`, which runs up under the toolbar.
+        .frame(width: 300 * s, height: (236 - top) * s, alignment: .bottom)
+        // The sky carries on above that, under the status bar and into a pull's overscroll.
         .background(alignment: .top) {
             DaySky.gradient(atClockHour: hour).top.color
                 .frame(height: 1000)
-                .offset(y: -999)
+                .offset(y: -999 - top * s)
         }
     }
 
