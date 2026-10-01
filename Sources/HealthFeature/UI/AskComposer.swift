@@ -66,7 +66,9 @@ struct AskComposer: View {
                     .focused($focused)
                     .submitLabel(.send)
                     .onSubmit { send(text) }
-                    .padding(.vertical, 6)
+                    // As tall as the send button, so one line (and the placeholder) centres on it; more lines grow
+                    // the field upward while the button stays at the bottom.
+                    .frame(minHeight: 30, alignment: .center)
                 Button { send(text) } label: {
                     Image(systemName: "arrow.up").font(.body.weight(.bold)).frame(width: 30, height: 30)
                 }
