@@ -51,9 +51,21 @@ struct HealthContextCard: View {
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let category = object["category"] as? String
         {
-            return [Chip(systemImage: "heart.text.square", text: category)]
+            return [Chip(systemImage: "heart.text.square", text: categoryTitle(category))]
         }
         return [Chip(systemImage: "heart.text.square", text: "Health")]  // l10n:ignore: product name
+    }
+
+    /// A week block names its category by its wire name; show Health's own title for it. The keys are Health's
+    /// (`ios:health.category.*`), read here by name since Chat does not depend on that module.
+    static func categoryTitle(_ wire: String) -> String {
+        switch wire {
+        case "sleep": String(localized: "ios:health.category.sleep", defaultValue: "Sleep")
+        case "activity": String(localized: "ios:health.category.activity", defaultValue: "Activity")
+        case "recovery": String(localized: "ios:health.category.recovery", defaultValue: "Heart & recovery")
+        case "body": String(localized: "ios:health.category.body", defaultValue: "Body & mood")
+        default: wire
+        }
     }
 
     var body: some View {

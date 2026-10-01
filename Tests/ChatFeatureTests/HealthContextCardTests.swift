@@ -13,6 +13,11 @@ struct HealthContextCardTests {
     @Test func aWeekAttachmentIsOneChip() {
         let chips = HealthContextCard.chips(json: #"{"category":"sleep","days":[]}"#)
         #expect(chips.count == 1)
+        #expect(chips.first?.text != "sleep")  // Health's title, not the wire name
+    }
+
+    @Test func anUnknownCategoryShowsAsSent() {
+        #expect(HealthContextCard.categoryTitle("naps") == "naps")
     }
 
     @Test func unreadableJSONStillShowsACard() {
