@@ -196,24 +196,66 @@ enum SceneArt {
     }
 }
 
+/// `SceneArt` parsed once per scene, so drawing a frame touches only ready `Path`s.
+struct ParsedLayer {
+    var path: Path
+    var paint: ArtLayer.Paint
+    var front: Bool
+    var rotate: Double
+    var pivot: CGPoint
+    var motion: ArtLayer.Motion
+    /// Where in the loop a `.float` layer starts, so a scene's z's and bubbles don't rise in lockstep.
+    var phaseOffset: Double
+}
+
+enum ParsedArt {
+    private static let cache: [OdyScene: [ParsedLayer]] = Dictionary(
+        uniqueKeysWithValues: OdyScene.allCases.map { ($0, parse($0)) })
+
+    static func layers(_ scene: OdyScene) -> [ParsedLayer] { cache[scene] ?? [] }
+
+    /// Whether anything in the scene moves on its own; still scenes skip the frame clock.
+    static func loops(_ scene: OdyScene) -> Bool { layers(scene).contains { $0.motion != .none } }
+
+    private static func parse(_ scene: OdyScene) -> [ParsedLayer] {
+        let art = SceneArt.layers(scene)
+        let floats = max(1, art.filter { $0.motion == .float }.count)
+        var floatIndex = 0
+        return art.map { layer in
+            var offset = 0.0
+            if layer.motion == .float {
+                offset = Double(floatIndex) / Double(floats)
+                floatIndex += 1
+            }
+            return ParsedLayer(
+                path: SVGPath.path(layer.d), paint: layer.paint, front: layer.front, rotate: layer.rotate,
+                pivot: layer.pivot, motion: layer.motion, phaseOffset: offset)
+        }
+    }
+}
+
 /// A scene, square, at any size. Ody in it is alive (breathing, blinking); looping props move unless Reduce Motion.
 public struct OdySceneView: View {
     let scene: OdyScene
     let showsBackground: Bool
     let pokable: Bool
+    private let seed: UInt64
+    private let loops: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(_ scene: OdyScene, showsBackground: Bool = true, pokable: Bool = false) {
         self.scene = scene
         self.showsBackground = showsBackground
         self.pokable = pokable
+        self.seed = UInt64(OdyScene.allCases.firstIndex(of: scene)! + 1)
+        self.loops = ParsedArt.loops(scene)
     }
 
     public var body: some View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
             let s = side / 150
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || !loops)) { timeline in
                 let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
                 ZStack(alignment: .topLeading) {
                     if showsBackground { scene.background }
@@ -232,7 +274,7 @@ public struct OdySceneView: View {
     private func ody(scale s: CGFloat) -> some View {
         let p = scene.placement
         let r = p.bodyRect
-        return OdyView(expression: scene.expression, pokable: pokable, seed: UInt64(OdyScene.allCases.firstIndex(of: scene)! + 1))
+        return OdyView(expression: scene.expression, pokable: pokable, seed: seed)
             .frame(width: r.width * s, height: r.height * s)
             .rotationEffect(
                 .degrees(p.tilt),
@@ -243,7 +285,7 @@ public struct OdySceneView: View {
     private func art(front: Bool, scale s: CGFloat, time t: TimeInterval) -> some View {
         Canvas { context, _ in
             context.scaleBy(x: s, y: s)
-            for layer in SceneArt.layers(scene) where layer.front == front {
+            for layer in ParsedArt.layers(scene) where layer.front == front {
                 var ctx = context
                 if layer.rotate != 0 || layer.motion == .wiggle {
                     let wiggle = layer.motion == .wiggle ? sin(t * 2 * .pi / 0.6) * 4 : 0
@@ -252,11 +294,11 @@ public struct OdySceneView: View {
                     ctx.translateBy(x: -layer.pivot.x, y: -layer.pivot.y)
                 }
                 if layer.motion == .float {
-                    let phase = (t / 2).truncatingRemainder(dividingBy: 1)
+                    let phase = (t / 2 + layer.phaseOffset).truncatingRemainder(dividingBy: 1)
                     ctx.translateBy(x: phase * 6, y: -phase * 10)
                     ctx.opacity = 1 - phase * 0.8
                 }
-                let path = SVGPath.path(layer.d)
+                let path = layer.path
                 switch layer.paint {
                 case .fill(let hex, let opacity):
                     ctx.fill(path, with: .color(OdyPalette.hex(hex, opacity)))

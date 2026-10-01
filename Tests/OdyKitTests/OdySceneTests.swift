@@ -21,6 +21,26 @@ struct OdySceneTests {
         }
     }
 
+    @Test func theParsedCacheHoldsEveryLayer() {
+        for scene in OdyScene.allCases {
+            let parsed = ParsedArt.layers(scene)
+            #expect(parsed.count == SceneArt.layers(scene).count, "\(scene)")
+            #expect(parsed.allSatisfy { !$0.path.isEmpty }, "\(scene)")
+        }
+    }
+
+    @Test func onlyScenesWithLoopingPropsTick() {
+        let still: Set<OdyScene> = [.rested, .active, .noData, .permission, .offline]
+        for scene in OdyScene.allCases {
+            #expect(ParsedArt.loops(scene) == !still.contains(scene), "\(scene)")
+        }
+    }
+
+    @Test func floatingPropsAreStaggered() {
+        let phases = ParsedArt.layers(.hydrating).filter { $0.motion == .float }.map(\.phaseOffset)
+        #expect(Set(phases).count == phases.count)
+    }
+
     @Test @MainActor func everySceneRendersSmallAndLarge() {
         for scene in OdyScene.allCases {
             for side in [44.0, 300.0] {
