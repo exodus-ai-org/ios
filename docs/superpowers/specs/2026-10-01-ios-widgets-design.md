@@ -1,6 +1,7 @@
 # iPhone widgets — design
 
 Date: 2026-10-01 · Status: approved in brainstorming, awaiting spec review
+Amended 2026-10-01 (plan): the health suggestion opens Health's ask box, which already attaches the day and never auto-sends.
 Repo: `exodus-ios` only (no desktop change)
 Prototypes: `.superpowers/brainstorm/39692-1790855953/content/` (`widget-direction.html`, `lockscreen-control.html`)
 
@@ -69,7 +70,8 @@ Each write that changes the snapshot calls `WidgetCenter.shared.reloadAllTimelin
 | Link | App does |
 |---|---|
 | `exodus://chat/new` | Chat workspace, fresh empty chat, composer focused |
-| `exodus://chat/new?prompt=<text>` | Same, composer pre-filled; **if the prompt came from the health suggestion** (`&health=1`) today's health block is attached as Health's ask does; never sent automatically |
+| `exodus://chat/new?prompt=<text>` | Same, composer pre-filled; never sent automatically. |
+| `exodus://health?ask=<text>` | Health workspace, its ask box pre-filled; today's data attached as Health's ask attaches it (per consent); never sent automatically. |
 | `exodus://chat/<id>` | Opens that chat; an unknown id falls back to the chat list |
 | `exodus://health` | Health workspace |
 
@@ -89,7 +91,7 @@ Each write that changes the snapshot calls `WidgetCenter.shared.reloadAllTimelin
 - Bottom: "Ask Exodus…" capsule with a marigold send glyph. Whole widget → `chat/new`.
 
 ### 3.2 Home medium
-- Left column: health line; the health suggestion chip (→ `chat/new?prompt=…&health=1`); one general chip (→ `chat/new?prompt=…`, a fixed localized "Plan my day"); the Ask capsule (→ `chat/new`).
+- Left column: health line; the health suggestion chip (→ `health?ask=…`); one general chip (→ `chat/new?prompt=…`, a fixed localized "Plan my day"); the Ask capsule (→ `chat/new`).
 - Right column: "Recent" and up to 3 chats (title + relative time) each → `chat/<id>`; none: "No chats yet".
 - Uses `Link` per element; the widget background → `chat/new`.
 

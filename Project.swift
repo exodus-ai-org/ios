@@ -72,6 +72,7 @@ let project = Project(
                 .target(name: "PhilharmonicFeature"),
                 .target(name: "HealthFeature"),
                 .target(name: "OdyKit"),
+                .target(name: "WidgetKitShared"),
                 .target(name: "NetworkingKit"),
                 .target(name: "MarkdownKit")
             ],
@@ -155,6 +156,16 @@ let project = Project(
         ),
         moduleTarget(name: "PhilharmonicFeature", dependencies: [.target(name: "Models")]),
         moduleTarget(name: "OdyKit"),
+        moduleTarget(name: "WidgetKitShared"),
+        .target(
+            name: "WidgetKitSharedTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "\(bundleIdRoot).WidgetKitSharedTests",
+            deploymentTargets: deploymentTargets,
+            buildableFolders: ["Tests/WidgetKitSharedTests"],
+            dependencies: [.target(name: "WidgetKitShared")]
+        ),
         .target(
             name: "OdyKitTests",
             destinations: .iOS,
