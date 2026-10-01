@@ -33,4 +33,11 @@ struct BlinkScheduleTests {
             #expect(abs(Breath.scale(at: t) - 1) <= 0.0121)
         }
     }
+
+    @Test func stretchAndTirednessAreClamped() {
+        #expect(OdyView.clampedStretch(0.1) == 0.5)
+        #expect(OdyView.clampedStretch(1.4) == 1.4)
+        #expect(OdyView.clampedTiredness(-1) == 0)
+        #expect(OdyView.clampedTiredness(3) == 1)
+    }
 }

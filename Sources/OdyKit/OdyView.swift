@@ -46,6 +46,7 @@ public struct OdyView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pokes = 0
+    @State private var squash: CGFloat = 1
 
     public init(
         expression: OdyExpression, look: CGVector = .zero, tiredness: CGFloat = 0, stretch: CGFloat = 1,
@@ -60,30 +61,43 @@ public struct OdyView: View {
         self.blink = BlinkSchedule(seed: seed)
     }
 
+    /// A pull can't flip or collapse Ody; below half height `1 / sqrt` would also blow up.
+    static func clampedStretch(_ v: CGFloat) -> CGFloat { max(v, 0.5) }
+    static func clampedTiredness(_ v: CGFloat) -> CGFloat { min(max(v, 0), 1) }
+
     public var body: some View {
-        TimelineView(.animation(paused: reduceMotion)) { timeline in
+        let figure = TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            let cap = 1 - 0.38 * tiredness
+            let cap = 1 - 0.38 * Self.clampedTiredness(tiredness)
             let open = reduceMotion ? cap : blink.openness(at: t) * cap
             let breath = reduceMotion ? 1 : Breath.scale(at: t)
+            let stretch = Self.clampedStretch(stretch)
             OdyFigure(expression: expression, openness: open, look: look)
                 .scaleEffect(x: 1 / sqrt(stretch), y: stretch * breath, anchor: .bottom)
         }
-        .keyframeAnimator(initialValue: CGFloat(1), trigger: pokes) { content, squash in
-            content.scaleEffect(x: 1 + (1 - squash) * 0.8, y: squash, anchor: .bottom)
-        } keyframes: { _ in
-            KeyframeTrack {
-                CubicKeyframe(0.8, duration: 0.06)
-                SpringKeyframe(1, duration: 0.7, spring: Spring(response: 0.4, dampingRatio: 0.45))
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard pokable else { return }
-            if !reduceMotion { pokes += 1 }
-            onPoke?()
-        }
-        .sensoryFeedback(.impact(flexibility: .soft), trigger: pokes)
+        .scaleEffect(x: 1 + (1 - squash) * 0.8, y: squash, anchor: .bottom)
         .accessibilityHidden(true)
+
+        if pokable {
+            figure
+                .contentShape(Rectangle())
+                .onTapGesture(perform: poke)
+                .sensoryFeedback(.impact(flexibility: .soft), trigger: pokes)
+        } else {
+            figure
+        }
+    }
+
+    /// The haptic always fires; Reduce Motion only drops the squash. A new poke retargets the spring from wherever
+    /// the last one is, so it never pops back to rest first.
+    private func poke() {
+        pokes += 1
+        onPoke?()
+        guard !reduceMotion else { return }
+        withAnimation(.linear(duration: 0.06)) {
+            squash = 0.8
+        } completion: {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.45)) { squash = 1 }
+        }
     }
 }
