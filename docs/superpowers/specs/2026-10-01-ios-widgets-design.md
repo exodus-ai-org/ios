@@ -72,7 +72,7 @@ Each write that changes the snapshot calls `WidgetCenter.shared.reloadAllTimelin
 | `exodus://chat/new` | Chat workspace, fresh empty chat, composer focused |
 | `exodus://chat/new?prompt=<text>` | Same, composer pre-filled; never sent automatically. |
 | `exodus://health?ask=<text>` | Health workspace, its ask box pre-filled; today's data attached as Health's ask attaches it (per consent); never sent automatically. |
-| `exodus://chat/<id>` | Opens that chat; an unknown id falls back to the chat list |
+| `exodus://chat/<id>` | Opens that chat; an unknown id opens a chat that shows the server's error, and the drawer still lists the rest |
 | `exodus://health` | Health workspace |
 
 `DeepLink` builds and parses these; anything else (unknown host/path, prompt over 500 characters, empty id) parses to `nil` and the app ignores it. Handled by `.onOpenURL` in `AppShell`; links arriving while the unlock or pairing gate is up wait until it is passed.
@@ -115,6 +115,6 @@ Each write that changes the snapshot calls `WidgetCenter.shared.reloadAllTimelin
 
 ## 5. Testing and verification
 - **`WidgetKitSharedTests`**: snapshot round trip and tolerant decode; store write/read, missing and corrupt file; every `DeepLink` round trip and rejections (unknown path, long prompt, empty id); timeline entries per hour, ink flip at dusk and dawn, stale health hidden; mood rules.
-- **App tests**: the writer writes/clears on chat list change, report, consent withdrawn, unpair; unchanged snapshot not rewritten; `AppShell` deep-link routing (new, pre-filled not sent, `exodus://health?ask=…` opens Health's ask box pre-filled and never sent, unknown id → list, waits behind the gates).
+- **App tests**: the writer writes/clears on chat list change, report, consent withdrawn, unpair; unchanged snapshot not rewritten; `AppShell` deep-link routing (new, pre-filled not sent, `exodus://health?ask=…` opens Health's ask box pre-filled and never sent, unknown id → the chat shows the server's error, waits behind the gates).
 - **Simulator**: a DEBUG `-WidgetGallery` page rendering every family on fixture snapshots at 07:00, 12:00, 18:30, 23:00, the empty state, dark mode and AX5; screenshots to `.superpowers/widget-*.png`. Then the real widgets on the simulator Home Screen, tapping each link.
 - **Device (user)**: add to Home and Lock Screen; chat or refresh Health and see the widget update; Control Center and Action button open a new chat.

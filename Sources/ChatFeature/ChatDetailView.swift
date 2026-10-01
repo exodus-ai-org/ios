@@ -43,14 +43,16 @@ public struct ChatDetailView: View {
     private let onInitialMessageSent: (() -> Void)?
     /// A prompt handed over from a widget: put in the composer, never sent by itself.
     private let initialDraft: String?
+    private let onInitialDraftUsed: (() -> Void)?
 
     public init(
         chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
         serverConfig: ServerConfigStore, initialMessage: String? = nil, onInitialMessageSent: (() -> Void)? = nil,
-        initialDraft: String? = nil
+        initialDraft: String? = nil, onInitialDraftUsed: (() -> Void)? = nil
     ) {
         self.title = title
         self.initialDraft = initialDraft
+        self.onInitialDraftUsed = onInitialDraftUsed
         self.initialMessage = initialMessage
         self.onInitialMessageSent = onInitialMessageSent
         makeObjects = {
@@ -153,7 +155,11 @@ public struct ChatDetailView: View {
                 onInitialMessageSent?()
                 await viewModel.sendInitial(initialMessage)
             }
-            if let initialDraft { viewModel.applyDraft(initialDraft) }
+            if let initialDraft {
+                // Handed over now: the chat screen is made again on a later visit, and must not fill it again.
+                viewModel.applyDraft(initialDraft)
+                onInitialDraftUsed?()
+            }
         }
         // Apart from `onAppear`, which waits out a turn it re-attaches to.
         .task(id: viewModel.hasLoadedHistory) { await viewModel.loadMemoryUsage() }

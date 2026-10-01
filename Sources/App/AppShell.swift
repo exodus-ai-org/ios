@@ -116,8 +116,6 @@ struct AppShell: View {
         .onChange(of: scenePhase) {
             if scenePhase == .active { Task { await toneModel?.refresh(apiClient: apiClient) } }
         }
-        // The chat screen is made again when the workspace comes back to it: a prompt already used must not return.
-        .onChange(of: workspace) { if workspace != .chat { draft = nil } }
         // Initial too: a link that arrived behind the unlock or pairing gate is opened once the shell appears.
         .onChange(of: pendingLink.link, initial: true) {
             guard let link = pendingLink.take() else { return }
@@ -134,7 +132,8 @@ struct AppShell: View {
                 streamManager: streamManager, serverConfig: serverConfig,
                 initialMessage: pendingAsk?.chatId == activeChat.id ? pendingAsk?.text : nil,
                 onInitialMessageSent: { pendingAsk = nil },
-                initialDraft: draft?.chatId == activeChat.id ? draft?.text : nil
+                initialDraft: draft?.chatId == activeChat.id ? draft?.text : nil,
+                onInitialDraftUsed: { draft = nil }
             )
             // A different chat is a different view model.
             .id(activeChat.id)
