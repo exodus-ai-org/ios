@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Models
 import NetworkingKit
@@ -100,16 +101,68 @@ enum ArtifactSandboxRoute {
         charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
 }
 
-/// Serves `exodus-artifact://sandbox/…` from the computer, one request per file, through `ArtifactSandboxSource`.
-/// A failure of the page itself is reported (before WebKit hears of it), so the preview can say why it fell back.
+/// The sandbox build's assets, kept on disk: a chat with a few artifacts loads the same megabytes of script for each,
+/// and the build names every one by its content (the computer serves them `immutable`), so a path read once is that
+/// file for good. Only `assets/` without a query is kept — never the page, which names the build's assets, and never
+/// a dev server's modules, which change under the same path. Files are named by the path's digest, so no path can
+/// reach outside the directory. The system may empty Caches whenever it likes; a miss is just a fetch.
+struct ArtifactSandboxCache: Sendable {
+    let directory: URL
+
+    static let shared = ArtifactSandboxCache(
+        directory: URL.cachesDirectory.appending(path: "ArtifactSandbox", directoryHint: .isDirectory))
+
+    /// The file name for a request's response, or nil when it is not kept.
+    static func key(for request: ArtifactSandboxRoute.Request) -> String? {
+        let path = request.path
+        guard request.query.isEmpty, path.hasPrefix(ArtifactSandboxRoute.apiPrefix + "assets/"),
+            path != ArtifactSandboxRoute.pageAPIPath, !isHTML(path: path)
+        else { return nil }
+        return SHA256.hash(data: Data(path.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// A page by its name or by what the computer called it: never kept, whatever its path.
+    static func isHTML(path: String? = nil, contentType: String? = nil) -> Bool {
+        let lower = path?.lowercased() ?? ""
+        return lower.hasSuffix(".html") || lower.hasSuffix(".htm")
+            || (contentType?.lowercased().hasPrefix("text/html") ?? false)
+    }
+
+    func read(_ key: String) async -> FetchedFile? {
+        guard let type = try? String(contentsOf: typeURL(key), encoding: .utf8),
+            let data = try? Data(contentsOf: dataURL(key))
+        else { return nil }
+        return FetchedFile(data: data, contentType: type.isEmpty ? nil : type)
+    }
+
+    func write(_ file: FetchedFile, for key: String) async {
+        guard !Self.isHTML(contentType: file.contentType) else { return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // The type last: a read needs both, so a write cut short is a miss, not half a file.
+        guard (try? file.data.write(to: dataURL(key), options: .atomic)) != nil else { return }
+        try? Data((file.contentType ?? "").utf8).write(to: typeURL(key), options: .atomic)
+    }
+
+    private func dataURL(_ key: String) -> URL { directory.appending(path: key, directoryHint: .notDirectory) }
+    private func typeURL(_ key: String) -> URL { directory.appending(path: key + ".type", directoryHint: .notDirectory) }
+}
+
+/// Serves `exodus-artifact://sandbox/…` from the computer, one request per file, through `ArtifactSandboxSource` —
+/// a built asset from `ArtifactSandboxCache` once it has been read. A failure of the page itself is reported (before
+/// WebKit hears of it), so the preview can say why it fell back.
 @MainActor
 final class ArtifactSchemeHandler: NSObject, WKURLSchemeHandler {
     private let fetch: ArtifactSandboxSource.FetchFile
+    private let cache: ArtifactSandboxCache?
     private let onPageFailure: (Error) -> Void
     private var running: [ObjectIdentifier: Task<Void, Never>] = [:]
 
-    init(fetch: @escaping ArtifactSandboxSource.FetchFile, onPageFailure: @escaping (Error) -> Void) {
+    init(
+        fetch: @escaping ArtifactSandboxSource.FetchFile, cache: ArtifactSandboxCache? = .shared,
+        onPageFailure: @escaping (Error) -> Void
+    ) {
         self.fetch = fetch
+        self.cache = cache
         self.onPageFailure = onPageFailure
     }
 
@@ -121,12 +174,22 @@ final class ArtifactSchemeHandler: NSObject, WKURLSchemeHandler {
         let key = ObjectIdentifier(urlSchemeTask)
         let isPage = request.path == ArtifactSandboxRoute.pageAPIPath
         let fetch = fetch
+        let cache = cache
+        let cacheKey = ArtifactSandboxCache.key(for: request)
         running[key] = Task { [weak self] in
             let result: Result<FetchedFile, Error>
-            do {
-                result = .success(try await fetch(request.path, request.query))
-            } catch {
-                result = .failure(error)
+            if let cache, let cacheKey, let cached = await cache.read(cacheKey) {
+                result = .success(cached)
+            } else {
+                do {
+                    let file = try await fetch(request.path, request.query)
+                    if let cache, let cacheKey {
+                        Task.detached(priority: .utility) { await cache.write(file, for: cacheKey) }
+                    }
+                    result = .success(file)
+                } catch {
+                    result = .failure(error)
+                }
             }
             // Stopped meanwhile: WebKit raises if a stopped task is answered.
             guard let self, self.running.removeValue(forKey: key) != nil else { return }
@@ -175,6 +238,30 @@ enum ArtifactPreviewEvent: Equatable {
     case timedOut
     /// No source to load from (outside a chat), or no code to render.
     case unavailable
+    /// The artifact's height in points (CSS pixels), as the sandbox measured it after a render or a change.
+    case resized(CGFloat)
+
+    /// What the bridge passed on from the sandbox, as an event; nil for anything else.
+    static func from(message body: Any) -> ArtifactPreviewEvent? {
+        guard let body = body as? [String: Any], let type = body["type"] as? String else { return nil }
+        switch type {
+        case "artifact-sandbox-ready":
+            return .sandboxReady
+        case "artifact-sandbox-rendered":
+            return .rendered
+        case "artifact-sandbox-error":
+            return .renderFailed(body["message"] as? String)
+        case "artifact-sandbox-size":
+            guard let number = body["height"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
+                return nil
+            }
+            let height = number.doubleValue
+            guard height.isFinite, height >= 0 else { return nil }
+            return .resized(CGFloat(height))
+        default:
+            return nil
+        }
+    }
 }
 
 /// The preview's decisions, apart from the web view so they can be tested. The first fallback is final; an error
@@ -190,7 +277,7 @@ enum ArtifactPreviewRules {
             return .fallback(.renderFailed(message))
         case .rendered:
             return .rendered
-        case .sandboxReady:
+        case .sandboxReady, .resized:
             return phase
         case .pageFailed(let status):
             guard phase == .loading else { return phase }
@@ -216,16 +303,25 @@ enum ArtifactPreviewRules {
 
 // MARK: - The web view
 
+/// How the artifact stands: a card in the chat, as on the desktop, or a page of its own, full screen.
+enum ArtifactLayout: Equatable {
+    /// In the chat: the page does not scroll — the chat does, through it — and is as tall as the card makes it.
+    case card
+    /// Full screen: the outermost card loses its frame, and the page scrolls.
+    case page
+}
+
 /// The desktop's own sandbox page in a `WKWebView`, served through `ArtifactSchemeHandler` and handed the code the way
 /// the desktop's card hands it to its iframe: on `artifact-sandbox-ready`, a `theme` and a `render` message. The page
 /// is its own top-level window here, so its `window.parent` is itself; a script in a world of our own hears what it
-/// tells its parent and passes `ready` / `rendered` / `error` on. Nothing leaves but sandbox requests: a navigation
-/// elsewhere is cancelled, a new window refused, and a content rule list blocks every other load.
+/// tells its parent and passes `ready` / `rendered` / `error` / `size` on. Nothing leaves but sandbox requests: a
+/// navigation elsewhere is cancelled, a new window refused, and a content rule list blocks every other load.
 struct ArtifactWebView: UIViewRepresentable {
     let source: ArtifactSandboxSource
     let code: String
     let artifactId: String
     let colorScheme: ColorScheme
+    var layout: ArtifactLayout = .page
     let onEvent: (ArtifactPreviewEvent) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onEvent: onEvent) }
@@ -235,6 +331,7 @@ struct ArtifactWebView: UIViewRepresentable {
         coordinator.code = code
         coordinator.artifactId = artifactId
         coordinator.theme = Self.theme(colorScheme)
+        coordinator.layout = layout
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -254,9 +351,21 @@ struct ArtifactWebView: UIViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
-        // Opaque, with no colour of its own: what shows past the page's end (the room over the home indicator, an
-        // overscroll) is then the page's own background, which follows its theme.
-        webView.scrollView.contentInsetAdjustmentBehavior = .automatic
+        switch layout {
+        case .page:
+            // Opaque, with no colour of its own: what shows past the page's end (the room over the home indicator, an
+            // overscroll) is then the page's own background, which follows its theme.
+            webView.scrollView.contentInsetAdjustmentBehavior = .automatic
+        case .card:
+            // A vertical drag is the chat's: with the page's own scrolling off, the list's pan takes it. Taps still
+            // reach the artifact. Clear until the page paints, so the card shows through while it loads.
+            webView.scrollView.isScrollEnabled = false
+            webView.scrollView.bounces = false
+            webView.scrollView.contentInsetAdjustmentBehavior = .never
+            webView.isOpaque = false
+            webView.backgroundColor = .clear
+            webView.scrollView.backgroundColor = .clear
+        }
         #if DEBUG
         webView.isInspectable = true
         #endif
@@ -286,18 +395,19 @@ struct ArtifactWebView: UIViewRepresentable {
         static let world = WKContentWorld.world(name: "exodus-artifact-bridge")
         static let handlerName = "exodusArtifact"
 
-        /// Listens for what the sandbox posts to its parent (here, itself) and passes on the three messages the
-        /// preview acts on: their type, and an error's message as text.
+        /// Listens for what the sandbox posts to its parent (here, itself) and passes on the four messages the
+        /// preview acts on: their type, an error's message as text, a size's height as a number.
         static let bridgeScript = """
             window.addEventListener('message', function (event) {
               if (event.source !== window) return;
               var data = event.data;
               if (!data || typeof data.type !== 'string') return;
               if (data.type !== 'artifact-sandbox-ready' && data.type !== 'artifact-sandbox-rendered'
-                && data.type !== 'artifact-sandbox-error') return;
+                && data.type !== 'artifact-sandbox-error' && data.type !== 'artifact-sandbox-size') return;
               window.webkit.messageHandlers.exodusArtifact.postMessage({
                 type: data.type,
-                message: typeof data.message === 'string' ? data.message.slice(0, 2000) : null
+                message: typeof data.message === 'string' ? data.message.slice(0, 2000) : null,
+                height: typeof data.height === 'number' && isFinite(data.height) ? data.height : null
               });
             });
             """
@@ -320,6 +430,7 @@ struct ArtifactWebView: UIViewRepresentable {
         var code = ""
         var artifactId = ""
         var theme = "light"
+        var layout: ArtifactLayout = .page
         var loading: Task<Void, Never>?
         private var isReady = false
 
@@ -327,10 +438,17 @@ struct ArtifactWebView: UIViewRepresentable {
             self.onEvent = onEvent
         }
 
+        /// Compiled once per launch: a chat with several artifacts makes a web view for each.
+        private static var compiledRules: WKContentRuleList?
+
         func load() {
             loading = Task { [weak self] in
-                let rules = try? await WKContentRuleListStore.default().compileContentRuleList(
-                    forIdentifier: "exodus-artifact-offline", encodedContentRuleList: Self.offlineRules)
+                var rules = Self.compiledRules
+                if rules == nil {
+                    rules = try? await WKContentRuleListStore.default().compileContentRuleList(
+                        forIdentifier: "exodus-artifact-offline", encodedContentRuleList: Self.offlineRules)
+                    Self.compiledRules = rules
+                }
                 guard let self, !Task.isCancelled, let webView = self.webView else { return }
                 // Fail closed: without the rules the page could load from anywhere.
                 guard let rules else {
@@ -351,10 +469,10 @@ struct ArtifactWebView: UIViewRepresentable {
         /// The desktop card's messages (`sendToIframe`) and the page layout, posted from our world to the page's window.
         private func post(render: Bool) {
             var script = "window.postMessage({ type: 'theme', theme }, '*');"
-            // A page of its own, not a card in a chat: the sandbox drops the outermost card's frame. A computer
-            // without page layout ignores the message.
             if render {
-                script += " window.postMessage({ type: 'layout', layout: 'page' }, '*');"
+                // A page of its own, not a card in a chat: the sandbox drops the outermost card's frame. A computer
+                // without page layout ignores the message. In the chat the sandbox's default, the card, stays.
+                if layout == .page { script += " window.postMessage({ type: 'layout', layout: 'page' }, '*');" }
                 script += " window.postMessage({ type: 'render', code, artifactId }, '*');"
             }
             webView?.callAsyncJavaScript(
@@ -365,18 +483,11 @@ struct ArtifactWebView: UIViewRepresentable {
         // MARK: WKScriptMessageHandler
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
-            switch type {
-            case "artifact-sandbox-ready":
+            guard let event = ArtifactPreviewEvent.from(message: message.body) else { return }
+            onEvent(event)
+            if event == .sandboxReady {
                 isReady = true
-                onEvent(.sandboxReady)
                 post(render: true)
-            case "artifact-sandbox-rendered":
-                onEvent(.rendered)
-            case "artifact-sandbox-error":
-                onEvent(.renderFailed(body["message"] as? String))
-            default:
-                break
             }
         }
 

@@ -128,6 +128,177 @@ struct ArtifactPreviewTests {
         #expect(ArtifactPreviewRules.displayMessage(String(repeating: "a", count: 400))?.count == 301)
     }
 
+    @Test("a resize does not change how the render went")
+    func resizeKeepsPhase() {
+        #expect(run([.resized(300)]) == .loading)
+        #expect(run([.rendered, .resized(300)]) == .rendered)
+    }
+
+    // MARK: The bridge's messages
+
+    @Test("the sandbox's messages read as events; anything else is ignored")
+    func parsesMessages() {
+        #expect(ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-ready"]) == .sandboxReady)
+        #expect(ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-rendered"]) == .rendered)
+        #expect(
+            ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-error", "message": "boom"])
+                == .renderFailed("boom"))
+        #expect(
+            ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-error", "message": NSNull()])
+                == .renderFailed(nil))
+        #expect(ArtifactPreviewEvent.from(message: ["type": "theme"]) == nil)
+        #expect(ArtifactPreviewEvent.from(message: "artifact-sandbox-ready") == nil)
+        #expect(ArtifactPreviewEvent.from(message: ["kind": "artifact-sandbox-ready"]) == nil)
+    }
+
+    @Test("a size is its height in points; one without a usable height is ignored")
+    func parsesSize() {
+        #expect(ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-size", "height": 312]) == .resized(312))
+        #expect(
+            ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-size", "height": 98.5]) == .resized(98.5))
+        #expect(ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-size", "height": NSNull()]) == nil)
+        #expect(ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-size", "height": "300"]) == nil)
+        #expect(ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-size", "height": -1]) == nil)
+        #expect(ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-size", "height": Double.nan]) == nil)
+        #expect(ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-size", "height": true]) == nil)
+        #expect(ArtifactPreviewEvent.from(message: ["type": "artifact-sandbox-size"]) == nil)
+    }
+
+    // MARK: The asset cache
+
+    private func cacheKey(_ url: String) -> String? {
+        request(url).flatMap(ArtifactSandboxCache.key(for:))
+    }
+
+    @Test("a built asset is kept, under a flat name that is the same for the same path")
+    func cachesAssets() throws {
+        let key = try #require(cacheKey("exodus-artifact://sandbox/assets/artifacts-CN-2EpYa.js"))
+        #expect(key.count == 64)
+        #expect(key.allSatisfy { $0.isHexDigit })
+        #expect(cacheKey("exodus-artifact://sandbox/assets/artifacts-CN-2EpYa.js") == key)
+        #expect(cacheKey("exodus-artifact://sandbox/assets/useControlled-b4vTsN15.css") != key)
+    }
+
+    @Test(
+        "the page, any HTML, a dev server's module and a request with a query are never kept",
+        arguments: [
+            "exodus-artifact://sandbox/src/renderer/sub-apps/artifacts/index.html",
+            "exodus-artifact://sandbox/assets/page.html",
+            "exodus-artifact://sandbox/assets/PAGE.HTM",
+            "exodus-artifact://sandbox/src/renderer/sub-apps/artifacts/main.tsx",
+            "exodus-artifact://sandbox/@vite/client",
+            "exodus-artifact://sandbox/assets/a.js?v=1",
+        ])
+    func doesNotCache(_ url: String) {
+        #expect(request(url) != nil)
+        #expect(cacheKey(url) == nil)
+    }
+
+    @Test("a key cannot leave the cache's directory, whatever the path")
+    func keyIsFlat() {
+        let key = ArtifactSandboxCache.key(
+            for: .init(path: ArtifactSandboxRoute.apiPrefix + "assets/../../../etc/passwd", query: []))
+        #expect(key.map { !$0.contains("/") && !$0.contains(".") } == true)
+    }
+
+    @Test("a kept file reads back with its type; HTML is not written; a miss is nil")
+    func cacheRoundTrip() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "artifact-cache-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = ArtifactSandboxCache(directory: directory)
+        let js = FetchedFile(data: Data("export {}".utf8), contentType: "text/javascript; charset=utf-8")
+        await cache.write(js, for: "a")
+        #expect(await cache.read("a") == js)
+        await cache.write(FetchedFile(data: Data("<p>".utf8), contentType: "text/html; charset=utf-8"), for: "b")
+        #expect(await cache.read("b") == nil)
+        #expect(await cache.read("missing") == nil)
+        let bare = FetchedFile(data: Data([1, 2]), contentType: nil)
+        await cache.write(bare, for: "c")
+        #expect(await cache.read("c") == bare)
+    }
+
+    // MARK: The card in the chat
+
+    private func inline(_ events: [ArtifactPreviewEvent]) -> ArtifactInlineState {
+        var state = ArtifactInlineState()
+        for event in events { state.apply(event) }
+        return state
+    }
+
+    @Test("the card holds a placeholder's room until the artifact says how tall it is")
+    func placeholderHeight() {
+        #expect(inline([]).height == ArtifactInlineState.placeholderHeight)
+        // The sandbox's "waiting" line, before the render, does not size the card.
+        #expect(inline([.resized(20)]).height == ArtifactInlineState.placeholderHeight)
+        #expect(inline([.rendered, .resized(312.2)]).height == 313)
+    }
+
+    @Test("the height stays within the limits; past the top it fades")
+    func clampsHeight() {
+        let tall = inline([.rendered, .resized(900)])
+        #expect(tall.height == ArtifactInlineState.maxHeight)
+        #expect(tall.overflows)
+        let exact = inline([.rendered, .resized(ArtifactInlineState.maxHeight)])
+        #expect(!exact.overflows)
+        #expect(inline([.rendered, .resized(0)]).height == ArtifactInlineState.minHeight)
+    }
+
+    @Test("a new web view loads again at the height the card had; a fallback stays")
+    func reloadKeepsHeight() {
+        var state = inline([.rendered, .resized(300)])
+        state.reload()
+        #expect(state.phase == .loading)
+        #expect(state.height == 300)
+        state.apply(.resized(10))
+        #expect(state.height == 300)
+        var failed = inline([.pageFailed(status: 404)])
+        failed.reload()
+        #expect(failed.phase == .fallback(.outdatedComputer))
+    }
+
+    @Test("full screen is offered unless the card knows it would not show")
+    func offersFullScreen() {
+        #expect(inline([]).offersFullScreen)
+        #expect(inline([.rendered]).offersFullScreen)
+        #expect(!inline([.pageFailed(status: nil)]).offersFullScreen)
+        #expect(!inline([.renderFailed("x")]).offersFullScreen)
+        // It rendered, then threw on a tap: full screen starts it afresh.
+        #expect(inline([.rendered, .renderFailed("x")]).offersFullScreen)
+    }
+
+    @Test("only a few web views live at once; a freed place goes to the first card waiting")
+    func liveSlots() {
+        var slots = ArtifactLiveSlots(limit: 2)
+        let ids = (0..<4).map { _ in UUID() }
+        ids.forEach { slots.want($0) }
+        #expect(slots.holders == [ids[0], ids[1]])
+        #expect(slots.waiting == [ids[2], ids[3]])
+        slots.want(ids[0])
+        #expect(slots.holders.count == 2)
+        slots.drop(ids[0])
+        #expect(slots.holders == [ids[1], ids[2]])
+        slots.drop(ids[3])
+        #expect(slots.waiting.isEmpty)
+        slots.drop(UUID())
+        #expect(slots.holders == [ids[1], ids[2]])
+    }
+
+    @Test("near the screen loads, far lets go, and between keeps what it has")
+    func proximity() {
+        let visible = CGRect(x: 0, y: 1000, width: 400, height: 800)
+        func at(_ y: CGFloat) -> ArtifactProximity {
+            ArtifactProximity.of(card: CGRect(x: 0, y: y, width: 400, height: 300), visible: visible)
+        }
+        #expect(at(1200) == .near)
+        #expect(at(1700) == .near)
+        #expect(at(2100) == .near)  // 300 below
+        #expect(at(2600) == .between)  // 800 below
+        #expect(at(3100) == .far)  // 1300 below
+        #expect(at(300) == .near)  // 400 above
+        #expect(at(-1000) == .far)
+        #expect(ArtifactProximity.of(card: .zero, visible: nil) == .near)
+    }
+
     @Test("create_artifact's result reads its id, chat, title and code; one without an id is not an artifact")
     func decodesResult() throws {
         let json = try JSONDecoder().decode(

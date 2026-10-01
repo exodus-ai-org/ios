@@ -4,11 +4,11 @@ import Models
 import NetworkingKit
 import SwiftUI
 
-/// The artifact card, and its preview against a sandbox build on disk instead of a computer:
+/// The artifact card, live in the reply, and full screen, against a sandbox build on disk instead of a computer:
 /// `-ArtifactSandboxDir <renderer build dir>` serves `exodus-artifact://sandbox/…` from that directory (a desktop
 /// `vite build` of `vite.renderer.config.mts`; the Simulator reads the Mac's disk). Without it every request is a 404,
-/// so Preview shows the "update Exodus on your computer" state. `-ArtifactPreviewOpen ok|broken` opens the preview of
-/// the working or the broken sample at launch.
+/// so the cards say to update Exodus on the computer. `-ArtifactPreviewOpen ok|broken` opens the working or the broken
+/// sample full screen at launch.
 struct ProtoArtifactSection: View {
     @State private var opened: ArtifactResult?
 
@@ -16,12 +16,12 @@ struct ProtoArtifactSection: View {
         VStack(alignment: .leading, spacing: 28) {
             UserBubble(text: "Chart our weekly active users against signups.")
             ProtoInReply(
-                state: "Done · Preview renders it with the computer's sandbox", header: "Worked for 9 sec",
+                state: "Done · the computer's sandbox renders it in the card", header: "Worked for 9 sec",
                 answer: "Here is the chart: signups lead active users by about a week."
             ) {
                 ToolCardView(card: Self.card(ProtoArtifactFixtures.working))
             }
-            ProtoInReply(state: "Code that does not render · Preview falls back") {
+            ProtoInReply(state: "Code that does not render · the card says to view it on the computer") {
                 ToolCardView(card: Self.card(ProtoArtifactFixtures.broken))
             }
         }
