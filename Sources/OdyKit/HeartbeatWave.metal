@@ -2,7 +2,7 @@
 #include <SwiftUI/SwiftUI_Metal.h>
 using namespace metal;
 
-// HeartbeatWave.swift's ECG, sampled per pixel: a glowing trace, brightest at its leading edge, scrolling at bpm.
+// HeartbeatWave.swift's ECG, sampled per pixel: a glowing trace scrolling at bpm, fading in from the left.
 
 static float bump(float x, float c, float w, float h) {
     float d = (x - c) / w;
@@ -24,11 +24,14 @@ static float ecg(float phase) {
     float yBefore = size.y * (0.6 - 0.45 * ecg(phase - perPixel));
     float yAfter = size.y * (0.6 - 0.45 * ecg(phase + perPixel));
     float slope = (yAfter - yBefore) * 0.5;
-    float d = abs(position.y - y) / sqrt(1.0 + slope * slope);
+    float dy = abs(position.y - y);
+    float d = dy / sqrt(1.0 + slope * slope);
+    // The glow takes only half the compensation, or it pinches into dark bands beside the spike.
+    float dGlow = dy / sqrt(1.0 + 0.25 * slope * slope);
     float core = smoothstep(2.0, 0.0, d);
-    float glow = exp(-d * d / 60.0) * 0.45;
+    float glow = exp(-dGlow * dGlow / 60.0) * 0.45;
     // Fade in from the left edge so the trace reads as moving toward the right.
     float edge = smoothstep(0.0, 0.25, position.x / size.x);
     float a = clamp(core + glow, 0.0, 1.0) * edge;
-    return half4(color.rgb * a, a);
+    return color * half(a);
 }
