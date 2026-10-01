@@ -47,4 +47,71 @@ struct HealthHistoryTests: Sendable {
         let text = try HealthContext.compose(h, question: "q")
         #expect(text.hasPrefix("```exodus-health\n{\"category\":\"activity\""))
     }
+
+    func at(_ d: Date, _ minutes: Int) -> Date { d.addingTimeInterval(Double(minutes) * 60) }
+
+    /// The week a sleep question carries has each night's stages and the time of waking.
+    @Test func sleepWeekHasStagesAndWake() async throws {
+        let fake = FakeHealthSource()
+        let nights = (0..<3).flatMap { o -> [SleepSample] in
+            let d = day(-o)
+            return [
+                SleepSample(start: at(d, -60), end: d, stage: .deep, source: "w"),
+                SleepSample(start: d, end: at(d, 300), stage: .core, source: "w"),
+                SleepSample(start: at(d, 300), end: at(d, 310), stage: .awake, source: "w"),
+                SleepSample(start: at(d, 310), end: at(d, 360), stage: .rem, source: "w"),
+            ]
+        }
+        await fake.set { $0.sleep = nights }
+        let data = try await HealthHistoryLoader(source: fake, calendar: cal).load(.sleep, now: TestClock.now)
+        let h = HealthHistory.lastWeek(.sleep, from: data, calendar: cal, now: TestClock.now)
+        let last = try #require(h.days.last)
+        #expect(last.values["asleepHours"] == 410.0 / 60)
+        #expect(last.values["deepMin"] == 60)
+        #expect(last.values["remMin"] == 50)
+        #expect(last.values["awakeMin"] == 10)
+        #expect(last.wake == "06:00")
+        #expect(h.days.first?.wake == nil)
+    }
+
+    @Test func activityWeekHasExercise() async throws {
+        let fake = FakeHealthSource()
+        await fake.set {
+            $0.sums[.steps] = [DayValue(day: TestClock.today, value: 4000)]
+            $0.sums[.exerciseMin] = [DayValue(day: TestClock.today, value: 25)]
+        }
+        let data = try await HealthHistoryLoader(source: fake, calendar: cal).load(.activity, now: TestClock.now)
+        let last = try #require(HealthHistory.lastWeek(.activity, from: data, calendar: cal, now: TestClock.now).days.last)
+        #expect(last.values["steps"] == 4000)
+        #expect(last.values["exerciseMin"] == 25)
+    }
+
+    @Test func recoveryWeekHasBreathing() async throws {
+        let fake = FakeHealthSource()
+        await fake.set { $0.averages[.respRate] = [DayValue(day: TestClock.today, value: 14.5)] }
+        let data = try await HealthHistoryLoader(source: fake, calendar: cal).load(.recovery, now: TestClock.now)
+        let last = try #require(HealthHistory.lastWeek(.recovery, from: data, calendar: cal, now: TestClock.now).days.last)
+        #expect(last.values["respRate"] == 14.5)
+    }
+
+    /// Water per day, not just today's, and the day's last mood.
+    @Test func bodyWeekHasWaterAndMood() async throws {
+        let fake = FakeHealthSource()
+        await fake.set {
+            $0.sums[.waterMl] = [DayValue(day: self.day(-2), value: 1000), DayValue(day: TestClock.today, value: 500)]
+            $0.moodList = [
+                MoodSample(date: self.at(TestClock.today, 9 * 60), label: .unpleasant),
+                MoodSample(date: self.at(TestClock.today, 13 * 60), label: .pleasant),
+            ]
+        }
+        let data = try await HealthHistoryLoader(source: fake, calendar: cal).load(.body, now: TestClock.now)
+        #expect(data.waterCups == 2)
+        let h = HealthHistory.lastWeek(.body, from: data, calendar: cal, now: TestClock.now)
+        #expect(h.days[4].values["waterCups"] == 4)
+        #expect(h.days[4].mood == nil)
+        #expect(h.days[6].values["waterCups"] == 2)
+        #expect(h.days[6].mood == .pleasant)
+        let json = String(decoding: try HealthWire.encoder().encode(h), as: UTF8.self)
+        #expect(json.contains("\"mood\":\"pleasant\""))
+    }
 }

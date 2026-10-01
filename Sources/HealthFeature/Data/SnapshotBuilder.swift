@@ -15,11 +15,13 @@ public struct SnapshotBuilder: Sendable {
     let source: any HealthDataSource
     let calendar: Calendar
     let stepGoal: Int
+    private let format: WireDate
 
     public init(source: any HealthDataSource, calendar: Calendar = .current, stepGoal: Int = 8000) {
         self.source = source
         self.calendar = calendar
         self.stepGoal = stepGoal
+        self.format = WireDate(timeZone: calendar.timeZone)
     }
 
     public func build(now: Date, locale: String) async throws -> HealthDay {
@@ -95,21 +97,7 @@ public struct SnapshotBuilder: Sendable {
         return HealthDay(snapshot: snapshot, night: night)
     }
 
-    func clock(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.calendar = calendar
-        f.timeZone = calendar.timeZone
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "HH:mm"
-        return f.string(from: date)
-    }
+    func clock(_ date: Date) -> String { format.clock(date) }
 
-    func day(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.calendar = calendar
-        f.timeZone = calendar.timeZone
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: date)
-    }
+    func day(_ date: Date) -> String { format.day(date) }
 }
