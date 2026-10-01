@@ -3,26 +3,33 @@ import Models
 import OdyKit
 import SwiftUI
 
-/// Ask about the day. The question goes to a new chat with the numbers attached (removable).
+/// Ask about the day. The question goes to a new chat with the numbers attached; the chip says so before anything
+/// is typed, and removes them. Numbers are attached by default only when the user has agreed to send the day's
+/// summary. A suggestion fills the box rather than sending, so it can be read and changed first.
 struct AskComposer: View {
     let suggestions: [LocalizedStringResource]
     /// Whether there is anything to attach; the block itself is only built when sending.
     let canAttach: Bool
+    let attachedLabel: LocalizedStringResource
+    let attachByDefault: Bool
     let attachment: () -> String?
     let onSend: (String) -> Void
 
     @State private var text = ""
-    @State private var attach = true
+    @State private var attach: Bool
     @FocusState private var focused: Bool
 
     init(
-        suggestions: [LocalizedStringResource], canAttach: Bool = true, attachment: @escaping () -> String?,
-        onSend: @escaping (String) -> Void
+        suggestions: [LocalizedStringResource], canAttach: Bool, attachedLabel: LocalizedStringResource,
+        attachByDefault: Bool, attachment: @escaping () -> String?, onSend: @escaping (String) -> Void
     ) {
         self.suggestions = suggestions
         self.canAttach = canAttach
+        self.attachedLabel = attachedLabel
+        self.attachByDefault = attachByDefault
         self.attachment = attachment
         self.onSend = onSend
+        _attach = State(initialValue: attachByDefault)
     }
 
     var body: some View {
@@ -31,7 +38,10 @@ struct AskComposer: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(Array(suggestions.enumerated()), id: \.offset) { _, s in
-                            Button { send(String(localized: s)) } label: { Text(s).font(.footnote) }
+                            Button {
+                                text = String(localized: s)
+                                focused = true
+                            } label: { Text(s).font(.footnote) }
                                 .buttonStyle(.glass)
                                 .buttonBorderShape(.capsule)
                         }
@@ -41,9 +51,9 @@ struct AskComposer: View {
                 .scrollClipDisabled()
                 .transition(.opacity)
             }
-            if attach, canAttach, focused || !text.isEmpty {
+            if attach, canAttach {
                 Button { withAnimation(.smooth) { attach = false } } label: {
-                    Label("ios:health.ask.attached", systemImage: "xmark.circle.fill").font(.caption.weight(.semibold))
+                    Label(attachedLabel, systemImage: "xmark.circle.fill").font(.caption.weight(.semibold))
                 }
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.capsule)
@@ -89,18 +99,20 @@ struct AskComposer: View {
         }
         .animation(.smooth(duration: 0.25), value: focused)
         .animation(.smooth(duration: 0.25), value: text.isEmpty)
+        // Consent given or taken back from the menu while the box is empty.
+        .onChange(of: attachByDefault) { if text.isEmpty { attach = attachByDefault } }
     }
 
     private func send(_ question: String) {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
-        if attach, let json = attachment() {
+        if attach, canAttach, let json = attachment() {
             onSend(HealthContext.compose(json: json, question: q))
         } else {
             onSend(q)
         }
         text = ""
-        attach = true
+        attach = attachByDefault
         focused = false
     }
 }

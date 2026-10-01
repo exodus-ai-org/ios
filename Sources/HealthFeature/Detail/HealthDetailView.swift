@@ -58,7 +58,10 @@ struct HealthDetailView: View {
         .navigationTitle(Text(style.title))
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
-            AskComposer(suggestions: Self.suggestions(category), attachment: { weekJSON }, onSend: onAsk)
+            AskComposer(
+                suggestions: Self.suggestions(category), canAttach: data != nil,
+                attachedLabel: Self.attachedWeekText(style.title), attachByDefault: model.hasConsent,
+                attachment: { weekJSON }, onSend: onAsk)
         }
         .task { await reload() }
     }
@@ -145,6 +148,12 @@ struct HealthDetailView: View {
         case .recovery: d.hrv.isEmpty && d.restingHr.isEmpty && d.respRate.isEmpty
         case .body: false
         }
+    }
+
+    static func attachedWeekText(_ category: LocalizedStringResource) -> LocalizedStringResource {
+        LocalizedStringResource(
+            "ios:health.ask.attachedWeek", defaultValue: "This week's \(String(localized: category)) attached",
+            comment: "Detail page ask box: the category's last seven days go with the question. %@ is the category name.")
     }
 
     static let emptyText = LocalizedStringResource(

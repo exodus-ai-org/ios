@@ -121,7 +121,8 @@ struct HealthHomeView: View {
                 suggestions: [
                     "ios:health.ask.suggestion.sleep", "ios:health.ask.suggestion.energy", "ios:health.ask.suggestion.week",
                 ],
-                canAttach: model.day != nil, attachment: { snapshotJSON }, onSend: onAsk)
+                canAttach: model.day != nil, attachedLabel: "ios:health.ask.attached",
+                attachByDefault: model.hasConsent, attachment: { snapshotJSON }, onSend: onAsk)
         }
         .navigationDestination(for: HealthCategory.self) { c in
             HealthDetailView(category: c, model: model, onAsk: onAsk)
@@ -164,8 +165,15 @@ struct HealthHomeView: View {
     private var noDataHelp: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("ios:health.noData.explain").font(.subheadline).foregroundStyle(.secondary)
-            Button("ios:health.noData.openSettings") {
-                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            // Health permissions are not on the app's own Settings page, so the Health app is the closer door; the
+            // system sheet only ever shows once, so there is no asking again from here.
+            Button("ios:health.noData.openHealth") {
+                guard let health = URL(string: "x-apple-health://") else { return }  // l10n:ignore: URL scheme
+                UIApplication.shared.open(health) { opened in
+                    if !opened, let settings = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(settings)
+                    }
+                }
             }
             .buttonStyle(.bordered)
         }
