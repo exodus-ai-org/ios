@@ -58,13 +58,18 @@ let project = Project(
                     "NSHealthShareUsageDescription":
                         "Exodus reads your sleep, activity, heart and body data to write your daily health report.",
                     "NSHealthUpdateUsageDescription":
-                        "Exodus saves the water you log to Apple Health."
+                        "Exodus saves the water you log to Apple Health.",
+                    // exodus:// — the widgets' links (WidgetKitShared.DeepLink).
+                    "CFBundleURLTypes": [
+                        ["CFBundleURLName": "app.yancey.exodus.link", "CFBundleURLSchemes": ["exodus"]]
+                    ]
                 ]
             ),
             buildableFolders: ["Sources/App", "Resources/App"],
             entitlements: .dictionary([
                 "com.apple.developer.healthkit": .boolean(true),
-                "com.apple.developer.healthkit.access": .array([])
+                "com.apple.developer.healthkit.access": .array([]),
+                "com.apple.security.application-groups": .array([.string("group.app.yancey.exodus")])
             ]),
             dependencies: [
                 .target(name: "ChatFeature"),
@@ -179,7 +184,7 @@ let project = Project(
             name: "HealthFeature",
             dependencies: [
                 .target(name: "Models"), .target(name: "NetworkingKit"), .target(name: "MarkdownKit"),
-                .target(name: "OdyKit")
+                .target(name: "OdyKit"), .target(name: "WidgetKitShared")
             ]
         ),
         .target(

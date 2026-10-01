@@ -2,6 +2,7 @@
 import Foundation
 import Models
 import Observation
+import WidgetKitShared
 
 /// The home screen's state: the day read from the health store, and the report written about it. The day always
 /// shows; the report needs consent and a reachable computer with a model, and says which one is missing.
@@ -221,5 +222,25 @@ public final class HealthHomeModel {
         } else {
             suggestion = nil
         }
+    }
+}
+
+extension HealthHomeModel {
+    /// What the widgets may show of today: only with a ready report (so only with consent).
+    public var widgetGlance: HealthGlance? {
+        guard case .ready(let summary) = report, let snapshot = day?.snapshot else { return nil }
+        let mood: WidgetMood =
+            switch snapshot.odyState {
+            case .tired, .recovering: .sleepy
+            case .happy, .active, .rested: .happy
+            default: .neutral
+            }
+        let suggestion =
+            mood == .sleepy
+            ? String(localized: "ios:health.ask.suggestion.energy", defaultValue: "Why do I feel tired today?")
+            : String(localized: "ios:health.ask.suggestion.sleep", defaultValue: "How did I sleep last night?")
+        return HealthGlance(
+            day: snapshot.date, sleepMinutes: snapshot.sleep?.asleepMin, steps: snapshot.activity?.steps,
+            stepGoal: snapshot.activity?.stepGoal, headline: summary.headline, suggestion: suggestion, mood: mood)
     }
 }

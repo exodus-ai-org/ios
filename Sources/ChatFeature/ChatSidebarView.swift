@@ -97,6 +97,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
     private let onOpenSettings: () -> Void
     private let onDeleteChat: (String) -> Void
     private let onRenameChat: (String, String) -> Void
+    private let onRecentsChange: ([ChatSummary]) -> Void
     private let workspaces: Workspaces
 
     /// A brand name: a plain `String`, shown as is and never looked up in the catalog.
@@ -112,6 +113,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
         onOpenSettings: @escaping () -> Void,
         onDeleteChat: @escaping (String) -> Void,
         onRenameChat: @escaping (String, String) -> Void,
+        onRecentsChange: @escaping ([ChatSummary]) -> Void = { _ in },
         @ViewBuilder workspaces: () -> Workspaces
     ) {
         _list = State(initialValue: ChatListViewModel(apiClient: apiClient))
@@ -124,6 +126,7 @@ public struct ChatSidebarView<Workspaces: View>: View {
         self.onOpenSettings = onOpenSettings
         self.onDeleteChat = onDeleteChat
         self.onRenameChat = onRenameChat
+        self.onRecentsChange = onRecentsChange
         self.workspaces = workspaces()
     }
 
@@ -188,6 +191,9 @@ public struct ChatSidebarView<Workspaces: View>: View {
             // Settings can change the server address, so a silent refresh could leave the old server's
             // chats on screen.
             .task(id: reloadToken) { await list.load() }
+            .onChange(of: loadedChats, initial: true) { _, chats in
+                if let chats { onRecentsChange(chats) }
+            }
             .refreshable { await list.load() }
             .onChange(of: isOpen) { _, nowOpen in
                 if nowOpen {
@@ -286,6 +292,12 @@ public struct ChatSidebarView<Workspaces: View>: View {
                 Label("common:action.delete", systemImage: "trash")
             }
         }
+    }
+
+    /// The chat list once a load has answered: before it the empty list means "not known yet", and passing that on
+    /// would blank the widgets' recents at every launch; a failed load leaves what they last showed.
+    private var loadedChats: [ChatSummary]? {
+        list.hasLoaded && !list.loadFailed ? list.chats : nil
     }
 
     @ViewBuilder

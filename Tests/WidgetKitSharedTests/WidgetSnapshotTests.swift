@@ -47,6 +47,28 @@ struct WidgetSnapshotTests {
         #expect(cleared.recentChats.isEmpty && cleared.health == nil)
     }
 
+    @Test("recents of the same moment keep one order: newest first, then by id")
+    func tieBreak() {
+        let chats = [
+            RecentChat(id: "c", title: "C", updatedAt: now), RecentChat(id: "a", title: "A", updatedAt: now),
+            RecentChat(id: "b", title: "B", updatedAt: now), RecentChat(id: "d", title: "D", updatedAt: now.addingTimeInterval(1)),
+        ]
+        let ids = WidgetSnapshot.empty.updating(recents: chats, at: now).recentChats.map(\.id)
+        #expect(ids == ["d", "a", "b"])
+        #expect(WidgetSnapshot.empty.updating(recents: chats.reversed(), at: now).recentChats.map(\.id) == ids)
+    }
+
+    @Test("a chat listed twice is one recent: its newest entry")
+    func duplicates() {
+        let chats = [
+            RecentChat(id: "a", title: "Old", updatedAt: now), RecentChat(id: "b", title: "B", updatedAt: now),
+            RecentChat(id: "a", title: "New", updatedAt: now.addingTimeInterval(5)),
+        ]
+        let recents = WidgetSnapshot.empty.updating(recents: chats, at: now).recentChats
+        #expect(recents.map(\.id) == ["a", "b"])
+        #expect(recents.first?.title == "New")
+    }
+
     @Test("a title is trimmed and an empty one is skipped")
     func titles() {
         let chats = [

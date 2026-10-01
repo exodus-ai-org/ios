@@ -19,6 +19,7 @@ struct AppShell: View {
     let apiClient: APIClient
     let streamManager: ChatStreamManager
     let serverConfig: ServerConfigStore
+    let widgetWriter: WidgetSnapshotWriter
 
     @State private var activeChat = ActiveChat.new()
     @State private var isSidebarOpen = false
@@ -53,7 +54,8 @@ struct AppShell: View {
                     // its own `title` argument changing, via `.onChange` (its `chatId` does not
                     // change, so it is never recreated by this).
                     if id == activeChat.id { activeChat.title = title }
-                }
+                },
+                onRecentsChange: { widgetWriter.recentsChanged($0) }
             ) {
                 ForEach(AppWorkspace.allCases) { option in
                     WorkspaceRow(option: option, isSelected: option == workspace) {
@@ -131,7 +133,7 @@ struct AppShell: View {
                     showSettings = true
                 })
         case .health:
-            HealthRootView(apiClient: apiClient) { text in
+            HealthRootView(apiClient: apiClient, onGlanceChange: { widgetWriter.healthChanged($0) }) { text in
                 let chat = ActiveChat.new()
                 pendingAsk = (chat.id, text)
                 activeChat = chat

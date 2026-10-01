@@ -67,13 +67,17 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
 
     public static let empty = WidgetSnapshot(updatedAt: Date(timeIntervalSince1970: 0), recentChats: [], health: nil)
 
+    /// Newest first, ties by id, one entry per chat: the same list always makes the same snapshot, so the app can
+    /// tell an unchanged one and leave the widgets alone.
     public func updating(recents: [RecentChat], at date: Date) -> WidgetSnapshot {
         var copy = self
+        var seen = Set<String>()
         copy.recentChats = Array(
             recents
                 .map { RecentChat(id: $0.id, title: $0.title.trimmingCharacters(in: .whitespacesAndNewlines), updatedAt: $0.updatedAt) }
                 .filter { !$0.title.isEmpty }
-                .sorted { $0.updatedAt > $1.updatedAt }
+                .sorted { $0.updatedAt != $1.updatedAt ? $0.updatedAt > $1.updatedAt : $0.id < $1.id }
+                .filter { seen.insert($0.id).inserted }
                 .prefix(Self.maxRecents))
         copy.updatedAt = date
         return copy
@@ -89,5 +93,18 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
     /// Unpaired: nothing of the old computer stays on the Home Screen.
     public func cleared(at date: Date) -> WidgetSnapshot {
         WidgetSnapshot(updatedAt: date, recentChats: [], health: nil)
+    }
+}
+
+/// How the app's own types become a snapshot's, without the module knowing them.
+public enum WidgetSnapshotRules {
+    public static func recents(from chats: [(id: String, title: String, createdAt: String)]) -> [RecentChat] {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        return chats.map { chat in
+            let date = fractional.date(from: chat.createdAt) ?? plain.date(from: chat.createdAt) ?? .distantPast
+            return RecentChat(id: chat.id, title: chat.title, updatedAt: date)
+        }
     }
 }

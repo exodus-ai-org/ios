@@ -1,15 +1,20 @@
 import Models
 import NetworkingKit
 import SwiftUI
+import WidgetKitShared
 
 /// The Health workspace: onboarding the first time, then the daily report. Owns the home model; reloads when the app
 /// comes back to the foreground (the health store is only readable while unlocked).
 public struct HealthRootView: View {
     @State private var model: HealthHomeModel
     let onAsk: (String) -> Void
+    let onGlanceChange: (HealthGlance?) -> Void
     @Environment(\.scenePhase) private var scenePhase
 
-    public init(apiClient: APIClient, onAsk: @escaping (String) -> Void = { _ in }) {
+    public init(
+        apiClient: APIClient, onGlanceChange: @escaping (HealthGlance?) -> Void = { _ in },
+        onAsk: @escaping (String) -> Void = { _ in }
+    ) {
         let source = HealthKitSource()
         _model = State(
             initialValue: HealthHomeModel(
@@ -17,11 +22,13 @@ public struct HealthRootView: View {
                 memory: LiveMemoryWriter(apiClient: apiClient), cache: .standard(), preferences: HealthPreferences(),
                 locale: Bundle.main.preferredLocalizations.first ?? "en"))
         self.onAsk = onAsk
+        self.onGlanceChange = onGlanceChange
     }
 
     init(model: HealthHomeModel, onAsk: @escaping (String) -> Void) {
         _model = State(initialValue: model)
         self.onAsk = onAsk
+        self.onGlanceChange = { _ in }
     }
 
     #if DEBUG
@@ -39,6 +46,9 @@ public struct HealthRootView: View {
         }
         .task { await model.load() }
         .onChange(of: scenePhase) { if scenePhase == .active { Task { await model.load() } } }
+        .onChange(of: settledGlance, initial: true) { _, glance in
+            if let glance { onGlanceChange(glance) }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -61,6 +71,16 @@ public struct HealthRootView: View {
                 }
                 .accessibilityIdentifier("healthMenu")
             }
+        }
+    }
+
+    /// The glance once the report has settled. Before the first read and while a note is written nothing is known
+    /// yet: passing that on would blank the widgets' health every time Health opens, until the report is back.
+    private var settledGlance: HealthGlance?? {
+        switch model.report {
+        case .writing: nil
+        case .idle where model.day == nil: nil
+        default: .some(model.widgetGlance)
         }
     }
 

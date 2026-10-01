@@ -11,6 +11,7 @@ struct ExodusApp: App {
     private let apiClient: APIClient
     private let streamManager: ChatStreamManager
     private let reporter: LogReporter
+    private let widgetWriter: WidgetSnapshotWriter
     @State private var toneModel = ColorToneModel()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -21,6 +22,10 @@ struct ExodusApp: App {
         // requests go to the plain manual address.
         let connection = ServerConnection(store: KeychainCredentialStore())
         connection.onComputerChange { Task { @MainActor in ChatCaches.clearAll() } }
+        // Nothing of the old computer stays on the Home Screen.
+        let widgetWriter = WidgetSnapshotWriter()
+        connection.onComputerChange { Task { @MainActor in widgetWriter.computerChanged() } }
+        self.widgetWriter = widgetWriter
         let config = ServerConfigStore()
         config.connection = connection
         self.connection = connection
@@ -87,7 +92,9 @@ struct ExodusApp: App {
 
     private var shell: some View {
         UnlockGate(connection: connection) {
-            AppShell(apiClient: apiClient, streamManager: streamManager, serverConfig: serverConfig)
+            AppShell(
+                apiClient: apiClient, streamManager: streamManager, serverConfig: serverConfig,
+                widgetWriter: widgetWriter)
         }
         .launchSplash()
     }
