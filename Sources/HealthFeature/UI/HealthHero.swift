@@ -272,6 +272,11 @@ private struct HeroScene: View, Animatable {
                     .contentTransition(.opacity)
             }
             .foregroundStyle(nightFactor > 0.5 ? OdyPalette.hex(0xF4EFFF) : OdyPalette.hex(0x3A2A00))
+            // The moon's arc crosses the words in the evening, white on white: at night they carry a halo of the
+            // sky's own colour, unseen on the sky and enough to lift them off the moon. By day the ink is dark on
+            // the sun, and the halo fades out with the night.
+            .shadow(color: DaySky.gradient(atClockHour: hour).top.color.opacity(0.9 * nightFactor), radius: 2)
+            .shadow(color: DaySky.gradient(atClockHour: hour).top.color.opacity(0.7 * nightFactor), radius: 7)
             // The words share a fixed picture with Ody: the left 60%, above the top of Ody's head. Big type wraps to
             // two lines, then shrinks to fit the box rather than run into Ody. The full title is the hero's
             // accessibility value, at any size.
