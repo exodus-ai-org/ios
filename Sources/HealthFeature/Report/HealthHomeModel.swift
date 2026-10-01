@@ -8,7 +8,7 @@ import Observation
 @MainActor
 @Observable
 public final class HealthHomeModel {
-    public enum Report: Equatable {
+    public enum Report: Equatable, Sendable {
         case idle
         case needsConsent
         case writing
