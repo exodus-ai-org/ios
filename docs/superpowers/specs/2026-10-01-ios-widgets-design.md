@@ -111,7 +111,7 @@ Each write that changes the snapshot calls `WidgetCenter.shared.reloadAllTimelin
 ## 4. Error handling
 - Snapshot unreadable → empty snapshot (empty state).
 - App fails to write → logged, the widget keeps the last good snapshot.
-- Bad deep link → ignored. Unknown chat id → chat list.
+- Bad deep link → ignored. Unknown chat id → that chat opens and shows the server's error; the drawer still lists the rest.
 
 ## 5. Testing and verification
 - **`WidgetKitSharedTests`**: snapshot round trip and tolerant decode; store write/read, missing and corrupt file; every `DeepLink` round trip and rejections (unknown path, long prompt, empty id); timeline entries per hour, ink flip at dusk and dawn, stale health hidden; mood rules.
