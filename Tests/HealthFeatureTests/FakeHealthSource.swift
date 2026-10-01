@@ -18,6 +18,8 @@ actor FakeHealthSource: HealthDataSource {
     var moodList: [MoodSample] = []
     var loggedWater: [Double] = []
     var failure: Error?
+    /// Delays the first read of a load, so a test can act while it is in flight.
+    var slowMs = 0
 
     func set(_ change: @Sendable (isolated FakeHealthSource) -> Void) { change(self) }
 
@@ -26,6 +28,7 @@ actor FakeHealthSource: HealthDataSource {
 
     func sleepSamples(from start: Date, to end: Date) async throws -> [SleepSample] {
         if let failure { throw failure }
+        if slowMs > 0 { try? await Task.sleep(for: .milliseconds(slowMs)) }
         return sleep.filter { $0.end > start && $0.start < end }
     }
 
@@ -50,7 +53,10 @@ actor FakeHealthSource: HealthDataSource {
         moodList.filter { $0.date >= start && $0.date < end }
     }
 
-    func logWater(milliliters: Double, at date: Date) async throws { loggedWater.append(milliliters) }
+    func logWater(milliliters: Double, at date: Date) async throws {
+        loggedWater.append(milliliters)
+        sums[.waterMl, default: []].append(DayValue(day: TestClock.today, value: milliliters))
+    }
 }
 
 /// Fixed calendar and clock for every Health test: Taipei, 2026-10-01 15:00.

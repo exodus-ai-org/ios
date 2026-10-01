@@ -195,6 +195,22 @@ struct HealthHomeModelTests {
         #expect(cache.load(date: "2026-10-01")?.summary.headline == "call 2")
         #expect(!m.isLoading)
     }
+
+    @Test func loggingWaterDuringALoadShowsTheCupWithoutRewritingTheReport() async {
+        await withData()
+        prefs.summaryConsent = true
+        await source.set { $0.slowMs = 200 }
+        let m = model()
+        let first = Task { await m.load() }
+        try? await Task.sleep(for: .milliseconds(50))
+        await source.set { $0.slowMs = 0 }
+        await m.logWater()
+        await first.value
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(m.day?.snapshot.body?.waterCups == 1)
+        #expect(await summaries.calls <= 1)
+        #expect(!m.isLoading)
+    }
 }
 
 extension HealthHomeModel.Report {

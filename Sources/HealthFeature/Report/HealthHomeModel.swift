@@ -51,15 +51,27 @@ public final class HealthHomeModel {
         self.locale = locale
     }
 
-    /// One load at a time: a plain call joins the one running, a forced one replaces it. A replaced run may still
-    /// finish, so every result is checked against the generation before it lands.
+    /// One load at a time: a plain call joins the one running, a forced one replaces it and rewrites the report.
     public func load(force: Bool = false) async {
-        if !force, let running { return await running.value }
+        await reload(replacing: force, regenerate: force)
+    }
+
+    /// `replacing` starts a fresh read of the store even while one runs (its day may predate a change); `regenerate`
+    /// skips the cache. A replaced run may still finish, so every result is checked against the generation.
+    private func reload(replacing: Bool, regenerate: Bool) async {
+        if !replacing, running != nil {
+            // The run joined can be replaced while we wait; the caller wants the newest one done.
+            while let joined = running {
+                await joined.value
+                if running == joined { break }
+            }
+            return
+        }
         running?.cancel()
         generation += 1
         let mine = generation
         isLoading = true
-        let task = Task { await run(force: force, generation: mine) }
+        let task = Task { await run(force: regenerate, generation: mine) }
         running = task
         await task.value
         if generation == mine {
@@ -154,7 +166,8 @@ public final class HealthHomeModel {
     /// One cup (250 ml) into Apple Health, then the day again.
     public func logWater() async {
         try? await source.logWater(milliliters: 250, at: now())
-        await load()
+        // A read that started before the cup was written would miss it, but the report is not rewritten per cup.
+        await reload(replacing: true, regenerate: false)
     }
 
     public static func reportState(for error: Error) -> Report {
