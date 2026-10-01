@@ -1,3 +1,4 @@
+import OdyKit
 import Synchronization
 import SwiftUI
 import UIKit
@@ -273,14 +274,23 @@ private struct DrawerPan: UIGestureRecognizerRepresentable {
             return isOpen ? movement.x < 0 : movement.x > 0
         }
 
-        // Nothing else is implemented on purpose. `shouldRecognizeSimultaneouslyWith` stays at its
-        // default of false, which is what leaves the text view's selection recognizers — already
-        // begun, and therefore already the winners — holding a selection drag. And the scroll views
+        // Nothing else is implemented on purpose, except yielding to a pan that claims horizontal
+        // drags. `shouldRecognizeSimultaneouslyWith` stays at its default of false, which is what
+        // leaves the text view's selection recognizers — already begun, and therefore already the
+        // winners — holding a selection drag. And the scroll views
         // need no failure requirement from this side: a scroll view that can only scroll vertically
         // declines a horizontal-dominant start of its own accord, so the two never both want the
         // same touch. Measured, not assumed: with a forty-turn transcript under the finger, a
         // horizontal drag opens the drawer without scrolling the transcript, and a vertical one
         // scrolls the transcript without moving the card.
+
+        /// The Health hero scrubs time with a horizontal drag; a swipe that begins there is its, not the drawer's.
+        /// Its pan is named `OdyGestures.claimsHorizontal` and fails at once for a vertical start or a touch outside it.
+        func gestureRecognizer(
+            _ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer
+        ) -> Bool {
+            other.name == OdyGestures.claimsHorizontal
+        }
     }
 
     func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
