@@ -31,6 +31,7 @@ struct HealthHero: View {
     @State private var live = LiveHour()
     @State private var look: CGVector = .zero
     @State private var yawning = false
+    @State private var yawn: Task<Void, Never>?
     @State private var stageTick = 0
     @State private var lastStage: SleepStage?
 
@@ -54,7 +55,11 @@ struct HealthHero: View {
     private var scrub: DayScrub { DayScrub(now: now, calendar: calendar) }
     private var today: Date { calendar.startOfDay(for: now) }
     private var shown: Double { hour ?? scrub.now }
-    private var atNow: Bool { !scrub.isScrubbing(shown) }
+    private var atNow: Bool { Self.isAtNow(hour: shown, scrub: scrub) }
+
+    /// Whether the hero is showing now. Past now is still now: a nudge forward only rubber-bands, and must not read as
+    /// a scrub (chip, title, pose, haptic).
+    static func isAtNow(hour: Double, scrub: DayScrub) -> Bool { !scrub.isScrubbing(min(hour, scrub.now)) }
 
     var body: some View {
         GeometryReader { proxy in
@@ -66,24 +71,6 @@ struct HealthHero: View {
                 bindleAnchor: $bindleAnchor, onPoke: poke
             )
             .contentShape(Rectangle())
-            .gesture(
-                ScrubPan(
-                    onBegin: {
-                        dragStart = live.value ?? shown
-                        lastStage = HeroPose.stage(at: dragStart, night: day?.night, today: today)
-                    },
-                    onChange: { t, location in
-                        var tx = Transaction()
-                        tx.disablesAnimations = true
-                        withTransaction(tx) {
-                            hour = scrub.hour(from: dragStart, translation: t, width: proxy.size.width)
-                            look = CGVector(
-                                dx: max(-1, min(1, (location.x - 150 * s) / (150 * s))),
-                                dy: max(-1, min(1, (location.y - 150 * s) / (120 * s))))
-                        }
-                        noteStage()
-                    },
-                    onEnd: { t, v in release(translation: t, velocity: v, width: proxy.size.width) }))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("ios:health.hero.a11y"))
             .accessibilityValue(accessibilityValue)
@@ -109,6 +96,25 @@ struct HealthHero: View {
                 .padding(.trailing, 14)
                 .animation(.spring(Self.spring), value: atNow)
             }
+            // After the overlay, so a swipe that starts on the chip is a scrub too; a tap on it is still a tap.
+            .gesture(
+                ScrubPan(
+                    onBegin: {
+                        dragStart = live.value ?? shown
+                        lastStage = HeroPose.stage(at: dragStart, night: day?.night, today: today)
+                    },
+                    onChange: { t, location in
+                        var tx = Transaction()
+                        tx.disablesAnimations = true
+                        withTransaction(tx) {
+                            hour = scrub.hour(from: dragStart, translation: t, width: proxy.size.width)
+                            look = CGVector(
+                                dx: max(-1, min(1, (location.x - 150 * s) / (150 * s))),
+                                dy: max(-1, min(1, (location.y - 150 * s) / (120 * s))))
+                        }
+                        noteStage()
+                    },
+                    onEnd: { t, v in release(translation: t, velocity: v, width: proxy.size.width) }))
         }
         .aspectRatio(300 / 236, contentMode: .fit)
         .sensoryFeedback(.selection, trigger: stageTick)
@@ -119,8 +125,9 @@ struct HealthHero: View {
         let date = today.addingTimeInterval(shown * 3600)
         var style = Date.FormatStyle.dateTime.hour().minute()
         style.timeZone = calendar.timeZone
-        let pose = HeroPose.at(hour: shown, scrub: scrub, mood: mood, night: day?.night, today: today)
-        let title = String(localized: HeroScene.title(hour: shown, scrub: scrub, mood: mood, pose: pose))
+        let settled = min(shown, scrub.now)
+        let pose = HeroPose.at(hour: settled, scrub: scrub, mood: mood, night: day?.night, today: today)
+        let title = String(localized: HeroScene.title(hour: settled, scrub: scrub, mood: mood, pose: pose))
         return date.formatted(style) + ", " + title
     }
 
@@ -158,8 +165,11 @@ struct HealthHero: View {
     private func poke() {
         guard mood == .tired, atNow, !reduceMotion else { return }
         yawning = true
-        Task {
+        // A poke mid-yawn starts the yawn over rather than letting the first one cut it short.
+        yawn?.cancel()
+        yawn = Task {
             try? await Task.sleep(for: .milliseconds(1100))
+            guard !Task.isCancelled else { return }
             yawning = false
         }
     }
@@ -193,7 +203,9 @@ private struct HeroScene: View, Animatable {
         let s = scale
         // Every frame of a settle evaluates this body, so this is always the hour the eye last saw.
         let _ = live.value = hour
-        let pose = HeroPose.at(hour: hour, scrub: scrub, mood: mood, night: night, today: today)
+        // The sky may show a rubber-band past now; Ody and the title never do.
+        let settled = min(hour, scrub.now)
+        let pose = HeroPose.at(hour: settled, scrub: scrub, mood: mood, night: night, today: today)
         let nightFactor = DaySky.night(atClockHour: hour)
         let settle: Animation? = reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 1)
         ZStack(alignment: .topLeading) {
@@ -241,7 +253,7 @@ private struct HeroScene: View, Animatable {
                 Text(dateLine)
                     .font(.caption.weight(.semibold))
                     .opacity(0.6)
-                Text(Self.title(hour: hour, scrub: scrub, mood: mood, pose: pose))
+                Text(Self.title(hour: settled, scrub: scrub, mood: mood, pose: pose))
                     .font(.title2.weight(.heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
