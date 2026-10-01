@@ -144,15 +144,70 @@ public struct HealthSnapshot: Codable, Equatable, Sendable {
 
 public struct HealthSummary: Codable, Equatable, Sendable {
     public var headline: String
+    /// The headline's key phrase, an exact substring of it, coloured as `headlineCategory`.
+    public var headlineHighlight: String?
+    public var headlineCategory: String?
+    /// The note as short stories, most important first. Nil in reports from desktops (and caches) that predate them,
+    /// which show `summary` instead.
+    public var insights: [Insight]?
+    /// One everyday habit to try today.
+    public var nudge: String?
+    /// The note as Markdown; the desktop still fills it in for phones that don't read `insights`.
     public var summary: String
     public var categories: Categories
     public var memorySuggestion: MemorySuggestion?
 
-    public init(headline: String, summary: String, categories: Categories, memorySuggestion: MemorySuggestion?) {
+    public init(
+        headline: String, summary: String, categories: Categories, memorySuggestion: MemorySuggestion?,
+        headlineHighlight: String? = nil, headlineCategory: String? = nil, insights: [Insight]? = nil,
+        nudge: String? = nil
+    ) {
         self.headline = headline
+        self.headlineHighlight = headlineHighlight
+        self.headlineCategory = headlineCategory
+        self.insights = insights
+        self.nudge = nudge
         self.summary = summary
         self.categories = categories
         self.memorySuggestion = memorySuggestion
+    }
+
+    /// One sentence about one category. `category` stays a string so a category this app doesn't know yet costs
+    /// that one insight, not the whole report.
+    public struct Insight: Codable, Equatable, Sendable {
+        public var category: String
+        public var text: String
+        /// Exact substrings of `text`, coloured in the category's colour.
+        public var highlights: [String]
+        public var stat: Stat?
+
+        public init(category: String, text: String, highlights: [String] = [], stat: Stat? = nil) {
+            self.category = category
+            self.text = text
+            self.highlights = highlights
+            self.stat = stat
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            category = try c.decode(String.self, forKey: .category)
+            text = try c.decode(String.self, forKey: .text)
+            highlights = try c.decodeIfPresent([String].self, forKey: .highlights) ?? []
+            stat = try c.decodeIfPresent(Stat.self, forKey: .stat)
+        }
+    }
+
+    /// The insight's one number, shown big: "6:12" "hours", "usual 7:05".
+    public struct Stat: Codable, Equatable, Sendable {
+        public var value: String
+        public var unit: String
+        public var caption: String?
+
+        public init(value: String, unit: String, caption: String? = nil) {
+            self.value = value
+            self.unit = unit
+            self.caption = caption
+        }
     }
 
     public struct Categories: Codable, Equatable, Sendable {

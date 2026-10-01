@@ -19,6 +19,21 @@ struct HealthWireTests {
          "memorySuggestion":{"section":"profile","key":"weekday-sleep","summary":"工作日平均只睡 6 小時左右"}}
         """
 
+    /// The desktop's REPORT fixture as it leaves the route: the structured note, with `summary` filled in.
+    static let storyJSON = """
+        {"headline":"有點沒睡飽，記得多走走。","headlineHighlight":"有點沒睡飽","headlineCategory":"sleep",
+         "insights":[
+          {"category":"sleep","text":"昨晚只睡了 6 小時 12 分，比平時少了將近一小時。","highlights":["6 小時 12 分"],
+           "stat":{"value":"6:12","unit":"小時","caption":"平時 7:05"}},
+          {"category":"recovery","text":"HRV 38 ms，低於你的 44 基線，身體還在恢復。","highlights":["38 ms","身體還在恢復"]},
+          {"category":"activity","text":"今天走了 5,840 步，離 8,000 的目標還差 2,160 步。","highlights":["5,840 步"],
+           "stat":{"value":"5,840","unit":"步"}}],
+         "nudge":"今晚早點上床，睡前少看螢幕。",
+         "summary":"有點沒睡飽，記得多走走。\\n\\n昨晚只睡了 **6 小時 12 分**，比平時少了將近一小時。",
+         "categories":{"sleep":"深睡偏少。","activity":"還差 2,160 步。","recovery":"HRV 偏低。","body":null},
+         "memorySuggestion":null}
+        """
+
     @Test func decodesTheSpecSnapshot() throws {
         let s = try JSONDecoder().decode(HealthSnapshot.self, from: Data(Self.snapshotJSON.utf8))
         #expect(s.sleep?.asleepMin == 372)
@@ -49,6 +64,38 @@ struct HealthWireTests {
             with: #""memorySuggestion":null"#)
         let r = try JSONDecoder().decode(HealthSummary.self, from: Data(json.utf8))
         #expect(r.memorySuggestion == nil)
+    }
+
+    @Test func decodesTheStructuredNote() throws {
+        let r = try JSONDecoder().decode(HealthSummary.self, from: Data(Self.storyJSON.utf8))
+        #expect(r.headlineHighlight == "有點沒睡飽")
+        #expect(r.headlineCategory == "sleep")
+        #expect(r.insights?.count == 3)
+        #expect(r.insights?.first?.highlights == ["6 小時 12 分"])
+        #expect(r.insights?.first?.stat == .init(value: "6:12", unit: "小時", caption: "平時 7:05"))
+        #expect(r.insights?[1].stat == nil)
+        #expect(r.insights?[2].stat?.caption == nil)
+        #expect(r.nudge == "今晚早點上床，睡前少看螢幕。")
+    }
+
+    @Test func anOldNoteDecodesWithoutTheStory() throws {
+        let r = try JSONDecoder().decode(HealthSummary.self, from: Data(Self.summaryJSON.utf8))
+        #expect(r.insights == nil)
+        #expect(r.headlineHighlight == nil)
+        #expect(r.nudge == nil)
+        #expect(r.summary.contains("6 小時 12 分"))
+    }
+
+    @Test func theStoryRoundTrips() throws {
+        let r = try JSONDecoder().decode(HealthSummary.self, from: Data(Self.storyJSON.utf8))
+        let again = try JSONDecoder().decode(HealthSummary.self, from: HealthWire.encoder().encode(r))
+        #expect(again == r)
+    }
+
+    @Test func anInsightWithoutHighlightsDecodes() throws {
+        let json = #"{"category":"body","text":"Three cups so far."}"#
+        let i = try JSONDecoder().decode(HealthSummary.Insight.self, from: Data(json.utf8))
+        #expect(i.highlights.isEmpty)
     }
 
     @Test func pleasantMoods() {
