@@ -19,7 +19,7 @@ actor FakeHealthSource: HealthDataSource {
     var loggedWater: [Double] = []
     var failure: Error?
 
-    func set(_ change: (isolated FakeHealthSource) -> Void) { change(self) }
+    func set(_ change: @Sendable (isolated FakeHealthSource) -> Void) { change(self) }
 
     func hasRequestedAuthorization() async -> Bool { requested }
     func requestAuthorization() async throws { requested = true }
