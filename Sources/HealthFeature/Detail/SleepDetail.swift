@@ -124,10 +124,10 @@ struct SleepDetail: View {
 
     static func label(_ s: SleepStage) -> String {
         switch s {
-        case .deep: String(localized: "ios:health.stage.deep")
-        case .core, .unspecified: String(localized: "ios:health.stage.core")
-        case .rem: String(localized: "ios:health.stage.rem")
-        case .awake: String(localized: "ios:health.stage.awake")
+        case .deep: String(localized: "ios:health.stage.deep", defaultValue: "Deep sleep")
+        case .core, .unspecified: String(localized: "ios:health.stage.core", defaultValue: "Core sleep")
+        case .rem: String(localized: "ios:health.stage.rem", defaultValue: "REM")
+        case .awake: String(localized: "ios:health.stage.awake", defaultValue: "Awake")
         }
     }
 

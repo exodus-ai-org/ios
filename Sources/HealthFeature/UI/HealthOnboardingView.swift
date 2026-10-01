@@ -15,10 +15,10 @@ struct HealthOnboardingView: View {
                 .frame(width: 200, height: 200)
                 .clipShape(.rect(cornerRadius: 36))
                 .contentTransition(.opacity)
-            Text(step == 0 ? "ios:health.onboarding.title" : "ios:health.onboarding.consentTitle")
+            Text(step == 0 ? Self.titleText : Self.consentTitleText)
                 .font(.title2.weight(.bold))
                 .multilineTextAlignment(.center)
-            Text(step == 0 ? "ios:health.onboarding.body" : "ios:health.onboarding.consentBody")
+            Text(step == 0 ? Self.bodyText : Self.consentBodyText)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -53,4 +53,10 @@ struct HealthOnboardingView: View {
         }
         .padding(24)
     }
+
+    // Resources, not bare literals: a ternary of literals can pick `Text`'s verbatim overload.
+    private static let titleText = LocalizedStringResource("ios:health.onboarding.title")
+    private static let bodyText = LocalizedStringResource("ios:health.onboarding.body")
+    private static let consentTitleText = LocalizedStringResource("ios:health.onboarding.consentTitle")
+    private static let consentBodyText = LocalizedStringResource("ios:health.onboarding.consentBody")
 }

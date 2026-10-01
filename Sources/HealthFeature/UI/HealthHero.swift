@@ -298,7 +298,9 @@ private struct HeroScene: View, Animatable {
         case .core, .unspecified: return "ios:health.stage.core"
         case .rem: return "ios:health.stage.rem"
         case .awake: return "ios:health.stage.awake"
-        case nil: return hour < 0 ? "ios:health.hero.notAsleepYet" : "ios:health.hero.awake"
+        case nil:
+            if hour < 0 { return "ios:health.hero.notAsleepYet" }
+            return "ios:health.hero.awake"
         }
     }
 }

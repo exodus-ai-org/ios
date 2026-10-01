@@ -13,6 +13,10 @@ struct HealthContextCard: View {
     let json: String
     @State private var expanded = false
 
+    // Resources, not bare literals: a ternary of literals can pick `Text`'s verbatim overload.
+    private static let collapseHint = LocalizedStringResource("ios:chat.health.collapse")
+    private static let expandHint = LocalizedStringResource("ios:chat.health.expand")
+
     static func chips(json: String) -> [Chip] {
         let data = Data(json.utf8)
         if let s = try? JSONDecoder().decode(HealthSnapshot.self, from: data) {
@@ -62,7 +66,7 @@ struct HealthContextCard: View {
                     ForEach(chips, id: \.systemImage) { chip in
                         Label(chip.text, systemImage: chip.systemImage).font(.caption.weight(.semibold))
                     }
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption2)
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption2)  // l10n:ignore: symbol names
                 }
                 .foregroundStyle(.secondary)
             }
@@ -70,7 +74,7 @@ struct HealthContextCard: View {
             // What it is, the numbers, and whether everything that was sent is shown.
             .accessibilityLabel(Text("ios:chat.health.attached"))
             .accessibilityValue(accessibilityValue(chips))
-            .accessibilityHint(Text(expanded ? "ios:chat.health.collapse" : "ios:chat.health.expand"))
+            .accessibilityHint(Text(expanded ? Self.collapseHint : Self.expandHint))
             if expanded {
                 Text(verbatim: json).font(.caption2.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
             }
