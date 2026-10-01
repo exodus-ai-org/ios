@@ -4,7 +4,7 @@ import HealthKit
 import Models
 
 /// `HealthDataSource` over HealthKit. Reads happen in the foreground only (a locked device's store is encrypted).
-public final class HealthKitSource: HealthDataSource, @unchecked Sendable {
+public final class HealthKitSource: HealthDataSource, Sendable {
     private let store: HKHealthStore
 
     public init(store: HKHealthStore = HKHealthStore()) { self.store = store }
@@ -91,9 +91,9 @@ public final class HealthKitSource: HealthDataSource, @unchecked Sendable {
         let descriptor = HKActivitySummaryQueryDescriptor(predicate: HKQuery.predicate(forActivitySummariesBetweenStart: components, end: components))
         guard let summary = try await descriptor.result(for: store).first else { return nil }
         return ActivityGoals(
-            moveKcal: Int(summary.activeEnergyBurnedGoal.doubleValue(for: .kilocalorie())),
-            exerciseMin: Int(summary.exerciseTimeGoal?.doubleValue(for: .minute()) ?? 0),
-            standHours: Int(summary.standHoursGoal?.doubleValue(for: .count()) ?? 0))
+            moveKcal: Self.goal(summary.activeEnergyBurnedGoal.doubleValue(for: .kilocalorie())),
+            exerciseMin: summary.exerciseTimeGoal.flatMap { Self.goal($0.doubleValue(for: .minute())) },
+            standHours: summary.standHoursGoal.flatMap { Self.goal($0.doubleValue(for: .count())) })
     }
 
     public func workouts(from start: Date, to end: Date) async throws -> [WorkoutSample] {
@@ -103,14 +103,14 @@ public final class HealthKitSource: HealthDataSource, @unchecked Sendable {
             let kcal = w.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie())
             return WorkoutSample(
                 start: w.startDate, minutes: Int(w.duration / 60), kcal: kcal.map { Int($0) },
-                type: String(describing: w.workoutActivityType).lowercased())
+                type: Self.name(w.workoutActivityType))
         }
     }
 
     public func moods(from start: Date, to end: Date) async throws -> [MoodSample] {
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.stateOfMind(Self.range(start, end))], sortDescriptors: [SortDescriptor(\.startDate)])
-        return try await descriptor.result(for: store).map { MoodSample(date: $0.startDate, label: Self.label($0.valence)) }
+        return try await descriptor.result(for: store).map { MoodSample(date: $0.startDate, label: Self.label($0.valenceClassification)) }
     }
 
     public func logWater(milliliters: Double, at date: Date) async throws {
@@ -132,6 +132,8 @@ public final class HealthKitSource: HealthDataSource, @unchecked Sendable {
         let collection = try await descriptor.result(for: store)
         var out: [DayValue] = []
         collection.enumerateStatistics(from: start, to: end) { stats, _ in
+            // The last bucket can start past `end`; the protocol is [start, end).
+            guard stats.startDate < end else { return }
             let quantity = options.contains(.cumulativeSum) ? stats.sumQuantity() : stats.averageQuantity()
             if let quantity { out.append(DayValue(day: stats.startDate, value: quantity.doubleValue(for: unit))) }
         }
@@ -177,15 +179,43 @@ public final class HealthKitSource: HealthDataSource, @unchecked Sendable {
         }
     }
 
-    private static func label(_ valence: Double) -> MoodLabel {
-        switch valence {
-        case ..<(-0.71): .veryUnpleasant
-        case ..<(-0.43): .unpleasant
-        case ..<(-0.14): .slightlyUnpleasant
-        case ...0.14: .neutral
-        case ...0.43: .slightlyPleasant
-        case ...0.71: .pleasant
-        default: .veryPleasant
+    /// A zero goal means the user tracks move in time, not energy; report it as absent.
+    private static func goal(_ value: Double) -> Int? { value > 0 ? Int(value) : nil }
+
+    static func label(_ c: HKStateOfMind.ValenceClassification) -> MoodLabel {
+        switch c {
+        case .veryUnpleasant: .veryUnpleasant
+        case .unpleasant: .unpleasant
+        case .slightlyUnpleasant: .slightlyUnpleasant
+        case .neutral: .neutral
+        case .slightlyPleasant: .slightlyPleasant
+        case .pleasant: .pleasant
+        case .veryPleasant: .veryPleasant
+        @unknown default: .neutral
+        }
+    }
+
+    /// HKWorkoutActivityType is an unnamed NS_ENUM, so the short English names are spelled out.
+    static func name(_ t: HKWorkoutActivityType) -> String {
+        switch t {
+        case .running: "running"
+        case .walking: "walking"
+        case .cycling: "cycling"
+        case .swimming: "swimming"
+        case .hiking: "hiking"
+        case .yoga: "yoga"
+        case .traditionalStrengthTraining: "strength training"
+        case .functionalStrengthTraining: "functional strength training"
+        case .highIntensityIntervalTraining: "hiit"
+        case .elliptical: "elliptical"
+        case .rowing: "rowing"
+        case .socialDance, .cardioDance: "dance"
+        case .coreTraining: "core training"
+        case .pilates: "pilates"
+        case .mindAndBody: "mind and body"
+        case .cooldown: "cooldown"
+        case .stairClimbing: "stairs"
+        default: "other"
         }
     }
 }
