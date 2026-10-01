@@ -30,7 +30,7 @@ public struct HealthRootView: View {
 
     public var body: some View {
         Group {
-            if !model.preferences.hasOnboarded || model.day?.snapshot.odyState == .permission {
+            if model.needsOnboarding {
                 HealthOnboardingView(model: model)
             } else {
                 HealthHomeView(model: model, onAsk: onAsk)

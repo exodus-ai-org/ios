@@ -6,7 +6,7 @@ import Models
 
 /// A HealthKit stand-in: tests fill in what the store holds.
 actor FakeHealthSource: HealthDataSource {
-    nonisolated let isAvailable = true
+    nonisolated let isAvailable: Bool
     var requested = true
     var sleep: [SleepSample] = []
     var sums: [SumMetric: [DayValue]] = [:]
@@ -20,6 +20,8 @@ actor FakeHealthSource: HealthDataSource {
     var failure: Error?
     /// Delays the water read of a load (after it has read, so the answer is stale), so a test can act while it is in flight.
     var slowMs = 0
+
+    init(isAvailable: Bool = true) { self.isAvailable = isAvailable }
 
     func set(_ change: @Sendable (isolated FakeHealthSource) -> Void) { change(self) }
 

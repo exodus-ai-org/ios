@@ -36,13 +36,19 @@ struct HealthOnboardingView: View {
                 .controlSize(.large)
             } else {
                 Button {
-                    Task { await model.grantConsent() }
+                    Task {
+                        await model.grantConsent()
+                        model.finishOnboarding()
+                    }
                 } label: {
                     Text("ios:health.onboarding.allow").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                Button("ios:health.onboarding.notNow") { Task { await model.load() } }
+                Button("ios:health.onboarding.notNow") {
+                    model.finishOnboarding()
+                    Task { await model.load() }
+                }
             }
         }
         .padding(24)

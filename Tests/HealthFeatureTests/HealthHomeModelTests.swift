@@ -64,6 +64,29 @@ struct HealthHomeModelTests {
         await source.set { $0.sums[.steps] = [DayValue(day: TestClock.today, value: 9000)] }
     }
 
+    @Test func authorizingDoesNotFinishOnboarding() async {
+        let m = model()
+        #expect(m.needsOnboarding)
+        await m.authorize()
+        #expect(m.needsOnboarding)
+        #expect(!prefs.hasOnboarded)
+    }
+
+    @Test func finishingOnboardingPersists() {
+        let m = model()
+        m.finishOnboarding()
+        #expect(!m.needsOnboarding)
+        #expect(prefs.hasOnboarded)
+        #expect(model().hasOnboarded)
+    }
+
+    @Test func aDeviceWithoutHealthSkipsOnboarding() {
+        let m = HealthHomeModel(
+            source: FakeHealthSource(isAvailable: false), summaries: summaries, memory: memory, cache: cache,
+            preferences: prefs, calendar: TestClock.calendar, now: { TestClock.now }, locale: "en")
+        #expect(!m.needsOnboarding)
+    }
+
     @Test func withoutConsentThereIsDataButNoReport() async {
         await withData()
         let m = model()

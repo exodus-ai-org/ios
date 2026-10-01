@@ -24,6 +24,8 @@ public final class HealthHomeModel {
     public private(set) var isLoading = false
     public private(set) var celebrates = false
     public let preferences: HealthPreferences
+    /// Observed mirror of the stored flag, so finishing onboarding swaps the screen.
+    public private(set) var hasOnboarded: Bool
 
     @ObservationIgnored private let source: any HealthDataSource
     @ObservationIgnored private let summaries: any HealthSummaryService
@@ -46,6 +48,7 @@ public final class HealthHomeModel {
         self.memory = memory
         self.cache = cache
         self.preferences = preferences
+        self.hasOnboarded = preferences.hasOnboarded
         self.builder = SnapshotBuilder(source: source, calendar: calendar)
         self.now = now
         self.locale = locale
@@ -128,13 +131,20 @@ public final class HealthHomeModel {
 
     public func authorize() async {
         try? await source.requestAuthorization()
-        preferences.hasOnboarded = true
         await load()
     }
 
     public func grantConsent() async {
         preferences.summaryConsent = true
         await load()
+    }
+
+    /// Onboarding shows until the user has been through both asks; a device without Health has nothing to ask for.
+    public var needsOnboarding: Bool { !hasOnboarded && source.isAvailable }
+
+    public func finishOnboarding() {
+        preferences.hasOnboarded = true
+        hasOnboarded = true
     }
 
     /// Saves the suggestion as a memory. False when it could not be saved; the card stays.
