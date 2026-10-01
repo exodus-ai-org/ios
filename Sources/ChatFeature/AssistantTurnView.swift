@@ -260,9 +260,14 @@ struct UserBubble: View {
         HStack {
             Spacer(minLength: 40)
             // A message asked about a selection opens with it as a quote (`QuotedText`): drawn as one, small and
-            // beside a rule, over the question. A word of either can be selected, as in an answer.
-            let parts = QuotedText.split(text)
+            // beside a rule, over the question. A word of either can be selected, as in an answer. One asked from Health
+            // opens with the day's numbers before that (`HealthContext`): a card of chips.
+            let health = HealthContext.split(text)
+            let parts = QuotedText.split(health.body)
             VStack(alignment: .leading, spacing: 6) {
+                if let json = health.json {
+                    HealthContextCard(json: json)
+                }
                 if let quote = parts.quote {
                     Text(verbatim: quote)
                         .font(.subheadline)

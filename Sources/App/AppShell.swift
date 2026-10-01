@@ -28,6 +28,8 @@ struct AppShell: View {
     @State private var settingsOpensMemory = false
     /// Bumped when Settings closes so the sidebar reloads Recents from the (possibly new) server.
     @State private var recentsReloadToken = 0
+    /// A question from Health waiting for its new chat to open and send it.
+    @State private var pendingAsk: (chatId: String, text: String)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @Environment(ColorToneModel.self) private var toneModel: ColorToneModel?
@@ -113,7 +115,9 @@ struct AppShell: View {
         case .chat:
             ChatDetailView(
                 chatId: activeChat.id, title: activeChat.title, apiClient: apiClient,
-                streamManager: streamManager, serverConfig: serverConfig
+                streamManager: streamManager, serverConfig: serverConfig,
+                initialMessage: pendingAsk?.chatId == activeChat.id ? pendingAsk?.text : nil,
+                onInitialMessageSent: { pendingAsk = nil }
             )
             // A different chat is a different view model.
             .id(activeChat.id)
@@ -124,18 +128,25 @@ struct AppShell: View {
                     showSettings = true
                 })
         case .health:
-            HealthRootView(apiClient: apiClient)
+            HealthRootView(apiClient: apiClient) { text in
+                let chat = ActiveChat.new()
+                pendingAsk = (chat.id, text)
+                activeChat = chat
+                workspace = .chat
+            }
         case .philharmonic:
             PhilharmonicPlaceholderView()
         }
     }
 
     private func select(id: String, title: String?) {
+        pendingAsk = nil
         activeChat = ActiveChat(id: id, title: title)
         setSidebar(open: false)
     }
 
     private func startNewChat() {
+        pendingAsk = nil
         activeChat = .new()
         setSidebar(open: false)
     }

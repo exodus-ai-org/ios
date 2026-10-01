@@ -38,12 +38,17 @@ public struct ChatDetailView: View {
     /// turns into a push into the already-running view model (its own `@State` only reads `init`'s
     /// value once, so a new `title:` argument alone would otherwise be silently ignored).
     private let title: String?
+    /// A question handed over from Health, sent once the (new) chat's history is known.
+    private let initialMessage: String?
+    private let onInitialMessageSent: (() -> Void)?
 
     public init(
         chatId: String, title: String? = nil, apiClient: APIClient, streamManager: ChatStreamManager,
-        serverConfig: ServerConfigStore
+        serverConfig: ServerConfigStore, initialMessage: String? = nil, onInitialMessageSent: (() -> Void)? = nil
     ) {
         self.title = title
+        self.initialMessage = initialMessage
+        self.onInitialMessageSent = onInitialMessageSent
         makeObjects = {
             ChatScreenObjects(
                 chatId: chatId, title: title, apiClient: apiClient, streamManager: streamManager, serverConfig: serverConfig)
@@ -135,7 +140,13 @@ public struct ChatDetailView: View {
         }
         .navigationTitle(viewModel.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await viewModel.onAppear() }
+        .task {
+            await viewModel.onAppear()
+            if let initialMessage, viewModel.hasLoadedHistory {
+                await viewModel.sendInitial(initialMessage)
+                onInitialMessageSent?()
+            }
+        }
         // Apart from `onAppear`, which waits out a turn it re-attaches to.
         .task(id: viewModel.hasLoadedHistory) { await viewModel.loadMemoryUsage() }
         .onChange(of: viewModel.composerFocusRequest) { isComposerFocused = true }

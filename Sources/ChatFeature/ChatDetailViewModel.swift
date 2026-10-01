@@ -87,6 +87,7 @@ public final class ChatDetailViewModel {
     private let noticeLifetime: Duration
     private let noticeSleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private var noticeClearTask: Task<Void, Never>?
+    @ObservationIgnored private var sentInitial = false
 
     /// `noticeLifetime` is how long a notice stays up; `noticeSleep` waits it out — a test hands in one it controls.
     public convenience init(
@@ -250,6 +251,14 @@ public final class ChatDetailViewModel {
         if supportsAttempts { messages = RunAttempts.autoChoose(messages) }
         await startTurn(
             with: .userMessage(id: Self.newMessageId(), text: text, timestampMs: Self.nowMs))
+    }
+
+    /// A question handed over from another workspace (Health's ask box): sent as if typed, once per chat screen.
+    public func sendInitial(_ text: String) async {
+        guard !sentInitial else { return }
+        sentInitial = true
+        composerText = text
+        await sendMessage()
     }
 
     /// Asks the last question again, as the desktop's `regenerate` does: a new user message with a new id (and so a new

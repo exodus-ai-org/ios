@@ -28,6 +28,11 @@ public struct HealthRootView: View {
         self.onAsk = onAsk
     }
 
+    #if DEBUG
+    /// The workspace on a model made elsewhere (preview data), for the app's `-HealthGallery`.
+    public static func gallery(model: HealthHomeModel) -> HealthRootView { HealthRootView(model: model, onAsk: { _ in }) }
+    #endif
+
     public var body: some View {
         Group {
             if model.needsOnboarding {

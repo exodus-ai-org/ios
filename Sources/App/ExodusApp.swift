@@ -53,6 +53,8 @@ struct ExodusApp: App {
                     SettingsGalleryView()
                 } else if OdyGalleryLaunch.isEnabled {
                     OdyGalleryView()
+                } else if HealthGalleryLaunch.isEnabled {
+                    HealthGalleryView()
                 } else if CardPrototypesLaunch.isEnabled {
                     CardPrototypesView(embedded: false).chatTone(toneModel)
                 } else {

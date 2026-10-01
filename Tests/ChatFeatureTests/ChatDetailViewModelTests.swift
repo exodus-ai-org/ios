@@ -993,6 +993,21 @@ struct ChatDetailViewModelTests {
         harness.session.invalidateAndCancel()
         await appear.value
     }
+
+    @Test("a question handed over from Health is sent once, however often it is handed")
+    func sendInitialSendsOnce() async throws {
+        let recorder = RequestRecorder()
+        serve(history: "[]", reply: helloReply, recorder: recorder)
+        let vm = Harness().makeViewModel(chatId: "from-health")
+        await vm.loadHistory()
+        let text = "```exodus-health\n{\"steps\":1}\n```\n\nWhy am I tired?"
+        await vm.sendInitial(text)
+        await vm.sendInitial(text)
+        #expect(recorder.lines.filter { $0 == "POST /api/v1/chat" }.count == 1)
+        let body = try recorder.onlyJSONBody(forPOST: "/api/v1/chat")
+        let message = try #require(body["message"] as? [String: Any])
+        #expect(message["content"] as? String == text)
+    }
 }
 
 @MainActor
