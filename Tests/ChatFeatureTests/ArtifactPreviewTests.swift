@@ -299,6 +299,34 @@ struct ArtifactPreviewTests {
         #expect(ArtifactProximity.of(card: .zero, visible: nil) == .near)
     }
 
+    @Test("a card back on screen asks for its place again unless it was last far")
+    func slotOnAppear() {
+        #expect(ArtifactProximity.near.slotChange == .want)
+        #expect(ArtifactProximity.far.slotChange == .drop)
+        #expect(ArtifactProximity.between.slotChange == nil)
+        #expect(ArtifactProximity.slotChangeOnAppear(last: nil) == .want)
+        #expect(ArtifactProximity.slotChangeOnAppear(last: .near) == .want)
+        #expect(ArtifactProximity.slotChangeOnAppear(last: .between) == .want)
+        #expect(ArtifactProximity.slotChangeOnAppear(last: .far) == nil)
+
+        // Near, then gone (scrolled just off the lazy list), then back with the same geometry: no proximity change
+        // fires, and the card still gets its web view back.
+        var slots = ArtifactLiveSlots()
+        let card = UUID()
+        func apply(_ change: ArtifactSlotChange?) {
+            switch change {
+            case .want: slots.want(card)
+            case .drop: slots.drop(card)
+            case nil: break
+            }
+        }
+        apply(ArtifactProximity.near.slotChange)
+        slots.drop(card)  // onDisappear
+        #expect(!slots.holds(card))
+        apply(ArtifactProximity.slotChangeOnAppear(last: .near))
+        #expect(slots.holds(card))
+    }
+
     @Test("create_artifact's result reads its id, chat, title and code; one without an id is not an artifact")
     func decodesResult() throws {
         let json = try JSONDecoder().decode(

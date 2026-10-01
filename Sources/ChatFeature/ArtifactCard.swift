@@ -170,6 +170,25 @@ enum ArtifactProximity: Equatable {
         if distance <= visible.height * 0.5 { return .near }
         return distance > visible.height * 1.5 ? .far : .between
     }
+
+    /// What a card does with its place on landing here.
+    var slotChange: ArtifactSlotChange? {
+        switch self {
+        case .near: .want
+        case .far: .drop
+        case .between: nil
+        }
+    }
+
+    /// A card that disappeared gave its place up, but one back on screen (scrolled just off the lazy list and back)
+    /// may land where it was, and an unchanged proximity reports nothing: it asks again unless it was last far.
+    static func slotChangeOnAppear(last: ArtifactProximity?) -> ArtifactSlotChange? {
+        last == .far ? nil : .want
+    }
+}
+
+enum ArtifactSlotChange: Equatable {
+    case want, drop
 }
 
 @MainActor
@@ -192,6 +211,7 @@ private struct ArtifactInlineView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var budget = ArtifactLiveBudget.shared
     @State private var slot = UUID()
+    @State private var lastProximity: ArtifactProximity?
     @State private var code: String?
 
     private var isLive: Bool { budget.slots.holds(slot) }
@@ -207,12 +227,10 @@ private struct ArtifactInlineView: View {
         .onGeometryChange(for: ArtifactProximity.self) { proxy in
             ArtifactProximity.of(card: proxy.frame(in: .local), visible: proxy.bounds(of: .scrollView))
         } action: { proximity in
-            switch proximity {
-            case .near: budget.want(slot)
-            case .far: budget.drop(slot)
-            case .between: break
-            }
+            lastProximity = proximity
+            apply(proximity.slotChange)
         }
+        .onAppear { apply(ArtifactProximity.slotChangeOnAppear(last: lastProximity)) }
         .onDisappear { budget.drop(slot) }
         .onChange(of: isLive) { _, live in
             if live { state.reload() }
@@ -280,6 +298,14 @@ private struct ArtifactInlineView: View {
         return String(
             localized: "ios:chat.artifact.fallback.title", defaultValue: "View it on your computer",
             comment: "Title shown instead of an artifact preview that cannot be shown on the phone.")
+    }
+
+    private func apply(_ change: ArtifactSlotChange?) {
+        switch change {
+        case .want: budget.want(slot)
+        case .drop: budget.drop(slot)
+        case nil: break
+        }
     }
 
     /// While live: the code (fetched when the row came without it), then the time the page has to render it.
