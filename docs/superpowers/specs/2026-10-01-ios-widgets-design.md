@@ -100,12 +100,12 @@ Each write that changes the snapshot calls `WidgetCenter.shared.reloadAllTimelin
 - **Rectangular**: line 1 the note's headline, line 2 sleep + steps / goal → `health`. Without today's note: "Ask Exodus" → `chat/new`.
 
 ### 3.4 Control
-- `AskControl`: `ControlWidgetButton` with an `OpenIntent` that opens `exodus://chat/new`; label "Ask Exodus", Ody outline symbol. Usable in Control Center and on the Action button.
+- `AskControl`: `ControlWidgetButton` with an `OpenIntent` that opens `exodus://chat/new`; label "Ask Exodus", the SF Symbol `bubble.left.and.text.bubble.right` (a control needs a symbol; a custom Ody symbol is later polish). Usable in Control Center and on the Action button.
 
 ### 3.5 Rendering modes, empty state, privacy
 - Full colour: night sky. Accented / clear Home Screen modes: no sky, Ody outline and text only (`widgetRenderingMode`).
 - Never paired / never opened: greeting, Ody and the Ask capsule; "No chats yet". No error, no pairing prompt — the app handles that once opened.
-- Chat titles and health numbers are `.privacySensitive()`.
+- Chat titles and health numbers are `.privacySensitive()`, and so is the Lock Screen's headline from today's note.
 - All strings in `Localizable.xcstrings` (extension shares the catalog), 10 languages via `scripts/l10n.py`.
 
 ## 4. Error handling
