@@ -32,6 +32,9 @@ public final class HealthHomeModel {
     @ObservationIgnored private let builder: SnapshotBuilder
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let locale: String
+    @ObservationIgnored private var running: Task<Void, Never>?
+    @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var remembering = false
 
     public init(
         source: any HealthDataSource, summaries: any HealthSummaryService, memory: any MemoryWriter,
@@ -48,16 +51,34 @@ public final class HealthHomeModel {
         self.locale = locale
     }
 
+    /// One load at a time: a plain call joins the one running, a forced one replaces it. A replaced run may still
+    /// finish, so every result is checked against the generation before it lands.
     public func load(force: Bool = false) async {
+        if !force, let running { return await running.value }
+        running?.cancel()
+        generation += 1
+        let mine = generation
         isLoading = true
-        defer { isLoading = false }
+        let task = Task { await run(force: force, generation: mine) }
+        running = task
+        await task.value
+        if generation == mine {
+            running = nil
+            isLoading = false
+        }
+    }
+
+    private func run(force: Bool, generation mine: Int) async {
+        func current() -> Bool { generation == mine && !Task.isCancelled }
         let built: HealthDay
         do {
             built = try await builder.build(now: now(), locale: locale)
         } catch {
-            report = .failed
+            // Whatever is already on screen beats an error.
+            if current(), !Self.isCancellation(error), day == nil { report = .failed }
             return
         }
+        guard current() else { return }
         day = built
         let snapshot = built.snapshot
         celebrates = snapshot.activity?.reachedGoal == true && preferences.lastCelebrated != snapshot.date
@@ -79,12 +100,18 @@ public final class HealthHomeModel {
         report = .writing
         do {
             let summary = try await summaries.summary(for: snapshot)
+            guard current() else { return }
             try? cache.save(CachedReport(snapshot: snapshot, summary: summary, generatedAt: now()))
             show(summary)
         } catch {
+            guard current(), !Self.isCancellation(error) else { return }
             // A report from earlier today beats an error.
             if let cached { show(cached.summary) } else { report = Self.reportState(for: error) }
         }
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 
     public func authorize() async {
@@ -100,11 +127,13 @@ public final class HealthHomeModel {
 
     /// Saves the suggestion as a memory. False when it could not be saved; the card stays.
     public func remember() async -> Bool {
-        guard let suggestion else { return false }
+        guard let suggestion, !remembering else { return false }
+        remembering = true
+        defer { remembering = false }
         do {
             try await memory.remember(suggestion)
             preferences.dismiss(suggestion.key)
-            self.suggestion = nil
+            if self.suggestion?.key == suggestion.key { self.suggestion = nil }
             return true
         } catch {
             return false
@@ -130,6 +159,8 @@ public final class HealthHomeModel {
 
     public static func reportState(for error: Error) -> Report {
         if error is URLError { return .offline }
+        // Status 0 is no usable address: no computer is paired or configured.
+        if let http = error as? HTTPError, http.statusCode == 0 { return .offline }
         if let http = error as? HTTPError, http.code.hasPrefix("CONFIG_") || http.code == "SETTING_NOT_FOUND" {
             return .needsModel
         }

@@ -26,6 +26,21 @@ actor StubMemory: MemoryWriter {
     }
 }
 
+/// Each call takes the next delay and answers with its own number, so a test can tell which call landed.
+actor SlowSummaries: HealthSummaryService {
+    var delays: [Duration]
+    var calls = 0
+    init(_ delays: [Duration]) { self.delays = delays }
+    func summary(for snapshot: HealthSnapshot) async throws -> HealthSummary {
+        calls += 1
+        let n = calls
+        try? await Task.sleep(for: delays[n - 1])
+        return HealthSummary(
+            headline: "call \(n)", summary: "s", categories: .init(sleep: nil, activity: nil, recovery: nil, body: nil),
+            memorySuggestion: nil)
+    }
+}
+
 @MainActor
 struct HealthHomeModelTests {
     static let suggestion = HealthSummary.MemorySuggestion(section: "profile", key: "weekday-sleep", summary: "s")
@@ -86,6 +101,7 @@ struct HealthHomeModelTests {
         #expect(HealthHomeModel.reportState(for: URLError(.cannotConnectToHost)) == .offline)
         #expect(HealthHomeModel.reportState(for: HTTPError(statusCode: 400, code: "CONFIG_MISSING_PROVIDER", message: "")) == .needsModel)
         #expect(HealthHomeModel.reportState(for: HTTPError(statusCode: 404, code: "SETTING_NOT_FOUND", message: "")) == .needsModel)
+        #expect(HealthHomeModel.reportState(for: HTTPError(statusCode: 0, code: "INVALID_BASE_URL", message: "")) == .offline)
         #expect(HealthHomeModel.reportState(for: HTTPError(statusCode: 500, code: "AI_GENERATION_FAILED", message: "")) == .failed)
     }
 
@@ -147,5 +163,43 @@ struct HealthHomeModelTests {
         await m.load()
         await m.logWater()
         #expect(await source.loggedWater == [250])
+    }
+
+    @Test func overlappingLoadsShareOneRun() async {
+        await withData()
+        prefs.summaryConsent = true
+        let slow = SlowSummaries([.milliseconds(100)])
+        let m = HealthHomeModel(
+            source: source, summaries: slow, memory: memory, cache: cache, preferences: prefs,
+            calendar: TestClock.calendar, now: { TestClock.now }, locale: "en")
+        async let a: Void = m.load()
+        async let b: Void = m.load()
+        _ = await (a, b)
+        #expect(await slow.calls == 1)
+        #expect(!m.isLoading)
+    }
+
+    @Test func aForcedLoadReplacesASlowOne() async {
+        await withData()
+        prefs.summaryConsent = true
+        let slow = SlowSummaries([.milliseconds(300), .milliseconds(0)])
+        let m = HealthHomeModel(
+            source: source, summaries: slow, memory: memory, cache: cache, preferences: prefs,
+            calendar: TestClock.calendar, now: { TestClock.now }, locale: "en")
+        let first = Task { await m.load() }
+        while await slow.calls == 0 { await Task.yield() }
+        await m.load(force: true)
+        await first.value
+        try? await Task.sleep(for: .milliseconds(400))
+        #expect(m.report.readySummary?.headline == "call 2")
+        #expect(cache.load(date: "2026-10-01")?.summary.headline == "call 2")
+        #expect(!m.isLoading)
+    }
+}
+
+extension HealthHomeModel.Report {
+    var readySummary: HealthSummary? {
+        if case .ready(let s) = self { return s }
+        return nil
     }
 }
