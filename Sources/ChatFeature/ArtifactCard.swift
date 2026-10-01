@@ -9,6 +9,10 @@ struct ArtifactCard: View {
     let artifact: ArtifactResult
     @State private var showsPreview = false
     @State private var showsCode = false
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.toneInk) private var toneInk
+    @Environment(\.toneAccent) private var toneAccent
+    @Environment(\.accentGlyph) private var accentGlyph
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -37,8 +41,12 @@ struct ArtifactCard: View {
                 } label: {
                     Label("ios:chat.artifact.card.preview", systemImage: "play.rectangle")
                         .frame(maxWidth: .infinity)
+                        .foregroundStyle(colorScheme == .dark ? accentGlyph : .white)
                 }
                 .buttonStyle(.glassProminent)
+                // As the send button: the ink with white in light, the tone's fill and its glyph in dark — `.tint`
+                // alone is near white in dark, under a white label.
+                .tint(colorScheme == .dark ? toneAccent : toneInk)
                 Button {
                     showsCode = true
                 } label: {
