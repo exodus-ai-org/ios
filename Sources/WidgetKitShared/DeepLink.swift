@@ -27,8 +27,8 @@ public enum DeepLink: Equatable, Sendable {
             parts.host = "health"
             parts.queryItems = ask.map { [URLQueryItem(name: "ask", value: $0)] }
         }
-        // `URLQueryItem` leaves `&`, `=`, `+` and `?` alone inside a value; they are escaped here so the value
-        // reads back whole.
+        // `URLQueryItem` escapes `&`, `=`, `%` and `#` in a value but leaves `+`, which form decoders read as a
+        // space; only `+` is escaped here, so the value reads back whole.
         parts.percentEncodedQuery = parts.percentEncodedQuery?
             .replacingOccurrences(of: "+", with: "%2B")
         return parts.url!
@@ -48,7 +48,7 @@ public enum DeepLink: Equatable, Sendable {
         case ("chat", ["new"]):
             guard let prompt = query("prompt") else { return nil }
             self = .newChat(prompt: prompt)
-        case ("chat", let path) where path.count == 1:
+        case ("chat", let path) where path.count == 1 && Self.isAcceptableChatId(path[0]):
             self = .chat(id: path[0])
         case ("health", []):
             guard let ask = query("ask") else { return nil }
@@ -56,5 +56,12 @@ public enum DeepLink: Equatable, Sendable {
         default:
             return nil
         }
+    }
+
+    /// The id goes into `/api/v1/chat/<id>/…`: only the characters of a UUID-like id, never `/` or `..`. The same
+    /// rule as `DeepResearchStore.isAcceptableId` in ChatFeature, which this module cannot reach.
+    static func isAcceptableChatId(_ id: String) -> Bool {
+        (1...64).contains(id.count)
+            && id.unicodeScalars.allSatisfy { ($0.isASCII && CharacterSet.alphanumerics.contains($0)) || $0 == "-" || $0 == "_" }
     }
 }

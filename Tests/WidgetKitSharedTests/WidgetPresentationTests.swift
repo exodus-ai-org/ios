@@ -33,6 +33,12 @@ struct WidgetPresentationTests {
         #expect(WidgetPresentation.health(of: snapshot, at: date(2, 0, 30), calendar: calendar) == nil)
     }
 
+    @Test("no glance, no health")
+    func noHealth() {
+        #expect(WidgetSnapshot.empty.health == nil)
+        #expect(WidgetPresentation.health(of: .empty, at: date(1, 8), calendar: calendar) == nil)
+    }
+
     @Test("twelve hourly entries, the first now, the rest on the hour")
     func entries() {
         let dates = WidgetPresentation.entryDates(from: date(1, 9, 41), calendar: calendar)
