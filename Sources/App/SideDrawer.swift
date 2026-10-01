@@ -286,8 +286,11 @@ private struct DrawerPan: UIGestureRecognizerRepresentable {
 
         /// The Health hero scrubs time with a horizontal drag; a swipe that begins there is its, not the drawer's.
         /// Its pan is named `OdyGestures.claimsHorizontal` and fails at once for a vertical start or a touch outside it.
+        /// The drawer waits for it: `shouldRequireFailureOf`, not `shouldBeRequiredToFailBy` — that one says the
+        /// opposite (the hero waits for the drawer), so a rightward swipe on the hero opened the drawer and only a
+        /// leftward one, which the closed drawer declines, ever reached the scrub.
         func gestureRecognizer(
-            _ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer
+            _ recognizer: UIGestureRecognizer, shouldRequireFailureOf other: UIGestureRecognizer
         ) -> Bool {
             other.name == OdyGestures.claimsHorizontal
         }
