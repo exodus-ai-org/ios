@@ -103,8 +103,8 @@ Each category card picks its own small Ody from its own data (`noData` when `nil
 
 1. If memory is enabled for chat, `loadRelevantMemories(question, …)` with a question built from "daily health report" + a one-line snapshot digest; session id `health:<date>`.
 2. One `callLlm` with the active provider/model/key. System prompt: warm, brief, in `locale` (one of the app's ten languages); only the given numbers, quoted exactly; no diagnosis; a memory suggestion only for a **lasting pattern**, never a one-day event, never a duplicate of an existing memory.
-3. Validate with the schema; on failure retry once; then `AIError(AI_GENERATION_FAILED)` (HTTP 500).
-4. No database writes (token usage is not recorded: the desktop derives usage from assistant messages and Health writes none); logs carry duration and outcome only, never health values.
+3. Validate with the schema; on failure retry once; then `AIError(AI_GENERATION_FAILED)` (HTTP 500). The headline is asked for in at most 60 characters (the schema allows 80). A malformed `memorySuggestion` alone does not fail the report: it is returned as `null`.
+4. No health data is stored; the memory read-filter's own usage bookkeeping (touch/usage log) still runs. Token usage is not recorded (the desktop derives usage from assistant messages and Health writes none); logs carry duration and outcome only, never health values.
 
 **Response**
 
