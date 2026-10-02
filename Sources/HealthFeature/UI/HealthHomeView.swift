@@ -125,9 +125,7 @@ struct HealthHomeView: View {
                 suggestions: [
                     "ios:health.ask.suggestion.sleep", "ios:health.ask.suggestion.energy", "ios:health.ask.suggestion.week",
                 ],
-                canAttach: model.day != nil, attachedLabel: "ios:health.ask.attached",
-                attachByDefault: model.hasConsent, attachment: { snapshotJSON },
-                initialText: initialAsk, onSend: onAsk)
+                attachment: { snapshotJSON }, initialText: initialAsk, onSend: onAsk)
         }
         .navigationDestination(for: HealthCategory.self) { c in
             HealthDetailView(category: c, model: model, onAsk: onAsk)
