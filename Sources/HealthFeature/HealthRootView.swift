@@ -13,6 +13,9 @@ public struct HealthRootView: View {
     let initialAsk: String?
     let onInitialAskUsed: () -> Void
     @Environment(\.scenePhase) private var scenePhase
+    @State private var confirmClear = false
+    /// Bumped when the archive was cleared: the success tap.
+    @State private var cleared = 0
 
     public init(
         apiClient: APIClient, onGlanceChange: @escaping (HealthGlance?) -> Void = { _ in },
@@ -67,6 +70,11 @@ public struct HealthRootView: View {
                         Toggle(isOn: notesBinding) {
                             Label(Self.notesText, systemImage: "text.bubble")
                         }
+                        Button(role: .destructive) {
+                            confirmClear = true
+                        } label: {
+                            Label(Self.clearArchiveText, systemImage: "trash")
+                        }
                     }
                     #if DEBUG
                     Button {
@@ -82,6 +90,17 @@ public struct HealthRootView: View {
                 .accessibilityIdentifier("healthMenu")
             }
         }
+        .alert(Text(Self.clearTitleText), isPresented: $confirmClear) {
+            Button(role: .destructive) {
+                if model.clearArchive() { cleared += 1 }
+            } label: {
+                Text(Self.clearArchiveText)
+            }
+            Button("common:action.cancel", role: .cancel) {}
+        } message: {
+            Text(Self.clearMessageText)
+        }
+        .sensoryFeedback(.success, trigger: cleared)
     }
 
     /// The glance once the report has settled. Before the first read and while a note is written nothing is known
@@ -107,4 +126,14 @@ public struct HealthRootView: View {
         comment: "Health menu toggle: send the day's summary to the AI provider for a written note.")
     private static let menuText = LocalizedStringResource(
         "ios:health.settings.menu", defaultValue: "Health options", comment: "Health toolbar menu, VoiceOver label.")
+    private static let clearArchiveText = LocalizedStringResource(
+        "ios:health.archive.clear", defaultValue: "Clear archive",
+        comment: "Health menu, and its confirmation's button: delete every daily note kept on this iPhone.")
+    private static let clearTitleText = LocalizedStringResource(
+        "ios:health.archive.confirmTitle", defaultValue: "Clear the archive?",
+        comment: "Confirmation title before deleting every kept daily note.")
+    private static let clearMessageText = LocalizedStringResource(
+        "ios:health.archive.confirmMessage",
+        defaultValue: "This deletes every daily note kept on this iPhone. Today's note and your health data stay.",
+        comment: "Confirmation message before deleting every kept daily note.")
 }

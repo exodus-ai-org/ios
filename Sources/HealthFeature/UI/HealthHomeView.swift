@@ -55,6 +55,13 @@ struct HealthHomeView: View {
                     Text(verbatim: summary.headline).font(.headline).padding(.top, 2)
                 }
                 ReportCard(report: model.report) { Task { await model.grantConsent() } }
+                // Trends are local: shown without a note or consent, hidden only until Health access is asked.
+                if let week = model.week, model.day?.snapshot.odyState != .permission {
+                    NavigationLink(value: TrendsRoute(scope: .week, anchor: week.period.start)) {
+                        WeekCard(week: week, calendar: model.calendar)
+                    }
+                    .buttonStyle(.plain)
+                }
                 if let snapshot = model.day?.snapshot {
                     if snapshot.odyState == .noData { noDataHelp }
                     LazyVGrid(columns: columns, spacing: 10) {
