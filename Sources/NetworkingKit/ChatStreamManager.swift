@@ -101,7 +101,8 @@ public actor ChatStreamManager {
     public func send(
         chatId: String,
         messages: [ChatMessage],
-        serverConfig: ServerConfigStore
+        serverConfig: ServerConfigStore,
+        options: TurnOptions = TurnOptions()
     ) -> AsyncStream<ChatStreamUpdate> {
         // Retire the previous turn for this chat: stop its task and end its
         // observer's stream so that consumer doesn't stay suspended forever.
@@ -116,7 +117,8 @@ public actor ChatStreamManager {
             generation: generation, task: nil, messages: messages, status: .submitted, continuation: continuation)
         continuation.yield(.status(.submitted))
 
-        let request = Self.makeRequest(chatId: chatId, messages: messages, serverConfig: serverConfig)
+        let request = Self.makeRequest(
+            chatId: chatId, messages: messages, serverConfig: serverConfig, options: options)
         let sseClient = self.sseClient
 
         let task = Task { [weak self] in
@@ -262,10 +264,12 @@ public actor ChatStreamManager {
         }
     }
 
-    private static func makeRequest(
+    /// Internal, not private: its tests read the body it builds.
+    static func makeRequest(
         chatId: String,
         messages: [ChatMessage],
-        serverConfig: ServerConfigStore
+        serverConfig: ServerConfigStore,
+        options: TurnOptions = TurnOptions()
     ) -> URLRequest? {
         guard let base = URL(string: serverConfig.baseURLString) else { return nil }
         var request = URLRequest(url: base.appendingPathComponent("/api/v1/chat"))
@@ -283,8 +287,11 @@ public actor ChatStreamManager {
             let id: String
             let messages: [ChatMessage]
             let advancedTools: [String]
+            /// Left out when off: a nil optional is not encoded.
+            let reasoningEffort: String?
         }
-        request.httpBody = try? JSONEncoder().encode(Body(id: chatId, messages: messages, advancedTools: []))
+        request.httpBody = try? JSONEncoder().encode(Body(id: chatId, messages: messages, advancedTools: options.advancedTools,
+                reasoningEffort: options.wireReasoningEffort))
         return request
     }
 }
