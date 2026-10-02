@@ -15,67 +15,67 @@
       "shouldTranslate" : false
     },
     "NSCameraUsageDescription" : {
-      "comment" : "Camera permission prompt. Exodus is the app's name and stays as is.",
+      "comment" : "Camera permission prompt: scanning the pairing code, and taking photos for a chat. Exodus is the app's name and stays as is.",
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exodus verwendet die Kamera, um den auf Ihrem Computer angezeigten Kopplungscode zu scannen."
+            "value" : "Exodus verwendet die Kamera, um den auf Ihrem Computer angezeigten Kopplungscode zu scannen und Fotos aufzunehmen, die Sie einem Chat hinzufügen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exodus uses the camera to scan the pairing code shown on your computer."
+            "value" : "Exodus uses the camera to scan the pairing code shown on your computer, and to take photos you add to a chat."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exodus usa la cámara para escanear el código de vinculación que aparece en tu ordenador."
+            "value" : "Exodus usa la cámara para escanear el código de vinculación que aparece en tu ordenador y para hacer fotos que añades a un chat."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exodus utilise l’appareil photo pour scanner le code de jumelage affiché sur votre ordinateur."
+            "value" : "Exodus utilise l’appareil photo pour scanner le code de jumelage affiché sur votre ordinateur et pour prendre les photos que vous ajoutez à une discussion."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exodus usa la fotocamera per scansionare il codice di abbinamento mostrato sul tuo computer."
+            "value" : "Exodus usa la fotocamera per scansionare il codice di abbinamento mostrato sul tuo computer e per scattare le foto che aggiungi a una chat."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exodus はコンピュータに表示されたペアリングコードをスキャンするためにカメラを使用します。"
+            "value" : "Exodus はコンピュータに表示されたペアリングコードのスキャンと、チャットに追加する写真の撮影にカメラを使用します。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exodus는 컴퓨터에 표시된 페어링 코드를 스캔하기 위해 카메라를 사용합니다."
+            "value" : "Exodus는 컴퓨터에 표시된 페어링 코드를 스캔하고 채팅에 추가할 사진을 찍기 위해 카메라를 사용합니다."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "O Exodus usa a câmera para escanear o código de pareamento exibido no seu computador."
+            "value" : "O Exodus usa a câmera para escanear o código de pareamento exibido no seu computador e para tirar fotos que você adiciona a um chat."
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exodus 使用相機掃描電腦上顯示的配對碼。"
+            "value" : "Exodus 使用相機掃描電腦上顯示的配對碼，以及拍攝你加入對話的相片。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exodus 使用相機掃描電腦上顯示的配對碼。"
+            "value" : "Exodus 使用相機掃描電腦上顯示的配對碼，以及拍攝你加入聊天的照片。"
           }
         }
       }

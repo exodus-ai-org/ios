@@ -60,7 +60,7 @@ let project = Project(
                     "NSLocalNetworkUsageDescription":
                         "Exodus needs local network access to connect to the Exodus service running on your computer.",
                     "NSCameraUsageDescription":
-                        "Exodus uses the camera to scan the pairing code shown on your computer.",
+                        "Exodus uses the camera to scan the pairing code shown on your computer, and to take photos you add to a chat.",
                     "NSFaceIDUsageDescription":
                         "Exodus uses Face ID to unlock the connection to your computer.",
                     "NSLocationWhenInUseUsageDescription":
