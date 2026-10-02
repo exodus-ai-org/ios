@@ -261,6 +261,48 @@ struct HealthHomeModelTests {
         #expect(await summaries.calls <= 1)
         #expect(!m.isLoading)
     }
+
+    @Test func aWrittenNoteIsKeptForItsDay() async {
+        await withData()
+        prefs.summaryConsent = true
+        await model().load()
+        #expect(cache.archive.read(day: "2026-10-01")?.summary == Self.summary)
+    }
+
+    @Test func stoppingNotesKeepsThePastOnes() async {
+        await withData()
+        prefs.summaryConsent = true
+        let m = model()
+        await m.load()
+        m.revokeConsent()
+        #expect(cache.load(date: "2026-10-01") == nil)
+        #expect(cache.archive.read(day: "2026-10-01") != nil)
+    }
+
+    @Test func clearingTheArchiveLeavesTodaysNote() async {
+        await withData()
+        prefs.summaryConsent = true
+        let m = model()
+        await m.load()
+        try? cache.archive.write(HealthArchiveTests.entry("2026-09-30"))
+        #expect(m.clearArchive())
+        #expect(cache.archive.read(day: "2026-09-30") == nil)
+        #expect(cache.load(date: "2026-10-01") != nil)
+        // Today's note stays filed; only the past is cleared.
+        #expect(cache.archive.read(day: "2026-10-01")?.summary == Self.summary)
+        #expect(m.report.readySummary != nil)
+    }
+
+    @Test func theWeekCardReadsThisWeekAndLast() async throws {
+        await withData()
+        let m = model()
+        await m.load()
+        let week = try #require(m.week)
+        #expect(week.period == Period.containing(TestClock.now, .week, calendar: TestClock.calendar))
+        #expect(week.cells.count == 7)
+        #expect(week.current.steps.average == 9000)
+        #expect(week.previous.steps.days == 0)
+    }
 }
 
 extension HealthHomeModel.Report {

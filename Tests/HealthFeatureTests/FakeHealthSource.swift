@@ -20,6 +20,10 @@ actor FakeHealthSource: HealthDataSource {
     var failure: Error?
     /// Delays the water read of a load (after it has read, so the answer is stale), so a test can act while it is in flight.
     var slowMs = 0
+    /// While set, the water read of a load waits (after it has read) until the test calls `release()`.
+    var gated = false
+    private var held: [CheckedContinuation<Void, Never>] = []
+    var holding: Bool { !held.isEmpty }
     /// How many times each series was read: one per load, however many days it covers.
     var sleepReads = 0
     var sumReads: [SumMetric: Int] = [:]
@@ -44,7 +48,16 @@ actor FakeHealthSource: HealthDataSource {
         sumReads[metric, default: 0] += 1
         let answer = (sums[metric] ?? []).filter { $0.day >= start && $0.day < end }
         if metric == .waterMl, slowMs > 0 { try? await Task.sleep(for: .milliseconds(slowMs)) }
+        if metric == .waterMl, gated { await withCheckedContinuation { held.append($0) } }
         return answer
+    }
+
+    /// Lets every held read go on, and holds no more.
+    func release() {
+        gated = false
+        let waiting = held
+        held = []
+        waiting.forEach { $0.resume() }
     }
 
     func hourlySums(_ metric: SumMetric, on day: Date) async throws -> [DayValue] { hourly[metric] ?? [] }

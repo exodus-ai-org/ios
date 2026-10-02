@@ -29,6 +29,11 @@ public final class HealthHomeModel {
     public private(set) var hasOnboarded: Bool
     /// Observed mirror of the stored consent, for the menu's toggle.
     public private(set) var hasConsent: Bool
+    /// This week for the home's card; nil until it has been read.
+    private(set) var week: WeekGlance?
+    /// The calendar's day records, kept across visits to it.
+    @ObservationIgnored let dayRecords: DayRecordStore
+    @ObservationIgnored let calendar: Calendar
 
     @ObservationIgnored private let source: any HealthDataSource
     @ObservationIgnored private let summaries: any HealthSummaryService
@@ -53,14 +58,19 @@ public final class HealthHomeModel {
         self.preferences = preferences
         self.hasOnboarded = preferences.hasOnboarded
         self.hasConsent = preferences.summaryConsent
-        self.builder = SnapshotBuilder(source: source, calendar: calendar)
+        let builder = SnapshotBuilder(source: source, calendar: calendar)
+        self.builder = builder
+        self.calendar = calendar
+        self.dayRecords = DayRecordStore(builder: builder, calendar: calendar, now: now)
         self.now = now
         self.locale = locale
     }
 
-    /// One load at a time: a plain call joins the one running, a forced one replaces it and rewrites the report.
+    /// One load at a time: a plain call joins the one running, a forced one replaces it and rewrites the report. The
+    /// week's card is read after it.
     public func load(force: Bool = false) async {
         await reload(replacing: force, regenerate: force)
+        await loadWeek()
     }
 
     /// `replacing` starts a fresh read of the store even while one runs (its day may predate a change); `regenerate`
@@ -201,6 +211,38 @@ public final class HealthHomeModel {
 
     /// A detail page reads its month from the same store the day came from.
     func historyLoader(calendar: Calendar = .current) -> HealthHistoryLoader { HealthHistoryLoader(source: source, calendar: calendar) }
+
+    /// Every daily note kept on this phone.
+    var archive: HealthArchive { cache.archive }
+
+    /// This week and last, for the home's card. A failed read keeps what is shown.
+    func loadWeek() async {
+        let today = calendar.startOfDay(for: now())
+        let period = Period.containing(today, .week, calendar: calendar)
+        let before = period.previous(calendar: calendar)
+        guard let records = try? await dayRecords.records(from: before.start, through: today) else { return }
+        let all = Array(records.values)
+        week = WeekGlance(
+            period: period, cells: CalendarGrid.cells(period, records: records, today: today, calendar: calendar),
+            current: TrendMath.aggregate(all, in: period, today: today, calendar: calendar),
+            previous: TrendMath.aggregate(all, in: before, today: today, calendar: calendar))
+    }
+
+    /// The calendar page's model, on the same store and day records as the home.
+    func trends(_ route: TrendsRoute) -> TrendsModel {
+        TrendsModel(route: route, store: dayRecords, archive: archive, calendar: calendar, locale: locale, now: now)
+    }
+
+    /// Deletes every kept note on this phone (the menu's Clear archive), then files today's again: today's note stays
+    /// on screen, so it stays in the calendar too. Apple Health is untouched.
+    @discardableResult
+    public func clearArchive() -> Bool {
+        guard (try? archive.clear()) != nil else { return false }
+        if let today = cache.load(date: WireDate(timeZone: calendar.timeZone).day(now())) {
+            try? archive.write(ArchivedDay(today))
+        }
+        return true
+    }
 
     public static func reportState(for error: Error) -> Report {
         if let url = error as? URLError {
