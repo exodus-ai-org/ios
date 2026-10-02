@@ -124,6 +124,8 @@ public struct MessageGalleryView: View {
                     NoticeStack(notice: notice, onDismiss: { notice = nil }) { standInComposer }
                 } else if MessageGalleryLaunch.quote {
                     standInComposer
+                } else if let state = ComposerGalleryState.launch {
+                    ComposerGalleryBar(state: state)
                 }
             }
         }
