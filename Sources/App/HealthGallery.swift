@@ -5,8 +5,8 @@ import SwiftUI
 
 /// DEBUG-only visual check of Health: `-HealthGallery <state>` opens the workspace on preview data with the report in
 /// `<state>` (`ready` default, `writing`, `offline`, `needsModel`, `failed`, `consent`, `onboarding`), or opens the
-/// calendar over it: `calendar-week`, `calendar-month`, `calendar-quarter`, `calendar-year`, and `day-note` /
-/// `day-empty` (the month with yesterday's sheet up, which has a kept note, or the sheet of three days ago, which has
+/// calendar over it, on last month: `calendar-week`, `calendar-month`, `calendar-quarter`, `calendar-year`, and
+/// `day-note` / `day-empty` (the month with the sheet of its 16th up, which has a kept note, or of its 12th, which has
 /// none). Add `-HealthGalleryAnchor center|bottom` to open the home scrolled down, for a screenshot of the note below
 /// the hero.
 enum HealthGalleryLaunch {
@@ -41,18 +41,23 @@ struct HealthGalleryView: View {
             .defaultScrollAnchor(HealthGalleryLaunch.anchor)
     }
 
-    private static func routes() -> [TrendsRoute] {
-        let now = Date()
+    /// The calendar opens on last month, which preview data fills with coloured days: its 15th and the days around.
+    private static func reference(_ offset: Int = 0) -> Date {
         let cal = Calendar.current
+        let thisMonth = cal.dateInterval(of: .month, for: Date())?.start ?? Date()
+        let mid = cal.date(byAdding: .month, value: -1, to: thisMonth).flatMap { cal.date(byAdding: .day, value: 14, to: $0) } ?? Date()
+        return cal.date(byAdding: .day, value: offset, to: mid) ?? mid
+    }
+
+    private static func routes() -> [TrendsRoute] {
+        let anchor = reference()
         switch HealthGalleryLaunch.state {
-        case "calendar-week": return [TrendsRoute(scope: .week, anchor: now)]
-        case "calendar-month": return [TrendsRoute(scope: .month, anchor: now)]
-        case "calendar-quarter": return [TrendsRoute(scope: .quarter, anchor: now)]
-        case "calendar-year": return [TrendsRoute(scope: .year, anchor: now)]
-        case "day-note":
-            return [TrendsRoute(scope: .month, anchor: now, presentedDay: cal.date(byAdding: .day, value: -1, to: now))]
-        case "day-empty":
-            return [TrendsRoute(scope: .month, anchor: now, presentedDay: cal.date(byAdding: .day, value: -3, to: now))]
+        case "calendar-week": return [TrendsRoute(scope: .week, anchor: anchor)]
+        case "calendar-month": return [TrendsRoute(scope: .month, anchor: anchor)]
+        case "calendar-quarter": return [TrendsRoute(scope: .quarter, anchor: anchor)]
+        case "calendar-year": return [TrendsRoute(scope: .year, anchor: anchor)]
+        case "day-note": return [TrendsRoute(scope: .month, anchor: anchor, presentedDay: reference(1))]
+        case "day-empty": return [TrendsRoute(scope: .month, anchor: anchor, presentedDay: reference(-3))]
         default: return []
         }
     }
@@ -73,10 +78,11 @@ struct HealthGalleryView: View {
             default: .ready(PreviewSummaryService.sample)
             }
         let cache = ReportCache(directory: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
-        // Yesterday has a kept note; the days before it have none.
+        // Yesterday and the day-note state's day have a kept note; the other days have none.
         if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) {
             try? cache.archive.writePreview(day: yesterday)
         }
+        try? cache.archive.writePreview(day: reference(1))
         return HealthHomeModel(
             source: HealthPreviewSource(), summaries: PreviewSummaryService(report: report),
             memory: PreviewMemoryWriter(), cache: cache, preferences: prefs,

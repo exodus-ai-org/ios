@@ -19,6 +19,7 @@ struct DaySheet: View {
 
     @State private var snapshot: HealthSnapshot?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         NavigationStack {
@@ -58,7 +59,7 @@ struct DaySheet: View {
             }
             .screenTitle(ScreenTitles.join(healthTitle, dateText))
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
         .task { snapshot = await loadSnapshot() }
     }
@@ -70,30 +71,35 @@ struct DaySheet: View {
         day.formatted(Date.FormatStyle(date: .long, time: .omitted, calendar: calendar, timeZone: calendar.timeZone))
     }
 
+    /// "Thursday": the date is already the title, so the story's eyebrow only names the weekday.
+    private var weekdayText: String {
+        day.formatted(Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).weekday(.wide))
+    }
+
     private var header: some View {
-        HStack(spacing: 12) {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             OdySceneView(OdyScene(hero: record?.mood ?? .noData))
                 .frame(width: 64, height: 64)
                 .clipShape(.rect(cornerRadius: 16))
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: dateText).font(.headline)
-                Text(tone.name).font(.subheadline).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
+            Text(tone.name).font(.headline)
+            if typeSize.isAccessibilitySize == false { Spacer(minLength: 0) }
             if record?.hasData == true {
                 CornerRing(sleep: record?.sleepFraction, steps: record?.stepFraction, lineWidth: 4)
                     .frame(width: 40, height: 40)
             }
         }
         .padding(.top, 8)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: dateText))
+        .accessibilityValue(tone.name)
     }
 
-    /// The note exactly as that day's home showed it, with the date where "Today" was.
+    /// The note exactly as that day's home showed it, with the weekday where "Today" was.
     @ViewBuilder
     private func note(_ summary: HealthSummary) -> some View {
-        if let story = ReportStory(summary, eyebrow: Text(verbatim: dateText)) {
+        if let story = ReportStory(summary, eyebrow: Text(verbatim: weekdayText)) {
             story
         } else {
             VStack(alignment: .leading, spacing: 8) {
@@ -133,17 +139,21 @@ struct DayNumbers: View {
     }
 
     let record: DayRecord
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let rows = Self.rows(record)
         VStack(spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                 if index > 0 { Divider() }
-                LabeledContent {
-                    Text(verbatim: row.value).monospacedDigit()
-                } label: {
+                let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout())
+                layout {
                     Label { Text(row.title) } icon: { Image(systemName: row.symbol) }
+                    if typeSize.isAccessibilitySize == false { Spacer(minLength: 8) }
+                    Text(verbatim: row.value).monospacedDigit().foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
                 .padding(.vertical, 10)
             }
         }
