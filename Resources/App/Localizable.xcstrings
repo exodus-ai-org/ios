@@ -5748,61 +5748,61 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stimmt eine Erinnerung nicht? Tippen Sie auf „Falsch?“ und korrigieren Sie sie im Chat – Exodus aktualisiert sie."
+            "value" : "Stimmt eine Erinnerung nicht? Klicken Sie auf „Falsch?“ und korrigieren Sie sie im Chat – Exodus aktualisiert sie."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A memory wrong? Tap Wrong? and fix it in chat — Exodus updates it."
+            "value" : "A memory wrong? Click Wrong? and fix it in chat — Exodus updates it."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "¿Algún recuerdo es incorrecto? Toca «¿Incorrecto?» y corrígelo en el chat: Exodus lo actualizará."
+            "value" : "¿Algún recuerdo es incorrecto? Haz clic en «¿Incorrecto?» y corrígelo en el chat: Exodus lo actualizará."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Un souvenir est erroné ? Touchez « Erroné ? » et corrigez-le dans le chat — Exodus le met à jour."
+            "value" : "Un souvenir est erroné ? Cliquez sur « Erroné ? » et corrigez-le dans le chat — Exodus le met à jour."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Una memoria è sbagliata? Tocca «Sbagliata?» e correggila in chat: Exodus la aggiorna."
+            "value" : "Una memoria è sbagliata? Fai clic su «Sbagliata?» e correggila in chat: Exodus la aggiorna."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記憶が違っていたら、「違う？」をタップしてチャットで修正してください。Exodus が記憶を更新します。"
+            "value" : "記憶が違っていたら、「違う？」をクリックしてチャットで修正してください。Exodus が記憶を更新します。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "기억이 틀렸나요? '틀렸나요?'를 탭해 채팅에서 고치면 Exodus가 기억을 업데이트합니다."
+            "value" : "기억이 틀렸나요? '틀렸나요?'를 클릭해 채팅에서 고치면 Exodus가 기억을 업데이트합니다."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Alguma memória errada? Toque em “Errado?” e corrija no chat — o Exodus a atualiza."
+            "value" : "Alguma memória errada? Clique em “Errado?” e corrija no chat — o Exodus a atualiza."
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記憶有誤？點「有誤」在對話中修正，Exodus 會更新這條記憶。"
+            "value" : "記憶有誤？點擊「有誤」在對話中修正，Exodus 會更新這條記憶。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "記憶有誤？點「有誤」在對話中修正，Exodus 會更新這條記憶。"
+            "value" : "記憶有誤？點擊「有誤」在對話中修正，Exodus 會更新這條記憶。"
           }
         }
       }
@@ -43921,6 +43921,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 次觀看"
+          }
+        }
+      }
+    },
+    "ios:chat.usedMemories.fixHint" : {
+      "comment" : "The used-memories sheet at a reply's foot (iOS wording of chat:usedMemories.fixHint, which says Click): under the entries, how a wrong one gets fixed. Names the per-entry button (chat:usedMemories.wrong).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stimmt eine Erinnerung nicht? Tippen Sie auf „Falsch?“ und korrigieren Sie sie im Chat – Exodus aktualisiert sie."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A memory wrong? Tap Wrong? and fix it in chat — Exodus updates it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Algún recuerdo es incorrecto? Toca «¿Incorrecto?» y corrígelo en el chat: Exodus lo actualizará."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un souvenir est erroné ? Touchez « Erroné ? » et corrigez-le dans le chat — Exodus le met à jour."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una memoria è sbagliata? Tocca «Sbagliata?» e correggila in chat: Exodus la aggiorna."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記憶が違っていたら、「違う？」をタップしてチャットで修正してください。Exodus が記憶を更新します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기억이 틀렸나요? '틀렸나요?'를 탭해 채팅에서 고치면 Exodus가 기억을 업데이트합니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alguma memória errada? Toque em “Errado?” e corrija no chat — o Exodus a atualiza."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記憶有誤？點「有誤」在對話中修正，Exodus 會更新這條記憶。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記憶有誤？點「有誤」在對話中修正，Exodus 會更新這條記憶。"
           }
         }
       }

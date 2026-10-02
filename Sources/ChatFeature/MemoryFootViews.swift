@@ -333,7 +333,7 @@ struct UsedMemoriesSheet: View {
                         UsedMemoryRow(memory: memory, entries: store.entries) { act(.wrong(key: $0)) }
                     }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("chat:usedMemories.fixHint")
+                        Text("ios:chat.usedMemories.fixHint")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                         if opensSettings {
