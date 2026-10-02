@@ -279,12 +279,12 @@ struct HealthHomeModelTests {
         #expect(cache.archive.read(day: "2026-10-01") != nil)
     }
 
-    @Test func clearingTheArchiveLeavesTodaysNote() async {
+    @Test func clearingTheArchiveLeavesTodaysNote() async throws {
         await withData()
         prefs.summaryConsent = true
         let m = model()
         await m.load()
-        try? cache.archive.write(HealthArchiveTests.entry("2026-09-30"))
+        try cache.archive.write(HealthArchiveTests.entry("2026-09-30"))
         #expect(m.clearArchive())
         #expect(cache.archive.read(day: "2026-09-30") == nil)
         #expect(cache.load(date: "2026-10-01") != nil)

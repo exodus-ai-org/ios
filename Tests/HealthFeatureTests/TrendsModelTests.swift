@@ -91,14 +91,17 @@ struct TrendsModelTests {
     /// Paging faster than Apple Health answers never lands an older period's numbers under a newer title.
     @Test func aSlowerOlderLoadNeverOverwritesANewerOne() async {
         await steps()
-        await source.set { $0.gated = true }
         let m = model(.week)
+        await m.load()
+        #expect(m.current?.steps.days == 4)
+        await source.set { $0.gated = true }
         let first = Task { await m.load() }
         // The older load is provably in flight: its read is held in the fake.
         while await !source.holding { await Task.yield() }
+        // A load in flight shows no numbers, so the last ones never sit under a new title.
+        #expect(m.current == nil)
         await source.set { $0.gated = false }
         m.showPrevious()
-        #expect(m.current == nil)
         await m.load()
         #expect(m.current?.steps.days == 7)
         await source.release()
