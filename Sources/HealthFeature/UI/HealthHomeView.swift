@@ -131,6 +131,9 @@ struct HealthHomeView: View {
             HealthDetailView(category: c, model: model, onAsk: onAsk)
                 .navigationTransition(.zoom(sourceID: c, in: zoom))
         }
+        .navigationDestination(for: TrendsRoute.self) { route in
+            TrendsView(route: route, home: model, onAsk: onAsk)
+        }
         .onChange(of: model.celebrates, initial: true) { _, celebrate in
             guard celebrate else { return }
             confetti += 1
