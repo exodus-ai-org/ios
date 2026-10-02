@@ -83,6 +83,7 @@ public struct ChatDetailView: View {
                 .environment(\.runApprovals, viewModel.approvals)
                 .environment(\.memoryFoot, viewModel.memoryFoot)
                 .environment(\.placePhotoLoader, objects.placePhotos)
+                .environment(\.workspaceFileLoader, objects.workspaceFiles)
                 .environment(\.artifactSandbox, objects.artifactSandbox)
                 .environment(\.readAloud, viewModel.readAloud)
                 .environment(\.markdownAskAbout, MarkdownAskAction { [viewModel] text in viewModel.askAbout(text) })
@@ -137,6 +138,7 @@ public struct ChatDetailView: View {
             .environment(\.runApprovals, viewModel.approvals)
             .environment(\.memoryFoot, viewModel.memoryFoot)
             .environment(\.placePhotoLoader, objects.placePhotos)
+            .environment(\.workspaceFileLoader, objects.workspaceFiles)
             .environment(\.artifactSandbox, objects.artifactSandbox)
         }
         .onChange(of: viewModel.choiceCount) {
@@ -368,6 +370,8 @@ final class ChatScreenObjects {
     let placePhotos: PlacePhotoLoader
     /// The computer's artifact sandbox page, through the same paired session.
     let artifactSandbox: ArtifactSandboxSource
+    /// This chat's workspace files (a file card's View), through the same paired session.
+    let workspaceFiles: WorkspaceFileLoader
 
     init(
         chatId: String, title: String?, apiClient: APIClient, streamManager: ChatStreamManager,
@@ -380,6 +384,7 @@ final class ChatScreenObjects {
         researchJobs = DeepResearchStore(apiClient: apiClient)
         placePhotos = PlacePhotoLoader(apiClient: apiClient)
         artifactSandbox = ArtifactSandboxSource(apiClient: apiClient)
+        workspaceFiles = WorkspaceFileLoader(apiClient: apiClient, chatId: chatId)
     }
 }
 

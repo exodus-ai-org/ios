@@ -106,6 +106,7 @@ struct WriteFileCard: View {
                 FileCardError(message: message ?? ToolPresentation.failedText("write_file"))
             case .written:
                 if let preview = model.preview { content(preview) }
+                WorkspaceFileViewRow(path: model.path)
             }
         }
         .modifier(CardSurface())
@@ -158,6 +159,9 @@ struct EditFileCard: View {
                         .padding(.horizontal, CardStyle.inset)
                         .padding(.vertical, 7)
                 }
+            }
+            if !model.isFailed {
+                WorkspaceFileViewRow(path: model.path)
             }
         }
         .modifier(CardSurface())

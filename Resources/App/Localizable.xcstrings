@@ -11636,6 +11636,402 @@
         }
       }
     },
+    "ios:chat.card.file.sheet.notFound" : {
+      "comment" : "The file viewer, when the file the card names is gone.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Datei ist nicht mehr auf deinem Computer. Sie wurde möglicherweise verschoben oder gelöscht."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file is no longer on your computer. It may have been moved or deleted."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo ya no está en tu ordenador. Puede que se haya movido o eliminado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier n’est plus sur votre ordinateur. Il a peut-être été déplacé ou supprimé."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo file non è più sul computer. Potrebbe essere stato spostato o eliminato."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルはコンピュータ上にもうありません。移動または削除された可能性があります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 파일이 더 이상 컴퓨터에 없습니다. 이동되었거나 삭제되었을 수 있습니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este arquivo não está mais no seu computador. Ele pode ter sido movido ou excluído."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "電腦上已沒有這個檔案。它可能已被移動或刪除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "電腦上已沒有這個檔案。它可能已被移動或刪除。"
+          }
+        }
+      }
+    },
+    "ios:chat.card.file.sheet.notText" : {
+      "comment" : "The file viewer, when the file is binary (an image, a PDF…).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Datei ist kein Text und kann hier nicht angezeigt werden. Öffne sie auf deinem Computer."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file isn’t text, so it can’t be shown here. Open it on your computer."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo no es texto, así que no se puede mostrar aquí. Ábrelo en tu ordenador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier n’est pas du texte et ne peut pas être affiché ici. Ouvrez-le sur votre ordinateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo file non è testo, quindi non può essere mostrato qui. Aprilo sul computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルはテキストではないため、ここでは表示できません。コンピュータで開いてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 파일은 텍스트가 아니어서 여기에 표시할 수 없습니다. 컴퓨터에서 여세요."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este arquivo não é texto, então não pode ser mostrado aqui. Abra-o no computador."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個檔案不是文字，無法在這裏顯示。請在電腦上打開。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個檔案不是文字，無法在這裡顯示。請在電腦上打開。"
+          }
+        }
+      }
+    },
+    "ios:chat.card.file.sheet.outside" : {
+      "comment" : "The file viewer, when the file was written outside the chat's workspace folder on the computer.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hier können nur Dateien aus dem Arbeitsbereich dieses Chats angezeigt werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only files in this chat’s workspace can be shown here."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aquí solo se pueden mostrar archivos del espacio de trabajo de este chat."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seuls les fichiers de l’espace de travail de cette conversation peuvent être affichés ici."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qui si possono mostrare solo i file nello spazio di lavoro di questa chat."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ここに表示できるのは、このチャットのワークスペース内のファイルだけです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "여기서는 이 채팅 작업 공간에 있는 파일만 표시할 수 있습니다."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aqui só é possível mostrar arquivos do espaço de trabalho deste chat."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這裏只能顯示這個聊天工作區中的檔案。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這裡只能顯示這個聊天工作區中的檔案。"
+          }
+        }
+      }
+    },
+    "ios:chat.card.file.sheet.tooLarge" : {
+      "comment" : "The file viewer, when the file is over the size the phone is sent (1 MB).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Datei ist zu groß, um sie auf dem Telefon anzuzeigen. Öffne sie auf deinem Computer."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file is too large to show on your phone. Open it on your computer."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo es demasiado grande para mostrarlo en el teléfono. Ábrelo en tu ordenador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier est trop volumineux pour être affiché sur votre téléphone. Ouvrez-le sur votre ordinateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo file è troppo grande per essere mostrato sul telefono. Aprilo sul computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルは大きすぎてスマートフォンでは表示できません。コンピュータで開いてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 파일은 너무 커서 휴대폰에서 표시할 수 없습니다. 컴퓨터에서 여세요."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este arquivo é grande demais para mostrar no celular. Abra-o no computador."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個檔案太大，無法在手機上顯示。請在電腦上打開。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個檔案太大，無法在手機上顯示。請在電腦上打開。"
+          }
+        }
+      }
+    },
+    "ios:chat.card.file.sheet.unavailableTitle" : {
+      "comment" : "Title of the file viewer when the file could not be shown; the reason follows under it.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datei kann nicht angezeigt werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can’t Show This File"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede mostrar este archivo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d’afficher ce fichier"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile mostrare questo file"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルを表示できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 파일을 표시할 수 없음"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não é possível mostrar este arquivo"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法顯示這個檔案"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法顯示這個檔案"
+          }
+        }
+      }
+    },
+    "ios:chat.card.file.sheet.unreachable" : {
+      "comment" : "The file viewer, when the computer did not send the file.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei konnte nicht von deinem Computer geladen werden. Stelle sicher, dass Exodus dort läuft, und versuche es erneut."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t get this file from your computer. Make sure Exodus is running there, then try again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo obtener este archivo de tu ordenador. Asegúrate de que Exodus esté abierto en él y vuelve a intentarlo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de récupérer ce fichier depuis votre ordinateur. Vérifiez qu’Exodus y est ouvert, puis réessayez."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile ottenere questo file dal computer. Assicurati che Exodus sia in esecuzione, poi riprova."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コンピュータからこのファイルを取得できませんでした。コンピュータで Exodus が起動していることを確認して、もう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터에서 이 파일을 가져올 수 없습니다. 컴퓨터에서 Exodus가 실행 중인지 확인한 다음 다시 시도하세요."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível obter este arquivo do seu computador. Verifique se o Exodus está aberto nele e tente novamente."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法從電腦取得這個檔案。請確認電腦上的 Exodus 正在執行，然後再試一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法從電腦取得這個檔案。請確認電腦上的 Exodus 正在執行，然後再試一次。"
+          }
+        }
+      }
+    },
     "ios:chat.card.file.showAllLines" : {
       "comment" : "Button that expands a file card. %lld is how many lines (always more than 10).",
       "extractionState" : "manual",
@@ -11764,6 +12160,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 行未變更"
+          }
+        }
+      }
+    },
+    "ios:chat.card.file.view" : {
+      "comment" : "Button under a file card (a file the assistant wrote or edited): opens the file as it is on the computer now, read-only.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anzeigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ver"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visualizza"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보기"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ver"
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看"
           }
         }
       }

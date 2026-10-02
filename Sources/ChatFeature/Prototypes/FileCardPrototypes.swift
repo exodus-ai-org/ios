@@ -85,6 +85,22 @@ struct ProtoFileCardsSection: View {
                     error: "old_string appears 3 times in the file. Provide more surrounding context to make it unique, or set replace_all=true.")
             }
         }
+        // View reads the file from a stand-in computer: the workspace's files load (the trip plan as Markdown), a file
+        // outside the workspace is refused as the route refuses it. `-CardPrototypesFileSheet trip-plan` opens that card's sheet at launch.
+        .environment(\.workspaceFileLoader, Self.files)
+    }
+
+    private static let files = WorkspaceFileLoader { path in
+        try await Task.sleep(for: .milliseconds(400))
+        guard path.contains("/.exodus/workspace/") else {
+            throw HTTPError(statusCode: 403, code: "OUTSIDE_WORKSPACE", message: "The file is not in this chat's workspace.")
+        }
+        var content = "# Kyoto, 3 days"
+        if case .object(let fields) = ProtoFixtures.writeArguments, let text = fields["content"]?.stringValue {
+            content = text
+        }
+        return WorkspaceFile(
+            path: path, name: FileCardRules.fileName(path), size: content.utf8.count, kind: .markdown, content: content)
     }
 }
 #endif
