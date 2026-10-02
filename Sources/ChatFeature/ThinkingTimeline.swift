@@ -10,25 +10,31 @@ struct ThinkingTimeline: View {
     let isLive: Bool
     /// Opens the turn's Sources sheet: where the sites a step does not show are.
     var showSources: () -> Void = {}
-    @State private var isExpanded: Bool?
+    /// The steps open in a sheet, not under the header: a phone's screen is for the answer. (The DEBUG galleries
+    /// still lay them out inline, to show every step in one screenshot.)
+    @State private var showsSteps = false
     @Environment(\.timelineStartsExpanded) private var startsExpanded
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var expanded: Bool { isExpanded ?? startsExpanded }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { isExpanded = !expanded }
+                showsSteps = true
             } label: {
                 header
             }
             .buttonStyle(.plain)
-            .accessibilityValue(expanded ? Text("ios:chat.message.timeline.expanded") : Text("ios:chat.message.timeline.collapsed"))
-            if expanded {
-                steps.transition(.opacity)
+            if startsExpanded {
+                steps
             }
         }
+        .sheet(isPresented: $showsSteps) {
+            // Read from the turn as it is now: a run still working keeps adding steps while the sheet is up.
+            TimelineSheet(title: headerText, isLive: isLive) { steps }
+        }
+    }
+
+    private var headerText: String {
+        ToolPresentation.headerText(ToolPresentation.header(for: turn, isLive: isLive))
     }
 
     private var header: some View {
@@ -43,13 +49,12 @@ struct ThinkingTimeline: View {
                 Image(systemName: turn.hasThinking ? "brain" : "checkmark")  // l10n:ignore: SF Symbol names
                     .imageScale(.small)
             }
-            Text(verbatim: ToolPresentation.headerText(ToolPresentation.header(for: turn, isLive: isLive)))
+            Text(verbatim: headerText)
                 .fontWeight(.medium)
                 .lineLimit(1)
                 .contentTransition(.opacity)
-            Image(systemName: "chevron.down")
+            Image(systemName: "chevron.right")
                 .imageScale(.small)
-                .rotationEffect(.degrees(expanded ? 180 : 0))
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
@@ -73,6 +78,35 @@ struct ThinkingTimeline: View {
                 }
             }
         }
+    }
+}
+
+/// The steps of a turn, over the answer: titled as the header reads, closed from its corner, half the screen at
+/// first and the whole of it on a pull.
+private struct TimelineSheet<Steps: View>: View {
+    let title: String
+    let isLive: Bool
+    @ViewBuilder let steps: () -> Steps
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                steps()
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .navigationTitle(Text(verbatim: title))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(role: .close) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
