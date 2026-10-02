@@ -99,9 +99,7 @@ enum CategoryValue {
             return Duration.seconds(m * 60).formatted(.units(allowed: [.hours, .minutes], width: .narrow))
         case .activity:
             guard let steps = s.activity?.steps else { return nil }
-            return String(
-                localized: "ios:health.value.steps", defaultValue: "\(steps) steps",
-                comment: "Card value: today's step count.")
+            return Self.steps(steps)
         case .recovery:
             guard let r = s.recovery else { return nil }
             switch r.level {
@@ -119,10 +117,7 @@ enum CategoryValue {
                     comment: "Card value: recovery is low.")
             case nil:
                 guard let hr = r.restingHr, hr.isFinite else { return nil }
-                let n = Int(hr)
-                return String(
-                    localized: "ios:health.value.bpm", defaultValue: "\(n) bpm",
-                    comment: "Card value: resting heart rate.")
+                return Self.bpm(hr)
             }
         case .body:
             guard let cups = s.body?.waterCups else { return nil }
@@ -134,5 +129,19 @@ enum CategoryValue {
         String(
             localized: "ios:health.value.cups", defaultValue: "\(n) cups",
             comment: "Cups of water today (250 ml each).")
+    }
+
+    static func steps(_ n: Int) -> String {
+        String(
+            localized: "ios:health.value.steps", defaultValue: "\(n) steps",
+            comment: "Card value: today's step count.")
+    }
+
+    /// The caller guarantees a finite rate.
+    static func bpm(_ hr: Double) -> String {
+        let n = Int(hr)
+        return String(
+            localized: "ios:health.value.bpm", defaultValue: "\(n) bpm",
+            comment: "Card value: resting heart rate.")
     }
 }

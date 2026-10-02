@@ -9,22 +9,25 @@ import SwiftUI
 struct ReportStory: View {
     let summary: HealthSummary
     private let stories: [(HealthCategory, HealthSummary.Insight)]
+    /// "Today" on the home; a past day's sheet names its date.
+    private let eyebrow: Text
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .title2) private var headlineSize: CGFloat = 26
     @State private var shown = false
 
     /// Nil when there are no insights this app can draw, so the caller shows the Markdown note instead.
-    init?(_ summary: HealthSummary) {
+    init?(_ summary: HealthSummary, eyebrow: Text? = nil) {
         let stories = ReportText.stories(summary)
         guard !stories.isEmpty else { return nil }
         self.summary = summary
         self.stories = stories
+        self.eyebrow = eyebrow ?? Text("ios:health.report.eyebrow")
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("ios:health.report.eyebrow")
+                eyebrow
                     .font(.footnote.weight(.bold))
                     .foregroundStyle(ReportInk.green)
                 headline
