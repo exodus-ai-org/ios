@@ -26,3 +26,14 @@ struct UserImagesTests {
         #expect(image.size.width * image.scale == 40)
     }
 }
+
+@Suite("A question's pictures: the row")
+struct UserImageRowTests {
+    @Test("every picture while four fit; past four, three and a fourth that reads +N for the rest")
+    func layout() {
+        #expect(UserImageStrip.layout(count: 1) == (1, 0))
+        #expect(UserImageStrip.layout(count: 4) == (4, 0))
+        #expect(UserImageStrip.layout(count: 5) == (4, 2))
+        #expect(UserImageStrip.layout(count: 9) == (4, 6))
+    }
+}

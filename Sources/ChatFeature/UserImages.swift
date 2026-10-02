@@ -11,7 +11,7 @@ enum UserImages {
         }
     }
 
-    /// Wide enough for the full-screen viewer on any phone; the strip draws the same image smaller.
+    /// Wide enough for the full-screen viewer on any phone; the strip draws the same image as a small square.
     static let maxPixelWidth = 2048
 
     /// Decoded pictures, by message and position: a data URL is decoded once, not on every scroll past it.
@@ -20,29 +20,32 @@ enum UserImages {
     static func key(_ messageId: String, _ index: Int) -> NSString { "\(messageId)#\(index)" as NSString }
 }
 
-/// The pictures above a question's bubble, right-aligned as the bubble is: one shown at a moderate size, several as
-/// a row of squares. A tap opens them full screen, where a swipe goes from one to the next.
+/// The pictures above a question's bubble, right-aligned as the bubble is: rounded squares whatever their shape, as
+/// the desktop's composer and transcript show them, so several sit in an even row. Past `shown` the last square reads
+/// "+N"; a tap on any opens them all full screen, where a swipe goes from one to the next.
 struct UserImageStrip: View {
     let messageId: String
     let dataURLs: [String]
 
+    /// The desktop's `USER_IMAGES_SHOWN`.
+    static let shown = 4
+
     @State private var images: [Int: UIImage] = [:]
     @State private var viewer: ImageViewerPage?
-    @ScaledMetric(relativeTo: .body) private var single: CGFloat = 170
-    @ScaledMetric(relativeTo: .body) private var square: CGFloat = 96
+    @ScaledMetric(relativeTo: .body) private var side: CGFloat = 80
+
+    /// The squares drawn: every picture while they fit, else the first three and a fourth that reads "+N".
+    static func layout(count: Int) -> (tiles: Int, more: Int) {
+        count > shown ? (shown, count - (shown - 1)) : (count, 0)
+    }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(dataURLs.indices, id: \.self) { index in
-                    tile(index)
-                }
+        let layout = Self.layout(count: dataURLs.count)
+        HStack(spacing: 8) {
+            ForEach(0..<layout.tiles, id: \.self) { index in
+                tile(index, more: index == layout.tiles - 1 ? layout.more : 0)
             }
         }
-        // Right-aligned like the bubble: a row narrower than the screen hugs the trailing edge.
-        .defaultScrollAnchor(.trailing)
-        .scrollBounceBehavior(.basedOnSize)
-        .frame(height: dataURLs.count == 1 ? single : square)
         .task(id: messageId) { await decode() }
         .fullScreenCover(item: $viewer) { page in
             ImageViewer(
@@ -53,34 +56,38 @@ struct UserImageStrip: View {
         }
     }
 
-    @ViewBuilder
-    private func tile(_ index: Int) -> some View {
-        let side = dataURLs.count == 1 ? single : square
+    static func moreText(_ count: Int) -> LocalizedStringResource {
+        LocalizedStringResource(
+            "ios:chat.images.more", defaultValue: "Show \(count) more",
+            comment: "A question's pictures: the last square past four, which opens the rest. %lld is how many more there are.")
+    }
+
+    private func tile(_ index: Int, more: Int) -> some View {
         Button {
             if images[index] != nil { viewer = ImageViewerPage(id: index) }
         } label: {
-            Group {
+            ZStack {
                 if let image = images[index] {
-                    if dataURLs.count == 1 {
-                        // One picture keeps its shape, as tall as the strip, no wider than it would be square.
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: min(side * image.size.width / max(image.size.height, 1), side * 1.5), height: side)
-                    } else {
-                        Image(uiImage: image).resizable().scaledToFill().frame(width: side, height: side)
-                    }
+                    Image(uiImage: image).resizable().scaledToFill()
                 } else {
-                    Rectangle().fill(.fill.tertiary).frame(width: side, height: side)
+                    Rectangle().fill(.fill.tertiary)
+                }
+                if more > 0 {
+                    Rectangle().fill(.black.opacity(0.5))
+                    Text(verbatim: "+\(more)")
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
                 }
             }
+            .frame(width: side, height: side)
             .clipShape(.rect(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color(.separator), lineWidth: 0.5))
             .contentShape(.rect(cornerRadius: 14))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text("ios:chat.markdown.image"))
-        .accessibilityValue(dataURLs.count > 1 ? Text(verbatim: "\(index + 1) / \(dataURLs.count)") : Text(verbatim: ""))
+        .accessibilityLabel(more > 0 ? Text(Self.moreText(more)) : Text("ios:chat.markdown.image"))
+        .accessibilityValue(dataURLs.count > 1 && more == 0 ? Text(verbatim: "\(index + 1) / \(dataURLs.count)") : Text(verbatim: ""))
     }
 
     private func decode() async {

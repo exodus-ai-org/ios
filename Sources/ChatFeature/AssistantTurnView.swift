@@ -264,7 +264,6 @@ struct UserBubble: View {
             if !images.isEmpty {
                 UserImageStrip(messageId: messageId, dataURLs: images)
                     .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.leading, 40)
             }
             // A picture sent alone has no empty bubble under it.
             if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
