@@ -55,9 +55,15 @@ private final class SendLog: Sendable {
         return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
+    /// The last send's question: `message` in a protocol-2 body, else the last of `messages`.
+    func lastQuestion() throws -> [String: Any] {
+        let body = try last()
+        return try #require((body["message"] as? [String: Any]) ?? (body["messages"] as? [[String: Any]])?.last)
+    }
+
     /// The last send's question `content` as blocks; nil when it is a plain string.
     func lastBlocks() throws -> [[String: Any]]? {
-        (try last()["message"] as? [String: Any])?["content"] as? [[String: Any]]
+        try lastQuestion()["content"] as? [[String: Any]]
     }
 }
 
@@ -161,7 +167,7 @@ struct ComposerSendTests {
         vm.composerText = "hi"
         await vm.sendMessage()
         let body = try ComposerMockURLProtocol.sends.last()
-        #expect((body["message"] as? [String: Any])?["content"] as? String == "hi")
+        #expect(try ComposerMockURLProtocol.sends.lastQuestion()["content"] as? String == "hi")
         #expect((body["advancedTools"] as? [String]) == [])
         #expect(!body.keys.contains("reasoningEffort"))
     }
@@ -218,6 +224,47 @@ struct ComposerSendTests {
         #expect(vm.notice == nil)
     }
 
+    @Test("picked pictures are loaded and prepared one at a time, each added as it is ready, and Send waits for them")
+    func picturesArriveOneAtATime() async throws {
+        let vm = await loadedViewModel()
+        vm.composerText = "these"
+        let seen = LoaderLog()
+        let loaders: [ComposerPicture.Loader] = (0..<3).map { _ in
+            { @MainActor in
+                seen.states.append(.init(waiting: vm.attachments.pictures.count, preparing: vm.preparingPictures, canSend: vm.canSend))
+                // A tap on Send now would leave the pictures not ready yet out of the message.
+                await vm.sendMessage()
+                return PictureFixture.data(width: 40, height: 30)
+            }
+        }
+        await vm.addPictures(loaders)
+        #expect(seen.states == [
+            .init(waiting: 0, preparing: 3, canSend: false),
+            .init(waiting: 1, preparing: 2, canSend: false),
+            .init(waiting: 2, preparing: 1, canSend: false),
+        ])
+        #expect(ComposerMockURLProtocol.sends.count == 0)
+        #expect(vm.attachments.pictures.count == 3)
+        #expect(!vm.isPreparingPictures && vm.canSend)
+    }
+
+    @Test("once the composer is full, the picks left are not even loaded")
+    func picksPastTheLimitAreNotLoaded() async {
+        let vm = await loadedViewModel()
+        vm.attachments.append((0..<9).map(PictureFixture.picture))
+        let seen = LoaderLog()
+        let loaders: [ComposerPicture.Loader] = (0..<3).map { _ in
+            { @MainActor in
+                seen.states.append(.init(waiting: vm.attachments.pictures.count, preparing: vm.preparingPictures, canSend: vm.canSend))
+                return PictureFixture.data(width: 40, height: 30)
+            }
+        }
+        await vm.addPictures(loaders)
+        #expect(seen.states.count == 1)
+        #expect(vm.attachments.pictures.count == 10)
+        #expect(vm.preparingPictures == 0 && vm.notice == nil)
+    }
+
     @Test("a picture can be taken out again")
     func removing() async {
         let vm = await loadedViewModel()
@@ -226,4 +273,16 @@ struct ComposerSendTests {
         vm.removePicture(picture.id)
         #expect(vm.attachments.isEmpty && !vm.canSend)
     }
+}
+
+/// What the composer looked like each time a picked picture started loading.
+@MainActor
+private final class LoaderLog {
+    struct State: Equatable {
+        let waiting: Int
+        let preparing: Int
+        let canSend: Bool
+    }
+
+    var states: [State] = []
 }

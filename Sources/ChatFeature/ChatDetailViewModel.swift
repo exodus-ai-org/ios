@@ -16,6 +16,9 @@ public final class ChatDetailViewModel {
     public var composerText: String = ""
     /// The pictures the next message carries, in pick order: sent with the text, and cleared with it.
     public var attachments = ComposerAttachments()
+    /// Picked pictures still being loaded or prepared: shown as placeholders, and Send waits for them.
+    public private(set) var preparingPictures = 0
+    public var isPreparingPictures: Bool { preparingPictures > 0 }
     /// The app session's reasoning effort and Deep Research (`ComposerTools`), read when a turn starts — a Regenerate
     /// too, with the choices as they are then, as on the desktop. Handed over by the chat screen; nil asks for neither.
     @ObservationIgnored public var composerTools: ComposerTools?
@@ -168,8 +171,8 @@ public final class ChatDetailViewModel {
     public var showsErrorAlert: Bool { errorMessage != nil && liveRunError == nil }
 
     public var canSend: Bool {
-        // A message may be pictures alone, as on the desktop.
-        hasLoadedHistory && !isTurnInFlight
+        // A message may be pictures alone, as on the desktop; one picked but not ready yet would be left out of it.
+        hasLoadedHistory && !isTurnInFlight && !isPreparingPictures
             && (!composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty)
     }
 
@@ -263,20 +266,26 @@ public final class ChatDetailViewModel {
                 timestampMs: Self.nowMs))
     }
 
-    /// Pictures from Photos or the camera (nil: one that could not be loaded), prepared off the main actor and added in
-    /// pick order as far as `ComposerAttachments.limit` allows. One that cannot be read is left out with a notice; the
-    /// others stay.
+    /// Pictures already loaded (nil: one that could not be).
     public func addPictures(_ items: [Data?]) async {
-        var prepared: [ComposerPicture] = []
+        await addPictures(items.map { item in { item } })
+    }
+
+    /// Pictures from Photos or the camera, loaded and prepared one at a time — ten ProRAW originals held at once
+    /// would be hundreds of MB — and added in pick order as each is ready, as far as `ComposerAttachments.limit`
+    /// allows (the rest are not even loaded). One that cannot be read is left out with a notice; the others stay.
+    public func addPictures(_ loaders: [ComposerPicture.Loader]) async {
+        preparingPictures += loaders.count
         var unreadable = 0
-        for item in items {
-            guard let item, let picture = try? await ComposerPicture.prepared(item) else {
+        for load in loaders {
+            defer { preparingPictures -= 1 }
+            guard !attachments.isFull else { continue }
+            guard let data = await load(), let picture = try? await ComposerPicture.prepared(data) else {
                 unreadable += 1
                 continue
             }
-            prepared.append(picture)
+            attachments.append([picture])
         }
-        attachments.append(prepared)
         if unreadable > 0 { show(StreamNotice(level: .warning, message: ComposerText.unreadable(unreadable))) }
     }
 

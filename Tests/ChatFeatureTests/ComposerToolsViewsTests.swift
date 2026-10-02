@@ -41,6 +41,16 @@ struct ComposerToolsViewsTests {
         #expect(!tools.deepResearch)
     }
 
+    @Test("a square's thumbnail is decoded with its shorter side at three times the square, so a wide one stays sharp")
+    func thumbnailWidth() {
+        #expect(ComposerPictureStrip.thumbnailPixelWidth(width: 300, height: 400) == 264)
+        #expect(ComposerPictureStrip.thumbnailPixelWidth(width: 400, height: 300) == 352)
+        #expect(ComposerPictureStrip.thumbnailPixelWidth(width: 2048, height: 1024) == 528)
+        // Never wider than the picture, nor than a panorama needs for a square.
+        #expect(ComposerPictureStrip.thumbnailPixelWidth(width: 200, height: 100) == 200)
+        #expect(ComposerPictureStrip.thumbnailPixelWidth(width: 2048, height: 200) == 1024)
+    }
+
     @Test("a tool's description is its own, or a line saying it has none")
     func toolDescription() {
         #expect(McpToolsSheet.description(of: McpTool(name: "read_file", description: "Reads **a file**.")) == "Reads **a file**.")

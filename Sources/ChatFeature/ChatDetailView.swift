@@ -229,8 +229,10 @@ public struct ChatDetailView: View {
                 ComposerQuote(text: quote, onRemove: viewModel.removeQuote)
                     .transition(.opacity)
             }
-            if !viewModel.attachments.isEmpty {
-                ComposerPictureStrip(pictures: viewModel.attachments.pictures, onRemove: viewModel.removePicture)
+            if !viewModel.attachments.isEmpty || viewModel.isPreparingPictures {
+                ComposerPictureStrip(
+                    pictures: viewModel.attachments.pictures, preparing: viewModel.preparingPictures,
+                    onRemove: viewModel.removePicture)
                     .transition(.opacity)
             }
             if let composerTools, composerTools.isActive {
@@ -250,6 +252,7 @@ public struct ChatDetailView: View {
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: isComposerFocused)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: viewModel.quote)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: viewModel.attachments)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: viewModel.preparingPictures)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: composerTools?.turnOptions)
     }
 

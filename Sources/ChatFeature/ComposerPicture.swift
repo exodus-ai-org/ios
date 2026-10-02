@@ -15,6 +15,9 @@ public struct ComposerPicture: Identifiable, Equatable, Sendable {
     public let pixelWidth: Int
     public let pixelHeight: Int
 
+    /// Hands over one picked picture's original (nil: it could not be), when its turn to be prepared comes.
+    public typealias Loader = @Sendable () async -> Data?
+
     static let maxPixelSize = 2048
     static let jpegQuality = 0.85
 

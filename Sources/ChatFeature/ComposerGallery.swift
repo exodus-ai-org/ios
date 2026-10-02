@@ -5,9 +5,10 @@ import SwiftUI
 import UIKit
 
 /// `-MessageGallery -MessageGalleryComposer <state>`: the composer's `+` pieces over the message gallery, for
-/// screenshots — `empty`, `pictures` (three), `full` (ten, Reasoning on), `reasoning`, `research`, `mcp` (the sheet).
+/// screenshots — `empty`, `pictures` (three), `preparing` (three, two more on their way), `full` (ten, Reasoning on),
+/// `reasoning`, `research`, `mcp` (the sheet).
 enum ComposerGalleryState: String {
-    case empty, pictures, full, reasoning, research, mcp
+    case empty, pictures, preparing, full, reasoning, research, mcp
 
     static var launch: ComposerGalleryState? {
         let arguments = ProcessInfo.processInfo.arguments
@@ -33,7 +34,9 @@ struct ComposerGalleryBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !attachments.isEmpty {
-                ComposerPictureStrip(pictures: attachments.pictures) { attachments.remove($0) }
+                ComposerPictureStrip(pictures: attachments.pictures, preparing: state == .preparing ? 2 : 0) {
+                    attachments.remove($0)
+                }
             }
             if tools.isActive {
                 ComposerToolPills(tools: tools)
@@ -76,7 +79,7 @@ struct ComposerGalleryBar: View {
         switch state {
         case .empty:
             break
-        case .pictures:
+        case .pictures, .preparing:
             attachments.append(Self.pictures(Array(colors.prefix(3))))
         case .full:
             attachments.append(Self.pictures(colors))
