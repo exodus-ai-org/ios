@@ -20,8 +20,12 @@ public enum MarkdownParser {
     }
 
     public static func parse(_ text: String, source: Int) -> MarkdownParseResult {
-        let (rewritten, citations) = MarkdownPreprocessor.rewriteCitations(text)
+        var (rewritten, citations) = MarkdownPreprocessor.rewriteCitations(text)
         var document = MarkdownPreprocessor.parseDocument(rewritten)
+        if rewritten.contains("*"), let flanked = MarkdownPreprocessor.cjkEmphasis(rewritten, document: document) {
+            rewritten = flanked
+            document = MarkdownPreprocessor.parseDocument(flanked)
+        }
         if rewritten.contains("~"), let escaped = MarkdownPreprocessor.escapeLoneTilde(rewritten, document: document),
             escaped != rewritten
         {
@@ -193,7 +197,7 @@ private struct InlineBuilder {
 
     mutating func visit(_ markup: Markup) {
         if let node = markup as? Text {
-            pending += node.string
+            pending += MarkdownPreprocessor.removingCJKBoundary(node.string)
             return
         }
         flush()
@@ -213,7 +217,9 @@ private struct InlineBuilder {
         case let anchor as Link:
             withLink(anchor.destination.flatMap(URL.init(string:))) { $0.visitChildren(markup) }
         case let image as Image:
-            withLink(image.source.flatMap(URL.init(string:))) { $0.append(image.plainText) }
+            withLink(image.source.flatMap(URL.init(string:))) {
+                $0.append(MarkdownPreprocessor.removingCJKBoundary(image.plainText))
+            }
         case let html as InlineHTML:
             append(HTMLBreak.matches(html.rawHTML) ? "\n" : html.rawHTML)
         default:

@@ -407,6 +407,7 @@ enum MarkdownGalleryDocuments {
             The paragraph above this one was nothing but a break, and is not drawn. In code, `<br>` is text.
             """
         ),
+        ("Bold beside CJK punctuation", cjkEmphasisSample),
     ]
 
     /// Han text sets differently from Latin (no spaces, full-width punctuation), and chips must sit well in both.
@@ -418,6 +419,16 @@ enum MarkdownGalleryDocuments {
         "",
         "- **美联储**：10 月再次加息的概率一度接近 70%\(cite("2"))。",  // l10n:ignore: gallery fixture
         "- **日元**：美元兑日元在 150 附近反复。",  // l10n:ignore: gallery fixture
+    ].joined(separator: "\n")
+
+    /// CommonMark leaves these `**` literal; the CJK-friendly rule bolds them. The last line stays literal, as in
+    /// English it should.
+    private static let cjkEmphasisSample = [
+        "关键不在点位，而是**\"卖与不卖都没有依据\"**——赢家靠的是纪律。",  // l10n:ignore: gallery fixture
+        "",
+        "这是**「重点」**的说法，**粗体。**后面接着写，中文**粗体**中文，还有*斜体*。",  // l10n:ignore: gallery fixture
+        "",
+        "Code keeps its asterisks: `而是**\"引号\"**`, and a**\"quoted\"**b stays literal.",  // l10n:ignore: gallery fixture
     ].joined(separator: "\n")
 
     private static func longDocument(minimumLength: Int) -> String {

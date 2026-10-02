@@ -54,6 +54,54 @@ public enum MarkdownPreprocessor {
         return escapeLoneTilde(text, document: parseDocument(text)) ?? text
     }
 
+    /// Where `cjkEmphasis` makes a `*` run flank: an invisible format character (U+2063 INVISIBLE SEPARATOR) that
+    /// cmark reads as neither space nor punctuation. Taken out of the text it lands in.
+    static let cjkBoundary: Character = "\u{2063}"
+
+    /// CommonMark leaves `而是**"引号"**` literal: a `*` run after a letter and before punctuation does not open (and
+    /// one after punctuation and before a letter does not close), and CJK puts no space before a word. The
+    /// CJK-friendly amendment the desktop renders with (github.com/tats-u/markdown-cjk-friendly) counts a CJK letter
+    /// there as the boundary a space is; cmark has no such option, so a boundary goes between the run and the
+    /// punctuation, which makes it flank as the amendment has it. Only `*`; never in code, autolinks or math.
+    public static func cjkEmphasis(_ text: String) -> String {
+        guard text.contains("*") else { return text }
+        return cjkEmphasis(text, document: parseDocument(text)) ?? text
+    }
+
+    static func cjkEmphasis(_ text: String, document: Document) -> String? {
+        let chars = Array(text)
+        guard chars.contains(where: { MarkdownScan.isCJK($0) }) else { return nil }
+        let mask = inertMask(chars, document: document)
+        var output = ""
+        var changed = false
+        var escaped = false
+        var index = 0
+        while index < chars.count {
+            guard chars[index] == "*", !mask[index], !escaped else {
+                escaped = chars[index] == "\\" && !escaped
+                output.append(chars[index])
+                index += 1
+                continue
+            }
+            var end = index
+            while end < chars.count, chars[end] == "*", !mask[end] { end += 1 }
+            let previous: Character? = index > 0 ? chars[index - 1] : nil
+            let next: Character? = end < chars.count ? chars[end] : nil
+            let closes = MarkdownScan.isPunctuation(previous) && MarkdownScan.isCJKLetter(next)
+            let opens = MarkdownScan.isCJKLetter(previous) && MarkdownScan.isPunctuation(next)
+            if closes { output.append(cjkBoundary) }
+            output += String(chars[index..<end])
+            if opens { output.append(cjkBoundary) }
+            changed = changed || opens || closes
+            index = end
+        }
+        return changed ? output : nil
+    }
+
+    static func removingCJKBoundary(_ text: String) -> String {
+        text.contains(cjkBoundary) ? text.filter { $0 != cjkBoundary } : text
+    }
+
     public static func rewriteCitations(_ text: String) -> (text: String, citations: [Int]) {
         guard text.contains(MarkdownScan.citationOpen) else { return (text, []) }
         let chars = Array(text)
@@ -152,6 +200,23 @@ public enum MarkdownPreprocessor {
         for child in markup.children {
             collect(child, strike: &strike, codeLines: &codeLines, boundaries: &boundaries)
         }
+    }
+
+    /// Where markup is not read: code spans and blocks, HTML blocks, autolinks, display math.
+    private static func inertMask(_ chars: [Character], document: Document) -> [Bool] {
+        var strike = false
+        var codeLines: [ClosedRange<Int>] = []
+        var boundaries: Set<Int> = []
+        collect(document, strike: &strike, codeLines: &codeLines, boundaries: &boundaries)
+        var mask = MarkdownScan.codeMask(chars, boundaries: boundaries)
+        let lines = MarkdownScan.lineRanges(chars)
+        for range in codeLines {
+            for number in range where number - 1 < lines.count && number >= 1 {
+                for masked in lines[number - 1] { mask[masked] = true }
+            }
+        }
+        maskAutolinksAndMath(chars, into: &mask)
+        return mask
     }
 
     private static func maskAutolinksAndMath(_ chars: [Character], into mask: inout [Bool]) {

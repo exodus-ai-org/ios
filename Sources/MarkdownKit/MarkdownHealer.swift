@@ -248,12 +248,17 @@ enum MarkdownHealer {
         if marker == "~", length != 2 { return }
         let previous: Character? = index > 0 ? scope[index - 1] : nil
         let next: Character? = index + length < scope.count ? scope[index + length] : nil
+        // CJK-friendly, as the parser (`MarkdownPreprocessor.cjkEmphasis`): for `*`, a CJK letter beside
+        // punctuation is a boundary, as a space is.
+        let cjk = marker == "*"
         let leftFlanking =
             !MarkdownScan.isSpace(next)
-            && (!MarkdownScan.isPunctuation(next) || MarkdownScan.isSpace(previous) || MarkdownScan.isPunctuation(previous))
+            && (!MarkdownScan.isPunctuation(next) || MarkdownScan.isSpace(previous) || MarkdownScan.isPunctuation(previous)
+                || (cjk && MarkdownScan.isCJKLetter(previous)))
         let rightFlanking =
             !MarkdownScan.isSpace(previous)
-            && (!MarkdownScan.isPunctuation(previous) || MarkdownScan.isSpace(next) || MarkdownScan.isPunctuation(next))
+            && (!MarkdownScan.isPunctuation(previous) || MarkdownScan.isSpace(next) || MarkdownScan.isPunctuation(next)
+                || (cjk && MarkdownScan.isCJKLetter(next)))
         var canOpen = leftFlanking
         var canClose = rightFlanking
         if marker == "_" {

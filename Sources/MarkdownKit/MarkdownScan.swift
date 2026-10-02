@@ -24,6 +24,32 @@ enum MarkdownScan {
         return character.isPunctuation || character.isSymbol
     }
 
+    /// Han, kana, Hangul, bopomofo, and the CJK punctuation and full-width forms.
+    static func isCJK(_ character: Character?) -> Bool {
+        guard let value = character?.unicodeScalars.first?.value else { return false }
+        return cjkRanges.contains { $0.contains(value) }
+    }
+
+    /// A CJK character that is not punctuation: where CJK-friendly emphasis counts the boundary a space would be.
+    static func isCJKLetter(_ character: Character?) -> Bool {
+        isCJK(character) && !isPunctuation(character)
+    }
+
+    private static let cjkRanges: [ClosedRange<UInt32>] = [
+        0x1100...0x11FF,  // Hangul Jamo
+        0x2E80...0x2FDF,  // CJK and Kangxi radicals
+        0x2FF0...0x303F,  // ideographic description, CJK symbols and punctuation
+        0x3040...0x31FF,  // kana, bopomofo, Hangul compatibility
+        0x3200...0x4DBF,  // enclosed and compatibility forms, Extension A
+        0x4E00...0x9FFF,  // CJK Unified Ideographs
+        0xA960...0xA97F,  // Hangul Jamo Extended-A
+        0xAC00...0xD7FF,  // Hangul syllables, Jamo Extended-B
+        0xF900...0xFAFF,  // compatibility ideographs
+        0xFE30...0xFE4F,  // CJK compatibility forms
+        0xFF00...0xFFEF,  // halfwidth and fullwidth forms
+        0x20000...0x3FFFF,  // Extensions B–H
+    ]
+
     static func lineRanges(_ chars: [Character]) -> [Range<Int>] {
         var ranges: [Range<Int>] = []
         var start = 0
