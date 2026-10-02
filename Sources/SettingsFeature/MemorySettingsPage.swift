@@ -370,6 +370,7 @@ struct MemoryEditorSheet: View {
     let entry: MemoryEntry?
     @State private var draft: MemoryDraft
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.screenTitle) private var enclosingTitle
 
     init(viewModel: MemorySettingsViewModel, entry: MemoryEntry?) {
         self.viewModel = viewModel
@@ -428,6 +429,7 @@ struct MemoryEditorSheet: View {
             .disabled(viewModel.isWriting)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
+            .screenTitle(ScreenTitles.join(enclosingTitle, titleString))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("common:action.cancel", role: .cancel) {
@@ -458,6 +460,19 @@ struct MemoryEditorSheet: View {
             Text("ios:settings.memory.newTitle")
         } else {
             Text("ios:settings.memory.editTitle")
+        }
+    }
+
+    /// The title, for the screenshot's name ("Settings · Memory · New Memory").
+    private var titleString: String {
+        if entry == nil {
+            String(
+                localized: "ios:settings.memory.newTitle", defaultValue: "New Memory",
+                comment: "Title of the sheet that adds a memory entry.")
+        } else {
+            String(
+                localized: "ios:settings.memory.editTitle", defaultValue: "Edit Memory",
+                comment: "Title of the sheet that edits a memory entry.")
         }
     }
 

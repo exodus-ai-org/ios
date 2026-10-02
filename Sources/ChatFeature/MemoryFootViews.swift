@@ -321,6 +321,8 @@ struct UsedMemoriesSheet: View {
     let opensSettings: Bool
     let act: (Action) -> Void
     @Environment(\.dismiss) private var dismiss
+    /// The chat's: a screenshot of the sheet is "Memories used · <chat>".
+    @Environment(\.screenTitle) private var enclosingTitle
 
     var body: some View {
         NavigationStack {
@@ -353,6 +355,12 @@ struct UsedMemoriesSheet: View {
             }
             .navigationTitle(Text("ios:chat.card.usedMemories.title"))
             .navigationBarTitleDisplayMode(.inline)
+            .screenTitle(
+                ScreenTitles.join(
+                    String(
+                        localized: "ios:chat.card.usedMemories.title", defaultValue: "Memories used",
+                        comment: "Title of the sheet listing the memory entries a reply read."),
+                    enclosingTitle))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("common:action.close", role: .close) { dismiss() }

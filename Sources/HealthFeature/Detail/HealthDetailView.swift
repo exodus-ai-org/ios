@@ -17,6 +17,8 @@ struct HealthDetailView: View {
     @State private var written = 0
     @State private var readWithWritten = 0
     @State private var generation = 0
+    /// The workspace's ("Health"): a screenshot of this page is "Health · Sleep".
+    @Environment(\.screenTitle) private var enclosingTitle
 
     var body: some View {
         let style = CategoryStyle.of(category)
@@ -57,6 +59,7 @@ struct HealthDetailView: View {
         .background(HealthSurface.page)
         .navigationTitle(Text(style.title))
         .navigationBarTitleDisplayMode(.inline)
+        .screenTitle(ScreenTitles.join(enclosingTitle, String(localized: style.title)))
         .safeAreaInset(edge: .bottom) {
             AskComposer(
                 suggestions: Self.suggestions(category), canAttach: data != nil,

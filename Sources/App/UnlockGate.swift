@@ -1,4 +1,5 @@
 import NetworkingKit
+import Models
 import SwiftUI
 
 /// Holds the app behind Face ID while the pairing credential is locked: on a
@@ -62,6 +63,10 @@ struct UnlockGate<Content: View>: View {
                 .disabled(isUnlocking)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .screenTitle(
+            String(
+                localized: "ios:app.lock.title", defaultValue: "Exodus is locked",
+                comment: "Shown full-screen while the pairing credential is locked behind Face ID. Exodus is the app's name."))
     }
 
     private func unlockIfNeeded() async {

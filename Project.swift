@@ -43,7 +43,7 @@ let project = Project(
                         "UIImageName": "LaunchLogo"
                     ],
                     // What the app is showing, published as the current activity so a screenshot is titled after
-                    // it (AppShell, ExodusActivity).
+                    // it (ExodusActivity and screenTitle in Models).
                     "NSUserActivityTypes": ["app.yancey.exodus.viewing"],
                     "NSAppTransportSecurity": [
                         "NSAllowsLocalNetworking": true,

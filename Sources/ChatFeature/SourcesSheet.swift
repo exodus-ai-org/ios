@@ -1,3 +1,4 @@
+import Models
 import SwiftUI
 
 /// The sources behind an answer, as the desktop's panel lists them: what the answer cites, then what else its
@@ -6,6 +7,7 @@ import SwiftUI
 struct SourcesSheet: View {
     let model: SourcesSheetModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.screenTitle) private var enclosingTitle
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -19,6 +21,12 @@ struct SourcesSheet: View {
             }
             .navigationTitle("chat:messageAction.sources")
             .navigationBarTitleDisplayMode(.inline)
+            .screenTitle(
+                ScreenTitles.join(
+                    String(
+                        localized: "chat:messageAction.sources", defaultValue: "Sources",
+                        comment: "Reused from the desktop catalog: same meaning on iOS."),
+                    enclosingTitle))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("common:action.close", role: .close) { dismiss() }

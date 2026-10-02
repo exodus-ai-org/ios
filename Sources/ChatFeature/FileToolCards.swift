@@ -1,3 +1,4 @@
+import Models
 import SwiftUI
 import UIKit
 
@@ -446,6 +447,7 @@ struct FileSheet: View {
     let path: String
     let text: String
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.screenTitle) private var enclosingTitle
 
     var body: some View {
         NavigationStack {
@@ -454,6 +456,7 @@ struct FileSheet: View {
             }
             .navigationTitle(Text(verbatim: FileCardRules.fileName(path)))
             .navigationBarTitleDisplayMode(.inline)
+            .screenTitle(ScreenTitles.join(FileCardRules.fileName(path), enclosingTitle))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("common:action.close", role: .close) { dismiss() }

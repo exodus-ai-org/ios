@@ -1,5 +1,6 @@
 import ChatFeature
 import MarkdownKit
+import Models
 import NetworkingKit
 import SettingsFeature
 import SwiftUI
@@ -83,6 +84,8 @@ struct ExodusApp: App {
             .environment(\.toneInk, toneModel.tone.inkColor)
             .environment(toneModel)
             .environment(\.renderDiagnostics, Self.diagnostics(reporter))
+            // The scene's one current activity: the frontmost `screenTitle` names a screenshot.
+            .publishesScreenTitle()
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { reporter.flushSoon() }
             }

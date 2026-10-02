@@ -88,12 +88,23 @@ public struct SettingsView: View {
         }
         // Icons in Settings are ink: the colour tone is the chat's, and a list of tinted symbols read as one of links.
         .listItemTint(.primary)
+        // "Settings", or "Settings · Memory" on a page: one title for the whole stack, from its path, so the page on
+        // top always names it.
+        .screenTitle(screenTitle)
         .onChange(of: store.snapshot?.colorTone, initial: true) {
             if let snapshot = store.snapshot { colorTone.adopt(snapshot) }
         }
         .onChange(of: colorTone.selected) {
             if colorTone.hasLoaded { toneModel?.apply(colorTone.selected) }
         }
+    }
+
+    private var screenTitle: String {
+        ScreenTitles.join(
+            String(
+                localized: "common:nav.settings", defaultValue: "Settings",
+                comment: "Title of the Settings screen and accessibility label of the gear button."),
+            path.last.map { String(localized: SettingsHubRow.row(for: $0).title) })
     }
 
     @ViewBuilder

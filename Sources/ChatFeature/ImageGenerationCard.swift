@@ -1,3 +1,4 @@
+import Models
 import SwiftUI
 import UIKit
 
@@ -366,6 +367,7 @@ struct ImageViewer: View {
     @State private var selection: Int
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.screenTitle) private var enclosingTitle
 
     init(pages: [ImageViewerPage.Content], start: Int) {
         self.pages = pages
@@ -416,6 +418,12 @@ struct ImageViewer: View {
             }
             .background(Color(.systemBackground))
             .navigationBarTitleDisplayMode(.inline)
+            .screenTitle(
+                ScreenTitles.join(
+                    String(
+                        localized: "ios:chat.markdown.image", defaultValue: "Image",
+                        comment: "VoiceOver label for an image in an answer that has no description."),
+                    enclosingTitle))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("common:action.close", role: .close) { dismiss() }

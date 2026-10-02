@@ -1,5 +1,6 @@
 import ChatFeature
 import HealthFeature
+import Models
 import NetworkingKit
 import PhilharmonicFeature
 import SettingsFeature
@@ -111,14 +112,9 @@ struct AppShell: View {
         // a row not already selected is tapped, so re-tapping the active row fires nothing. And
         // today .chat and .health are selectable (AppWorkspace.isAvailable).
         .sensoryFeedback(.selection, trigger: workspace)
-        // What is on screen, as the system's current activity: a screenshot is titled after it (the share
-        // sheet's header, and the file's name when it reaches a computer).
-        .userActivity(ExodusActivity.viewing) { activity in
-            activity.title = sceneTitle
-            activity.isEligibleForHandoff = false
-            activity.isEligibleForSearch = false
-            activity.isEligibleForPrediction = false
-        }
+        // What is on screen: a screenshot is titled after it (the share sheet's header, and the file's name when it
+        // reaches a computer). Settings, and a chat's sheets, are inside it and win while they are up.
+        .screenTitle(sceneTitle)
         // The desktop may have picked another tone meanwhile.
         .task { await toneModel?.refresh(apiClient: apiClient) }
         .onChange(of: scenePhase) {
@@ -224,9 +220,4 @@ enum SettingsRoute: String, Identifiable {
     case root, memory
 
     var id: String { rawValue }
-}
-
-/// The app's `NSUserActivity` types (also listed under `NSUserActivityTypes` in the Info.plist).
-enum ExodusActivity {
-    static let viewing = "app.yancey.exodus.viewing"
 }

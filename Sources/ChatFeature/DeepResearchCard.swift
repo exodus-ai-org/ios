@@ -383,6 +383,7 @@ struct DeepResearchReportView: View {
     var startAt: Int?
     @State private var highlighted: Int?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.screenTitle) private var enclosingTitle
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -414,6 +415,12 @@ struct DeepResearchReportView: View {
             }
             .navigationTitle("ios:chat.card.research.reportTitle")
             .navigationBarTitleDisplayMode(.inline)
+            .screenTitle(
+                ScreenTitles.join(
+                    String(
+                        localized: "ios:chat.card.research.reportTitle", defaultValue: "Research report",
+                        comment: "Title of the full deep research report view."),
+                    enclosingTitle))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("common:action.close", role: .close) { dismiss() }

@@ -545,6 +545,7 @@ struct MapItineraryFullView: View {
     @State private var copyCount = 0
     @State private var location = ItineraryLocationAccess()
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.screenTitle) private var enclosingTitle
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     static let peekBase: CGFloat = 170
@@ -609,6 +610,8 @@ struct MapItineraryFullView: View {
         }
         .task { location.requestIfNeeded() }
         .sensoryFeedback(.success, trigger: copyCount)
+        // The stops sheet over the map adds no title of its own: the trip is what is on screen.
+        .screenTitle(ScreenTitles.join(model.title ?? ToolPresentation.displayName("map_itinerary"), enclosingTitle))
     }
 
     static func position(for region: MapRegion?) -> MapCameraPosition {

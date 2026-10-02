@@ -1,4 +1,5 @@
 import NetworkingKit
+import Models
 import SwiftUI
 import VisionKit
 
@@ -94,6 +95,7 @@ final class ScannerHostController: UIViewController, DataScannerViewControllerDe
 struct ScannerScreen: View {
     let onLink: (String) -> Void
     @State private var unavailable: String?
+    @Environment(\.screenTitle) private var enclosingTitle
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -131,5 +133,11 @@ struct ScannerScreen: View {
         }
         .navigationTitle("ios:settings.pairing.scanCode")
         .navigationBarTitleDisplayMode(.inline)
+        .screenTitle(
+            ScreenTitles.join(
+                enclosingTitle,
+                String(
+                    localized: "ios:settings.pairing.scanCode", defaultValue: "Scan pairing code",
+                    comment: "Button: opens the camera to scan the QR code shown on the computer.")))
     }
 }

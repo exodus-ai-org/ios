@@ -360,6 +360,7 @@ struct ArtifactPreviewScreen: View {
             .animation(.easeOut(duration: 0.2), value: phase)
             .navigationTitle(Text(verbatim: ArtifactCardRules.title(artifact)))
             .navigationBarTitleDisplayMode(.inline)
+            .screenTitle(ArtifactCardRules.title(artifact))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("common:action.close", role: .close) { dismiss() }

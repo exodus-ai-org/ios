@@ -127,6 +127,7 @@ struct OtherVersionSheet: View {
     @State private var sources: SourcesSheetModel?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accentGlyph) private var accentGlyph
+    @Environment(\.screenTitle) private var enclosingTitle
 
     var body: some View {
         NavigationStack {
@@ -140,6 +141,7 @@ struct OtherVersionSheet: View {
             }
             .navigationTitle(Text(verbatim: CompareText.otherVersions(1)))
             .navigationBarTitleDisplayMode(.inline)
+            .screenTitle(ScreenTitles.join(CompareText.otherVersions(1), enclosingTitle))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("common:action.close", role: .close) { dismiss() }
