@@ -42,7 +42,7 @@ struct TranscriptRows: View {
             Group {
                 switch segment {
                 case .user(let message):
-                    UserBubble(text: message.answerText)
+                    UserBubble(text: message.answerText, messageId: message.id, images: UserImages.dataURLs(of: message))
                 case .assistantTurn(let turn):
                     let isStreaming = turn.id == streamingTurnId
                     let canRegenerate = turn.id == actions.regenerableTurnId
@@ -254,9 +254,26 @@ extension AssistantTurnView {
 
 struct UserBubble: View {
     let text: String
+    var messageId = ""
+    /// The pictures the question was asked with, drawn above the bubble.
+    var images: [String] = []
     @Environment(\.colorTone) private var tone
 
     var body: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            if !images.isEmpty {
+                UserImageStrip(messageId: messageId, dataURLs: images)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.leading, 40)
+            }
+            // A picture sent alone has no empty bubble under it.
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                bubble
+            }
+        }
+    }
+
+    private var bubble: some View {
         HStack {
             Spacer(minLength: 40)
             // A message asked about a selection opens with it as a quote (`QuotedText`): drawn as one, small and
