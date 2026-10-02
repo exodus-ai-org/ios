@@ -88,3 +88,32 @@ public enum SleepAnalyzer {
         return result
     }
 }
+
+
+extension SleepAnalyzer {
+    /// The night that ended on each of `days`, for many days at once. Each sample is offered only to the windows it
+    /// can reach (a window runs from 18:00 the day before to 12:00 on its day), so a year of samples is sorted into
+    /// nights in one pass instead of being filtered once per day. Same nights as `night(from:endingOn:)` day by day.
+    static func nights(from samples: [SleepSample], days: [Date], calendar: Calendar) -> [Date: SleepNight] {
+        let wanted = Set(days)
+        var buckets: [Date: [SleepSample]] = [:]
+        for sample in samples {
+            var day = calendar.startOfDay(for: sample.start)
+            let last = calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: sample.end)!)
+            while day <= last {
+                if wanted.contains(day) {
+                    let w = window(endingOn: day, calendar: calendar)
+                    if sample.end > w.start && sample.start < w.end { buckets[day, default: []].append(sample) }
+                }
+                day = calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: day)!)
+            }
+        }
+        var out: [Date: SleepNight] = [:]
+        for day in days {
+            if let samples = buckets[day], let n = night(from: samples, endingOn: day, calendar: calendar) {
+                out[day] = n
+            }
+        }
+        return out
+    }
+}

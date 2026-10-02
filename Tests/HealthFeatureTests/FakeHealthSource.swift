@@ -20,6 +20,12 @@ actor FakeHealthSource: HealthDataSource {
     var failure: Error?
     /// Delays the water read of a load (after it has read, so the answer is stale), so a test can act while it is in flight.
     var slowMs = 0
+    /// How many times each series was read: one per load, however many days it covers.
+    var sleepReads = 0
+    var sumReads: [SumMetric: Int] = [:]
+    var averageReads: [AverageMetric: Int] = [:]
+    var workoutReads = 0
+    var moodReads = 0
 
     init(isAvailable: Bool = true) { self.isAvailable = isAvailable }
 
@@ -29,11 +35,13 @@ actor FakeHealthSource: HealthDataSource {
     func requestAuthorization() async throws { requested = true }
 
     func sleepSamples(from start: Date, to end: Date) async throws -> [SleepSample] {
+        sleepReads += 1
         if let failure { throw failure }
         return sleep.filter { $0.end > start && $0.start < end }
     }
 
     func dailySums(_ metric: SumMetric, from start: Date, to end: Date) async throws -> [DayValue] {
+        sumReads[metric, default: 0] += 1
         let answer = (sums[metric] ?? []).filter { $0.day >= start && $0.day < end }
         if metric == .waterMl, slowMs > 0 { try? await Task.sleep(for: .milliseconds(slowMs)) }
         return answer
@@ -42,18 +50,21 @@ actor FakeHealthSource: HealthDataSource {
     func hourlySums(_ metric: SumMetric, on day: Date) async throws -> [DayValue] { hourly[metric] ?? [] }
 
     func dailyAverages(_ metric: AverageMetric, from start: Date, to end: Date) async throws -> [DayValue] {
-        (averages[metric] ?? []).filter { $0.day >= start && $0.day < end }
+        averageReads[metric, default: 0] += 1
+        return (averages[metric] ?? []).filter { $0.day >= start && $0.day < end }
     }
 
     func standHours(on day: Date) async throws -> Int { stand }
     func activityGoals(on day: Date) async throws -> ActivityGoals? { goals }
 
     func workouts(from start: Date, to end: Date) async throws -> [WorkoutSample] {
-        workoutList.filter { $0.start >= start && $0.start < end }
+        workoutReads += 1
+        return workoutList.filter { $0.start >= start && $0.start < end }
     }
 
     func moods(from start: Date, to end: Date) async throws -> [MoodSample] {
-        moodList.filter { $0.date >= start && $0.date < end }
+        moodReads += 1
+        return moodList.filter { $0.date >= start && $0.date < end }
     }
 
     func logWater(milliliters: Double, at date: Date) async throws {
