@@ -41,6 +41,7 @@ struct ExodusApp: App {
         self.reporter = reporter
         apiClient = APIClient(session: connection.session, serverConfig: config, reporter: reporter)
         streamManager = ChatStreamManager(sseClient: SSEClient(session: connection.session, reporter: reporter))
+        SettingsPageHooks.workingCards = { AnyView(WorkingCardsSettingsPage()) }
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-EmitTestLogReport") {
             reporter.report(.warn, scope: "debug", message: "Test report from the -EmitTestLogReport launch argument")

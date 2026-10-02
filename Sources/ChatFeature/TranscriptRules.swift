@@ -44,19 +44,28 @@ enum TranscriptRules {
 
     /// What a turn draws, in the order the model produced it. An image still forming is shown only while its run
     /// streams: in a stopped run it never will, so it shows nothing, as on the desktop — and the text it stood
-    /// between is one block again. (A stopped computer_use keeps its card, reading "stopped".)
-    static func blocks(_ turn: AssistantTurn, isStreaming: Bool) -> [AssistantTurn.Block] {
-        guard !isStreaming, turn.blocks.contains(where: neverComes) else { return turn.blocks }
-        return AssistantTurn.Block.numbered(turn.blocks.filter { !neverComes($0) })
+    /// between is one block again. (A stopped computer_use keeps its card, reading "stopped".) The cards of the tools
+    /// in `hidden` (Settings › Working cards) are left out the same way; their steps stay in the timeline.
+    static func blocks(
+        _ turn: AssistantTurn, isStreaming: Bool, hiding hidden: Set<String> = []
+    ) -> [AssistantTurn.Block] {
+        func dropped(_ block: AssistantTurn.Block) -> Bool {
+            guard case .card(let card) = block else { return false }
+            return hidden.contains(card.toolName) || (!isStreaming && neverComes(card))
+        }
+        guard turn.blocks.contains(where: dropped) else { return turn.blocks }
+        return AssistantTurn.Block.numbered(turn.blocks.filter { !dropped($0) })
     }
 
     /// The cards among `blocks`.
-    static func toolCards(_ turn: AssistantTurn, isStreaming: Bool) -> [ToolCard] {
-        blocks(turn, isStreaming: isStreaming).compactMap { if case .card(let card) = $0 { card } else { nil } }
+    static func toolCards(_ turn: AssistantTurn, isStreaming: Bool, hiding hidden: Set<String> = []) -> [ToolCard] {
+        blocks(turn, isStreaming: isStreaming, hiding: hidden).compactMap {
+            if case .card(let card) = $0 { card } else { nil }
+        }
     }
 
-    private static func neverComes(_ block: AssistantTurn.Block) -> Bool {
-        if case .card(let card) = block { card.isPending && card.toolName == "image_generation" } else { false }
+    private static func neverComes(_ card: ToolCard) -> Bool {
+        card.isPending && card.toolName == "image_generation"
     }
 
     /// The block that grows while the run streams: the last one, when it is text. Text above a card is finished.

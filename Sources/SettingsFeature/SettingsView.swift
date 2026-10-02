@@ -112,6 +112,8 @@ public struct SettingsView: View {
         switch page {
         case .colorTone:
             ColorToneSettingsPage(viewModel: colorTone)
+        case .workingCards:
+            SettingsPageHooks.workingCards()
         case .connection:
             ConnectionSettingsPage(viewModel: viewModel, connection: connection, pairingRevision: $pairingRevision)
         case .providers:
