@@ -39,6 +39,9 @@ struct AppShell: View {
     @State private var draft: (chatId: String, text: String)?
     /// A widget's question for Health's ask box.
     @State private var healthAsk: String?
+    /// The composer's `+` choices (reasoning effort, Deep Research) for the whole app session, as the desktop keeps them,
+    /// with the current model's levels and the MCP tools the menu offers.
+    @State private var composerTools = ComposerTools()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @Environment(ColorToneModel.self) private var toneModel: ColorToneModel?
@@ -104,7 +107,11 @@ struct AppShell: View {
         }
         .sheet(
             item: $settings,
-            onDismiss: { recentsReloadToken += 1 }
+            onDismiss: {
+                recentsReloadToken += 1
+                // The model may have changed there, and with it the reasoning levels.
+                refreshComposerTools()
+            }
         ) { route in
             SettingsView(apiClient: apiClient, serverConfig: serverConfig, opensMemory: route == .memory)
         }
@@ -118,8 +125,13 @@ struct AppShell: View {
         // The desktop may have picked another tone meanwhile.
         .task { await toneModel?.refresh(apiClient: apiClient) }
         .onChange(of: scenePhase) {
-            if scenePhase == .active { Task { await toneModel?.refresh(apiClient: apiClient) } }
+            if scenePhase == .active {
+                Task { await toneModel?.refresh(apiClient: apiClient) }
+                refreshComposerTools()
+            }
         }
+        // A chat opening reads the current model's levels and the MCP tools (the desktop may have changed either).
+        .onChange(of: activeChat.id, initial: true) { refreshComposerTools() }
         // Initial too: a link that arrived behind the unlock or pairing gate is opened once the shell appears.
         .onChange(of: pendingLink.link, initial: true) {
             guard let link = pendingLink.take() else { return }
@@ -141,6 +153,7 @@ struct AppShell: View {
             )
             // A different chat is a different view model.
             .id(activeChat.id)
+            .environment(composerTools)
             .environment(
                 \.openMemorySettings,
                 OpenMemorySettingsAction {
@@ -208,6 +221,10 @@ struct AppShell: View {
             workspace = .health
             setSidebar(open: false)
         }
+    }
+
+    private func refreshComposerTools() {
+        Task { await composerTools.refresh(from: ComposerToolsSource(apiClient: apiClient)) }
     }
 
     private func setSidebar(open: Bool) {

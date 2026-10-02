@@ -33,6 +33,8 @@ public struct ChatDetailView: View {
     @Environment(\.toneAccent) private var toneFillColor
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
+    /// The app session's `+` choices, from the app shell; nil (a preview) leaves the menu with pictures only.
+    @Environment(ComposerTools.self) private var composerTools: ComposerTools?
     /// Kept alongside the view model, not just handed to its `init`: a rename from the sidebar
     /// while this chat is the one on screen changes this on a re-render, which `.onChange` below
     /// turns into a push into the already-running view model (its own `@State` only reads `init`'s
@@ -151,6 +153,8 @@ public struct ChatDetailView: View {
         .navigationTitle(viewModel.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            // First: a turn reads the session's choices when it starts, and one may start right below.
+            viewModel.composerTools = composerTools
             await viewModel.onAppear()
             if let initialMessage {
                 // Handed over now, not when the reply ends: the question is this chat's from here on.
@@ -225,6 +229,14 @@ public struct ChatDetailView: View {
                 ComposerQuote(text: quote, onRemove: viewModel.removeQuote)
                     .transition(.opacity)
             }
+            if !viewModel.attachments.isEmpty {
+                ComposerPictureStrip(pictures: viewModel.attachments.pictures, onRemove: viewModel.removePicture)
+                    .transition(.opacity)
+            }
+            if let composerTools, composerTools.isActive {
+                ComposerToolPills(tools: composerTools)
+                    .transition(.opacity)
+            }
             composerRow
         }
         .padding(.leading, 16)
@@ -237,11 +249,18 @@ public struct ChatDetailView: View {
         // the drawer), rather than inventing a new one.
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: isComposerFocused)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: viewModel.quote)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: viewModel.attachments)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: composerTools?.turnOptions)
     }
 
     private var composerRow: some View {
         @Bindable var viewModel = viewModel
         return HStack(alignment: .bottom, spacing: 8) {
+            ComposerToolsButton(tools: composerTools, attachments: viewModel.attachments) { items in
+                Task { await viewModel.addPictures(items) }
+            }
+            // Reaches into the composer's padding, so its circle sits as far from the edge as Send's on the other side.
+            .padding(.leading, -10)
             TextField("ios:chat.composer.placeholder", text: $viewModel.composerText, axis: .vertical)
                 .lineLimit(1...5)
                 .focused($isComposerFocused)
