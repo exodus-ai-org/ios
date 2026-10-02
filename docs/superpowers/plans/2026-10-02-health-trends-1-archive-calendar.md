@@ -72,7 +72,7 @@
 
 **App**: `Sources/App/HealthGallery.swift` — calendar and day-sheet gallery states.
 
-**Resources**: `Resources/App/Localizable.xcstrings` — 39 new `ios:health.*` keys in ten languages (committed as a patch of only those hunks).
+**Resources**: `Resources/App/Localizable.xcstrings` — 38 new `ios:health.*` keys in ten languages (committed as a patch of only those hunks).
 
 **Tests (`Tests/HealthFeatureTests/`)**: new `TrendMathTests.swift`, `HealthArchiveTests.swift`, `DayRecordTests.swift`, `TrendsModelTests.swift`, `DaySheetTests.swift`, `DayCellTextTests.swift`; modified `FakeHealthSource.swift` (a sleep-read counter), `HealthHomeModelTests.swift` (archive, week).
 
@@ -1367,7 +1367,7 @@ git show --stat HEAD
 `Resources/App/Localizable.xcstrings` carries the user's uncommitted edits. Add the keys to the working file and, identically, to a copy of the committed catalog; commit the difference between the committed catalog and that copy as a patch, so only these keys enter the commit.
 
 **Files:**
-- Modify: `Resources/App/Localizable.xcstrings` (39 new `ios:health.*` keys)
+- Modify: `Resources/App/Localizable.xcstrings` (38 new `ios:health.*` keys)
 
 **Interfaces:**
 - Consumes: nothing.
@@ -1405,7 +1405,6 @@ git show --stat HEAD
 | `ios:health.calendar.a11y.sleep` | Sleep %@ |
 | `ios:health.calendar.today` | Today |
 | `ios:health.day.noNote` | No note for this day |
-| `ios:health.day.attached` | %@ attached |
 | `ios:health.day.ask.compare` | How did this day compare to my usual? |
 | `ios:health.day.ask.standout` | What stood out on this day? |
 | `ios:health.day.steps` | Steps |
@@ -1455,7 +1454,6 @@ KEYS = [
     ("ios:health.calendar.a11y.sleep", "Sleep %@", "VoiceOver for a calendar day: the night's sleep. %@ is a duration, e.g. 7h 40m."),
     ("ios:health.calendar.today", "Today", "VoiceOver for a calendar day: this day is today."),
     ("ios:health.day.noNote", "No note for this day", "Day sheet: no daily note was written or kept for this day."),
-    ("ios:health.day.attached", "%@ attached", "Day sheet ask box: the day's health numbers go with the question. %@ is the date."),
     ("ios:health.day.ask.compare", "How did this day compare to my usual?", "Day sheet: suggested question about a past day."),
     ("ios:health.day.ask.standout", "What stood out on this day?", "Day sheet: suggested question about a past day."),
     ("ios:health.day.steps", "Steps", "Day sheet: row label, the day's step count."),
@@ -1508,7 +1506,6 @@ Create `/tmp/trends-l10n/translations.json`:
   "ios:health.calendar.a11y.sleep": {"de": "Schlaf %@", "es": "Sueño %@", "fr": "Sommeil %@", "it": "Sonno %@", "ja": "睡眠 %@", "ko": "수면 %@", "pt-BR": "Sono %@", "zh-Hant": "睡眠 %@", "zh-HK": "睡眠 %@"},
   "ios:health.calendar.today": {"de": "Heute", "es": "Hoy", "fr": "Aujourd'hui", "it": "Oggi", "ja": "今日", "ko": "오늘", "pt-BR": "Hoje", "zh-Hant": "今天", "zh-HK": "今日"},
   "ios:health.day.noNote": {"de": "Keine Notiz für diesen Tag", "es": "No hay nota de este día", "fr": "Aucune note pour ce jour", "it": "Nessuna nota per questo giorno", "ja": "この日のメモはありません", "ko": "이 날의 노트가 없어요", "pt-BR": "Nenhuma nota para este dia", "zh-Hant": "這天沒有小記", "zh-HK": "呢日冇小記"},
-  "ios:health.day.attached": {"de": "%@ angehängt", "es": "%@ adjunto", "fr": "%@ joint", "it": "%@ allegato", "ja": "%@を添付済み", "ko": "%@ 첨부됨", "pt-BR": "%@ anexado", "zh-Hant": "已附上 %@", "zh-HK": "已附上 %@"},
   "ios:health.day.ask.compare": {"de": "Wie war dieser Tag im Vergleich zu sonst?", "es": "¿Cómo fue este día comparado con lo habitual?", "fr": "Comment s'est passée cette journée par rapport à d'habitude ?", "it": "Com'è andato questo giorno rispetto al solito?", "ja": "この日はいつもと比べてどうだった？", "ko": "이 날은 평소와 비교해 어땠어?", "pt-BR": "Como foi este dia comparado ao normal?", "zh-Hant": "這天和平常比起來如何？", "zh-HK": "呢日同平時比起嚟點？"},
   "ios:health.day.ask.standout": {"de": "Was war an diesem Tag auffällig?", "es": "¿Qué destacó de este día?", "fr": "Qu'est-ce qui a marqué cette journée ?", "it": "Cosa è emerso in questo giorno?", "ja": "この日に目立ったことは？", "ko": "이 날 눈에 띈 건 뭐였어?", "pt-BR": "O que se destacou neste dia?", "zh-Hant": "這天有什麼特別的？", "zh-HK": "呢日有咩特別？"},
   "ios:health.day.steps": {"de": "Schritte", "es": "Pasos", "fr": "Pas", "it": "Passi", "ja": "歩数", "ko": "걸음 수", "pt-BR": "Passos", "zh-Hant": "步數", "zh-HK": "步數"},
@@ -1542,7 +1539,7 @@ work = json.load(open('Resources/App/Localizable.xcstrings', encoding='utf-8'))[
 mine = json.load(open('/tmp/trends-l10n/mine.xcstrings', encoding='utf-8'))['strings']
 head = json.load(open('/tmp/trends-l10n/head.xcstrings', encoding='utf-8'))['strings']
 new = sorted(set(mine) - set(head))
-assert len(new) == 39, len(new)
+assert len(new) == 38, len(new)
 for k in new:
     assert work.get(k) == mine[k], k
     langs = set(mine[k]['localizations'])
@@ -1551,7 +1548,7 @@ print('OK', len(new))
 PY
 python3 scripts/l10n.py audit 2>&1 | tail -1
 ```
-Expected: `OK 39`, then `0 error(s)` (the new keys show as "not referenced" warnings until Tasks 5–8 use them).
+Expected: `OK 38`, then `0 error(s)` (the new keys show as "not referenced" warnings until Tasks 5–8 use them).
 
 - [ ] **Step 5: Build the patch of only these keys and check it applies to HEAD**
 
@@ -1573,7 +1570,7 @@ Expected: `PATCH-OK`. (The private index file never touches the shared one.)
 
 ```bash
 .superpowers/sdd/commit-mine.sh "feat(health): calendar, day sheet and archive strings in ten languages" --patch /tmp/trends-l10n/catalog.patch
-git show --stat HEAD           # only Resources/App/Localizable.xcstrings, about 39 entries' worth of lines
+git show --stat HEAD           # only Resources/App/Localizable.xcstrings, about 38 entries' worth of lines
 git diff --stat                # the catalog still shows the user's own edits, nothing of ours
 ```
 
@@ -2306,7 +2303,7 @@ git show --stat HEAD
 - Consumes: `DayRecord`, `DayTone` (Task 1), `ArchivedDay` (Task 2), `TrendText`, `TrendMetric` (Task 5), `ReportStory`, `AskComposer`, `HealthSurface`, `CategoryStyle`, `CategoryValue`, `OdyScene(hero:)`, `MarkdownView`, `ScreenTitles`, `HealthWire`.
 - Produces:
   - `extension DayTone { var fill: Color; var name: LocalizedStringResource }`, `enum RingInk { static let sleep, steps: Color }`, `struct CornerRing: View { init(sleep: Double?, steps: Double?, lineWidth: CGFloat = 2.5) }`.
-  - `struct DaySheet: View { init(day: Date, record: DayRecord?, archived: ArchivedDay?, healthTitle: String, calendar: Calendar, attachByDefault: Bool, loadSnapshot: @escaping () async -> HealthSnapshot?, onAsk: @escaping (String) -> Void) }`.
+  - `struct DaySheet: View { init(day: Date, record: DayRecord?, archived: ArchivedDay?, healthTitle: String, calendar: Calendar, loadSnapshot: @escaping () async -> HealthSnapshot?, onAsk: @escaping (String) -> Void) }`.
   - `struct DayNumbers: View { struct Row { title: LocalizedStringResource; symbol: String; value: String }; static func rows(_ r: DayRecord) -> [Row] }`.
   - `ReportStory.init?(_ summary: HealthSummary, eyebrow: Text? = nil)`.
   - `CategoryValue.steps(_ n: Int) -> String`.
@@ -2519,7 +2516,6 @@ struct DaySheet: View {
     /// The workspace's title ("Health"), for the screenshot's name.
     let healthTitle: String
     let calendar: Calendar
-    let attachByDefault: Bool
     let loadSnapshot: () async -> HealthSnapshot?
     let onAsk: (String) -> Void
 
@@ -2557,7 +2553,6 @@ struct DaySheet: View {
             .safeAreaInset(edge: .bottom) {
                 AskComposer(
                     suggestions: ["ios:health.day.ask.compare", "ios:health.day.ask.standout"],
-                    canAttach: snapshot != nil, attachedLabel: attachedText, attachByDefault: attachByDefault,
                     attachment: { snapshotJSON }, onSend: send)
             }
             .screenTitle(ScreenTitles.join(healthTitle, dateText))
@@ -2608,12 +2603,6 @@ struct DaySheet: View {
             .padding(14)
             .background(HealthSurface.card, in: .rect(cornerRadius: 18))
         }
-    }
-
-    private var attachedText: LocalizedStringResource {
-        LocalizedStringResource(
-            "ios:health.day.attached", defaultValue: "\(dateText) attached",
-            comment: "Day sheet ask box: the day's health numbers go with the question. %@ is the date.")
     }
 
     private var snapshotJSON: String? {
@@ -3090,7 +3079,6 @@ struct TrendsView: View {
     @State private var presented: PresentedDay?
     /// Which way the last page turned, so the new one comes in from that side.
     @State private var forward = true
-    let attachByDefault: Bool
     let onAsk: (String) -> Void
     /// The workspace's ("Health"): a screenshot of this page is "Health · October 2026".
     @Environment(\.screenTitle) private var enclosingTitle
@@ -3100,7 +3088,6 @@ struct TrendsView: View {
     init(route: TrendsRoute, home: HealthHomeModel, onAsk: @escaping (String) -> Void) {
         _trends = State(initialValue: home.trends(route))
         _presented = State(initialValue: route.presentedDay.map { PresentedDay(day: home.calendar.startOfDay(for: $0)) })
-        attachByDefault = home.hasConsent
         self.onAsk = onAsk
     }
 
@@ -3144,7 +3131,7 @@ struct TrendsView: View {
         .sheet(item: $presented) { p in
             DaySheet(
                 day: p.day, record: trends.records[p.day], archived: trends.archived(p.day), healthTitle: enclosingTitle,
-                calendar: trends.calendar, attachByDefault: attachByDefault,
+                calendar: trends.calendar,
                 loadSnapshot: { await trends.snapshot(for: p.day) }, onAsk: onAsk)
         }
     }
@@ -3700,7 +3687,7 @@ Expected: `** BUILD SUCCEEDED **`, `done`. Read every PNG in `.superpowers/trend
 - `calendar-month`: segmented control on Month; "October 2026" with ‹ › (› disabled); three stat tiles with arrows and "vs last month"; Mon-first weekday initials; three blanks before Thursday 1st (in October 2026; whatever the current month, blanks up to its first weekday); tinted cells with corner rings; today outlined in marigold; days to come pale and ring-less; legend below.
 - `calendar-week`: "Week N", the date range under it, seven tall columns with weekday, number, ring, "7:40" and "9.1K".
 - `calendar-quarter` / `calendar-year`: a bar per month, months to come faded.
-- `day-note`: a sheet with yesterday's date, Ody, the insight stories with the date as eyebrow, the ask box with suggestions and the attached chip.
+- `day-note`: a sheet with yesterday's date, Ody, the insight stories with the date as eyebrow, the ask box with suggestions.
 - `day-empty`: "No note for this day" and the numbers card (sleep, bedtime, steps, exercise, HRV, resting heart rate, water).
 - `home-week`: the card under the note.
 - Dark: every fill is a deep tint, numbers readable. AX: month grid still 7 columns (numbers capped), week as rows, stat tiles stacked, home card stats stacked.
@@ -3754,7 +3741,7 @@ with
 
 ```bash
 xcodebuild test -workspace ExodusIos.xcworkspace -scheme HealthFeature -destination "id=D8A2BE45-88F3-46AE-8693-B147F2815724" -derivedDataPath /tmp/trends-dd 2>&1 | grep -E "error:|✘|Test run with|TEST (SUCCEEDED|FAILED)"
-python3 scripts/l10n.py audit 2>&1 | tail -1     # 0 error(s); none of the 39 new keys is unreferenced any more
+python3 scripts/l10n.py audit 2>&1 | tail -1     # 0 error(s); none of the 38 new keys is unreferenced any more
 grep -c "ios:health.calendar\|ios:health.day\|ios:health.week\|ios:health.archive" <(python3 scripts/l10n.py audit 2>&1 | grep "not referenced") || true   # 0
 git diff --stat
 .superpowers/sdd/commit-mine.sh "feat(health): calendar and day-sheet gallery states, a year of preview data, device checklist and README" \
