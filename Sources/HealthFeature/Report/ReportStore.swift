@@ -27,6 +27,11 @@ public struct ReportCache: Sendable {
 
     public var fileURL: URL { directory.appending(path: "report.json") }
 
+    /// Every stored note is also kept by day, for the calendar.
+    public var archive: HealthArchive {
+        HealthArchive(directory: directory.appending(path: "archive", directoryHint: .isDirectory))
+    }
+
     public func load(date: String) -> CachedReport? {
         guard let data = try? Data(contentsOf: fileURL),
             let report = try? JSONDecoder().decode(CachedReport.self, from: data), report.snapshot.date == date
@@ -34,9 +39,10 @@ public struct ReportCache: Sendable {
         return report
     }
 
-    /// Forgets the stored report (consent withdrawn). Nothing stored is fine.
+    /// Forgets today's stored report (consent withdrawn); the archive stays. Nothing stored is fine.
     public func clear() throws {
-        guard FileManager.default.fileExists(atPath: fileURL.path()) else { return }
+        // Not `path()`: it percent-encodes "Application Support", and the file would never be found.
+        guard FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) else { return }
         try FileManager.default.removeItem(at: fileURL)
     }
 
@@ -47,6 +53,7 @@ public struct ReportCache: Sendable {
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try url.setResourceValues(values)
+        try archive.write(ArchivedDay(report))
     }
 }
 
