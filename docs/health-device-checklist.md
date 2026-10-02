@@ -26,7 +26,7 @@ Things the simulator cannot show. Run on a real iPhone (iOS 27) with an Apple Wa
 - [ ] Week · Month · Quarter · Year switch with a selection tick; ‹ › slide the page in from its side with a tick; › is disabled on the current period; with Reduce Motion the page cross-fades and cells don't shrink when pressed.
 - [ ] On a phone with a year of Apple Watch sleep, the Year view appears within about a second, and paging back and forth through months reads instantly the second time.
 - [ ] Today's cell and the home card pick up new steps after a walk (leave Health and come back).
-- [ ] Tap a past day with a note: the sheet shows that day's note as it was (its date where "Today" was). Tap a day before the archive began: its numbers and "No note for this day".
+- [ ] Tap a past day with a note: the sheet is titled with the date and shows that day's note as it was, its weekday where "Today" was. Tap a day before the archive began: its numbers and "No note for this day".
 - [ ] In a day sheet, ask a question with the day attached: a new chat opens with the health card showing that day's numbers and the date.
 - [ ] VoiceOver on a month cell reads like "October 1, Rested or active, Sleep 7h 40m, 9,120 steps"; the header tiles read "Avg. sleep, 7h 12m, Up 20m, vs last week".
 - [ ] Largest accessibility text size: the month grid keeps seven columns; the week becomes rows; the stat tiles and the home card's numbers stack.
