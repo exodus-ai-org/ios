@@ -42,20 +42,23 @@ struct TrendsView: View {
                 periodRow
                 TrendStatsHeader(scope: trends.scope, current: trends.current, previous: trends.previous)
                     .redacted(reason: trends.current == nil ? .placeholder : [])
-                Group {
-                    if trends.phase == .failed, trends.records.isEmpty {
-                        failedNote
-                    } else {
-                        VStack(alignment: .leading, spacing: 10) {
-                            if trends.phase == .ready, trends.current?.daysWithData == 0 {
-                                note(Text("ios:health.calendar.empty"))
+                // One slot for the old page and the new, so they cross rather than stack.
+                ZStack(alignment: .top) {
+                    Group {
+                        if trends.phase == .failed, trends.records.isEmpty {
+                            failedNote
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                if trends.phase == .ready, trends.current?.daysWithData == 0 {
+                                    note(Text("ios:health.calendar.empty"))
+                                }
+                                periodBody
                             }
-                            periodBody
                         }
                     }
+                    .id(trends.period)
+                    .transition(pageTransition)
                 }
-                .id(trends.period)
-                .transition(pageTransition)
                 legend
             }
             .padding(.horizontal, 16)

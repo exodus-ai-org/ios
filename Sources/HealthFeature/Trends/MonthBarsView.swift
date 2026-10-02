@@ -15,7 +15,6 @@ struct MonthBarsView: View {
                 Button { onOpen(bar.month) } label: { row(bar) }
                     .buttonStyle(PressScale())
                     .disabled(bar.isFuture)
-                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel(Text(verbatim: spoken(bar)))
             }
         }
