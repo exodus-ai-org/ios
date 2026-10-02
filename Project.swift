@@ -42,6 +42,9 @@ let project = Project(
                         "UIColorName": "LaunchBackground",
                         "UIImageName": "LaunchLogo"
                     ],
+                    // What the app is showing, published as the current activity so a screenshot is titled after
+                    // it (AppShell, ExodusActivity).
+                    "NSUserActivityTypes": ["app.yancey.exodus.viewing"],
                     "NSAppTransportSecurity": [
                         "NSAllowsLocalNetworking": true,
                         // Away from home the paired computer is reached over Tailscale by its MagicDNS name. Its

@@ -111,6 +111,14 @@ struct AppShell: View {
         // a row not already selected is tapped, so re-tapping the active row fires nothing. And
         // today .chat and .health are selectable (AppWorkspace.isAvailable).
         .sensoryFeedback(.selection, trigger: workspace)
+        // What is on screen, as the system's current activity: a screenshot is titled after it (the share
+        // sheet's header, and the file's name when it reaches a computer).
+        .userActivity(ExodusActivity.viewing) { activity in
+            activity.title = sceneTitle
+            activity.isEligibleForHandoff = false
+            activity.isEligibleForSearch = false
+            activity.isEligibleForPrediction = false
+        }
         // The desktop may have picked another tone meanwhile.
         .task { await toneModel?.refresh(apiClient: apiClient) }
         .onChange(of: scenePhase) {
@@ -154,6 +162,18 @@ struct AppShell: View {
             }
         case .philharmonic:
             PhilharmonicPlaceholderView()
+        }
+    }
+
+    /// The title of what is on screen: the chat's, else the workspace's.
+    private var sceneTitle: String {
+        switch workspace {
+        case .chat:
+            let title = activeChat.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return title.isEmpty
+                ? String(localized: "chat:sidebar.newChat", defaultValue: "New chat") : title
+        case .health, .philharmonic:
+            return String(localized: workspace.title)
         }
     }
 
@@ -204,4 +224,9 @@ enum SettingsRoute: String, Identifiable {
     case root, memory
 
     var id: String { rawValue }
+}
+
+/// The app's `NSUserActivity` types (also listed under `NSUserActivityTypes` in the Info.plist).
+enum ExodusActivity {
+    static let viewing = "app.yancey.exodus.viewing"
 }
