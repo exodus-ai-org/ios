@@ -14,6 +14,11 @@ public final class ChatDetailViewModel {
     @ObservationIgnored private var segmentCache = RunGrouper.Cache()
     public private(set) var status: ChatStatus = .idle
     public var composerText: String = ""
+    /// The pictures the next message carries, in pick order: sent with the text, and cleared with it.
+    public var attachments = ComposerAttachments()
+    /// The app session's reasoning effort and Deep Research (`ComposerTools`), read when a turn starts — a Regenerate
+    /// too, with the choices as they are then, as on the desktop. Handed over by the chat screen; nil asks for neither.
+    @ObservationIgnored public var composerTools: ComposerTools?
     /// "Ask about this": text the user selected in a message of this chat, shown over the composer and sent with the
     /// next message as a quote (`QuotedText`). One at a time; it belongs to this chat and goes with it.
     public private(set) var quote: String?
@@ -163,8 +168,9 @@ public final class ChatDetailViewModel {
     public var showsErrorAlert: Bool { errorMessage != nil && liveRunError == nil }
 
     public var canSend: Bool {
+        // A message may be pictures alone, as on the desktop.
         hasLoadedHistory && !isTurnInFlight
-            && !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (!composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty)
     }
 
     /// The answer that carries Regenerate: the last one, once nothing is in flight.
@@ -245,13 +251,36 @@ public final class ChatDetailViewModel {
         guard canSend else { return }
         let typed = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = quote.map { QuotedText.compose(quote: $0, text: typed) } ?? typed
+        let pictures = attachments.pictures
         composerText = ""
         quote = nil
+        attachments.removeAll()
 
         if supportsAttempts { messages = RunAttempts.autoChoose(messages) }
         await startTurn(
-            with: .userMessage(id: Self.newMessageId(), text: text, timestampMs: Self.nowMs))
+            with: .userMessage(
+                id: Self.newMessageId(), content: ComposerContent.content(text: text, pictures: pictures),
+                timestampMs: Self.nowMs))
     }
+
+    /// Pictures from Photos or the camera (nil: one that could not be loaded), prepared off the main actor and added in
+    /// pick order as far as `ComposerAttachments.limit` allows. One that cannot be read is left out with a notice; the
+    /// others stay.
+    public func addPictures(_ items: [Data?]) async {
+        var prepared: [ComposerPicture] = []
+        var unreadable = 0
+        for item in items {
+            guard let item, let picture = try? await ComposerPicture.prepared(item) else {
+                unreadable += 1
+                continue
+            }
+            prepared.append(picture)
+        }
+        attachments.append(prepared)
+        if unreadable > 0 { show(StreamNotice(level: .warning, message: ComposerText.unreadable(unreadable))) }
+    }
+
+    public func removePicture(_ id: ComposerPicture.ID) { attachments.remove(id) }
 
     @ObservationIgnored private var appliedDraft = false
 
@@ -361,7 +390,9 @@ public final class ChatDetailViewModel {
         sendCount += 1
         status = .submitted  // disable the composer now, before the first stream update arrives
 
-        let updates = await streamManager.send(chatId: chatId, messages: messages, serverConfig: serverConfig)
+        let options = composerTools?.turnOptions ?? TurnOptions()
+        let updates = await streamManager.send(
+            chatId: chatId, messages: messages, serverConfig: serverConfig, options: options)
         await consume(updates)
     }
 
