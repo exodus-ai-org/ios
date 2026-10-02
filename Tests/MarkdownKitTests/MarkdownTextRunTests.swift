@@ -104,7 +104,7 @@ struct MarkdownTextRunTests {
         let lead = MarkdownLayoutRules.gap(after: .paragraph(""), before: .heading(level: 2, content: ""), inList: false)
         #expect(try abs(#require(gap(between: "Second", and: "heading", in: run)) - em * lead) < tolerance)
         #expect(
-            try abs(#require(gap(between: "heading", and: "Third", in: run)) - em * MarkdownLayoutRules.afterHeadingGap)
+            try abs(#require(gap(between: "heading", and: "Third", in: run)) - em * MarkdownLayoutRules.afterHeadingGap(level: 2))
                 < tolerance)
     }
 

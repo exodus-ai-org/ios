@@ -5,10 +5,12 @@ import UIKit
 /// like the desktop's inline code) instead of being a fixed size.
 ///
 /// The transcript reads a step smaller than the system's styles — 16 pt where body is 17 — at every Dynamic
-/// Type size: the size is the style's own, as the system scales it, times `scale`.
+/// Type size: the size is the style's own, as the system scales it, times `scale`. Headings are the exception
+/// (`scaled: false`): they keep the system's sizes, so they stand clear of the smaller body.
 struct MarkdownFontSpec: Hashable {
     var style: Font.TextStyle
     var weight: Font.Weight?
+    var scaled: Bool
 
     static let body = MarkdownFontSpec(style: .body)
     /// Body text at the default text size, in points; what the layout's `em` is at that size. The owner's choice:
@@ -17,27 +19,28 @@ struct MarkdownFontSpec: Hashable {
     /// What every style's size is multiplied by: `bodySize` over the system's body, 17.
     static let scale: CGFloat = bodySize / 17
 
-    init(style: Font.TextStyle, weight: Font.Weight? = nil) {
+    init(style: Font.TextStyle, weight: Font.Weight? = nil, scaled: Bool = true) {
         self.style = style
         self.weight = weight
+        self.scaled = scaled
     }
 
-    var pointSize: CGFloat { Self.pointSize(style, in: .current) }
+    var pointSize: CGFloat { Self.pointSize(style, in: .current, scaled: scaled) }
 
-    /// A style's size at a text size setting: the system's, scaled.
-    static func pointSize(_ style: Font.TextStyle, in traits: UITraitCollection) -> CGFloat {
-        UIFont.preferredFont(forTextStyle: uiStyle(style), compatibleWith: traits).pointSize * scale
+    /// A style's size at a text size setting: the system's, scaled unless asked not to be.
+    static func pointSize(_ style: Font.TextStyle, in traits: UITraitCollection, scaled: Bool = true) -> CGFloat {
+        UIFont.preferredFont(forTextStyle: uiStyle(style), compatibleWith: traits).pointSize * (scaled ? scale : 1)
     }
 
-    var font: Font { Self.font(style, weight: weight) }
+    var font: Font { Self.font(style, weight: weight, scaled: scaled) }
 
     var codeFont: Font {
         let codeWeight = weight ?? (style == .headline ? .semibold : nil)
-        return Self.font(Self.smaller(style), weight: codeWeight).monospaced()
+        return Self.font(Self.smaller(style), weight: codeWeight, scaled: scaled).monospaced()
     }
 
-    private static func font(_ style: Font.TextStyle, weight: Font.Weight?) -> Font {
-        let size = pointSize(style, in: .current)
+    private static func font(_ style: Font.TextStyle, weight: Font.Weight?, scaled: Bool = true) -> Font {
+        let size = pointSize(style, in: .current, scaled: scaled)
         // A headline is semibold by itself, as the system's is.
         return Font.system(size: size, weight: weight ?? (style == .headline ? .semibold : .regular))
     }

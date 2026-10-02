@@ -10,7 +10,16 @@ enum MarkdownLayoutRules {
     /// body whose lines are 23.5 pt apart.
     static let blockGap: CGFloat = 1.8
     static let listGap: CGFloat = 0.5
-    static let afterHeadingGap: CGFloat = 0.6
+    /// After a heading, before its text: larger headings need more room under them to stand as titles, still
+    /// well under the gap above them, so a heading stays with what it introduces.
+    static func afterHeadingGap(level: Int) -> CGFloat {
+        switch level {
+        case 1: 1.1
+        case 2: 0.95
+        case 3: 0.8
+        default: 0.6
+        }
+    }
     static let ruleGap: CGFloat = 1.4
 
     /// The room added between two lines of one block, as a fraction of its font size.
@@ -34,19 +43,23 @@ enum MarkdownLayoutRules {
             default: return 1.85
             }
         }
-        if case .heading = previous { return inList ? listGap : afterHeadingGap }
+        if case .heading(let level, _) = previous { return inList ? listGap : afterHeadingGap(level: level) }
         if case .thematicBreak = previous { return ruleGap }
         if case .thematicBreak = next { return ruleGap }
         return inList ? listGap : blockGap
     }
 
+    /// The HIG's type scale at the system's own sizes (28 / 22 / 20 / 17 at the default text size) over a 16 pt
+    /// body, so every level reads larger than the one below it and h2 is no longer mistaken for a paragraph.
+    /// h5 is body-sized and only bold; h6 sits under the body, drawn secondary.
     static func headingFont(level: Int) -> MarkdownFontSpec {
         switch level {
-        case 1: MarkdownFontSpec(style: .title2, weight: .semibold)
-        case 2: MarkdownFontSpec(style: .title3, weight: .semibold)
-        case 3: MarkdownFontSpec(style: .headline)
-        case 4: MarkdownFontSpec(style: .callout, weight: .semibold)
-        default: MarkdownFontSpec(style: .subheadline, weight: .semibold)
+        case 1: MarkdownFontSpec(style: .title, weight: .bold, scaled: false)
+        case 2: MarkdownFontSpec(style: .title2, weight: .bold, scaled: false)
+        case 3: MarkdownFontSpec(style: .title3, weight: .semibold, scaled: false)
+        case 4: MarkdownFontSpec(style: .headline, scaled: false)
+        case 5: MarkdownFontSpec(style: .body, weight: .semibold)
+        default: MarkdownFontSpec(style: .subheadline, weight: .semibold, scaled: false)
         }
     }
 

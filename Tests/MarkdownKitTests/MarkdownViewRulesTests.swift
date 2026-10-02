@@ -408,14 +408,14 @@ struct MarkdownLayoutRulesTests {
         #expect(MarkdownLayoutRules.gap(after: paragraph, before: paragraph, inList: true) == MarkdownLayoutRules.listGap)
     }
 
-    @Test("headings: bigger lead-in by level, small gap after")
+    @Test("headings: bigger lead-in by level, and a smaller gap after that also grows with the level")
     func headings() {
         let leads = (1...6).map { MarkdownLayoutRules.gap(after: paragraph, before: heading($0), inList: false) }
         #expect(leads == leads.sorted(by: >))
         #expect(leads.allSatisfy { $0 > MarkdownLayoutRules.blockGap })
-        #expect(
-            MarkdownLayoutRules.gap(after: heading(2), before: paragraph, inList: false)
-                == MarkdownLayoutRules.afterHeadingGap)
+        let afters = (1...6).map { MarkdownLayoutRules.gap(after: heading($0), before: paragraph, inList: false) }
+        #expect(afters == afters.sorted(by: >))
+        #expect(zip(leads, afters).allSatisfy { $0 > $1 })
     }
 
     @Test("a thematic break gets room on both sides")
@@ -445,11 +445,19 @@ struct MarkdownLayoutRulesTests {
         #expect(MarkdownLayoutRules.widestMarker(list(start: 99, count: 1), depth: 0) == "00.")
     }
 
-    @Test("heading fonts differ by level down to h5")
+    @Test("each heading level is larger than the next, h5 is body-sized, h6 sits under the body")
     func headingFonts() {
-        let fonts = (1...5).map { MarkdownLayoutRules.headingFont(level: $0) }
-        #expect(Set(fonts).count == 5)
-        #expect(MarkdownLayoutRules.headingFont(level: 6) == MarkdownLayoutRules.headingFont(level: 5))
+        let large = UITraitCollection(preferredContentSizeCategory: .large)
+        func size(_ level: Int) -> CGFloat {
+            let spec = MarkdownLayoutRules.headingFont(level: level)
+            return MarkdownFontSpec.pointSize(spec.style, in: large, scaled: spec.scaled)
+        }
+        let body = MarkdownFontSpec.pointSize(.body, in: large)
+        #expect([size(1), size(2), size(3), size(4)] == [28, 22, 20, 17])
+        #expect(size(4) > size(5))
+        #expect(abs(size(5) - body) < 0.001)
+        #expect(size(6) < body)
+        #expect(Set((1...6).map { MarkdownLayoutRules.headingFont(level: $0) }).count == 6)
     }
 }
 

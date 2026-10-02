@@ -43,8 +43,9 @@ struct MarkdownCodeBlockView: View {
             .padding(.bottom, 4)
 
             ScrollView(.horizontal) {
+                // 0.875 em, as code sits beside body text on GitHub and the web: monospaced at body size reads large.
                 Text(verbatim: code)
-                    .font(.callout.monospaced())
+                    .font(.system(size: MarkdownFontSpec(style: .subheadline).pointSize, design: .monospaced))
                     .fixedSize(horizontal: true, vertical: true)
                     .textSelection(.enabled)
                     .padding(.horizontal, MarkdownBlockShape.inset)

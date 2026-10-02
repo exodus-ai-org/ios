@@ -77,12 +77,12 @@ struct MarkdownAttributedTextTests {
         #expect(font(of: "f", in: text)?.fontDescriptor.symbolicTraits.isSuperset(of: [.traitBold, .traitMonoSpace]) == true)
     }
 
-    @Test("a heading's text is its style's size, semibold")
+    @Test("a heading's text is its style's size and weight")
     func headingFont() {
         let spec = MarkdownLayoutRules.headingFont(level: 1)
         let text = built("# Title", style: MarkdownTextStyle(spec: spec))
         #expect(font(of: "Title", in: text)?.pointSize == spec.pointSize)
-        #expect(weight(of: font(of: "Title", in: text)) == weight(of: .systemFont(ofSize: spec.pointSize, weight: .semibold)))
+        #expect(weight(of: font(of: "Title", in: text)) == weight(of: .systemFont(ofSize: spec.pointSize, weight: .bold)))
         let third = MarkdownLayoutRules.headingFont(level: 3)
         let headline = built("### Title", style: MarkdownTextStyle(spec: third))
         #expect(font(of: "Title", in: headline)?.pointSize == third.pointSize)
