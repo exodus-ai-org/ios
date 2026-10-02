@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Copy, Read aloud, Regenerate and Sources, under a finished answer. Equatable on what it shows only: the closures
+/// Copy, Read aloud, Regenerate and Sources, under a finished answer, and when it was written. Equatable on what it shows only: the closures
 /// never change what a bar looks like, so a finished turn's bar is not evaluated again while a later reply streams.
 /// (What read-aloud is doing is read from its model, which tells this view itself.)
 struct TurnActionBarView: View, Equatable {
@@ -32,6 +32,9 @@ struct TurnActionBarView: View, Equatable {
             }
             if bar.showsSources {
                 sourcesButton
+            }
+            if let generatedAt = bar.generatedAt {
+                GeneratedAtText(date: generatedAt)
             }
             Spacer(minLength: 0)
         }
@@ -110,6 +113,36 @@ struct TurnActionBarView: View, Equatable {
 
     private static var copiedAnnouncement: String {
         String(localized: "common:state.copied", defaultValue: "Copied", comment: "Said aloud after the answer was copied.")
+    }
+}
+
+/// When the answer was written, as the desktop's bar ends: short and faint ("5m ago"), kept current while on screen.
+/// VoiceOver hears it in full.
+struct GeneratedAtText: View {
+    let date: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            Text(verbatim: Self.short(date, now: context.date))
+                .font(.footnote)
+                .monospacedDigit()
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .padding(.leading, 8)
+                .accessibilityLabel(Text(date, format: .relative(presentation: .named, unitsStyle: .wide)))
+        }
+    }
+
+    /// "now" under a minute, then the largest whole unit, abbreviated — the desktop's `compactRelativeTime`, localized.
+    static func short(_ date: Date, now: Date, locale: Locale = .current) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.dateTimeStyle = .named
+        formatter.unitsStyle = .abbreviated
+        // Under a minute is "now", as on the desktop, not a count of seconds; and a phone whose clock runs behind
+        // the computer's would otherwise read a fresh answer as "in 1m".
+        let shown = now.timeIntervalSince(date) < 60 ? now : date
+        return formatter.localizedString(for: shown, relativeTo: now)
     }
 }
 

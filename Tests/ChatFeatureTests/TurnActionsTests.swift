@@ -36,7 +36,11 @@ struct ActionBarRulesTests {
     @Test("a finished answer gets copy, and no sources when it searched nothing")
     func plainAnswer() {
         let bar = TurnActions.bar(for: turn(answered), isStreaming: false, canRegenerate: false)
-        #expect(bar == TurnActionBar(turnId: "run:u1", copyText: "Hello **there**", showsRegenerate: false, sourceCount: 0))
+        #expect(
+            bar
+                == TurnActionBar(
+                    turnId: "run:u1", copyText: "Hello **there**", showsRegenerate: false, sourceCount: 0,
+                    generatedAt: Date(timeIntervalSince1970: 1_700_000_000)))
         #expect(bar?.showsSources == false)
         #expect(bar?.sourceIcons.isEmpty == true)
     }

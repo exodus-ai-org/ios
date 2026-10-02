@@ -15,11 +15,13 @@ struct TurnActionBar: Equatable {
     let sourceCount: Int
     /// The sites the Sources button shows, as the desktop's does: the first three, each once.
     let sourceIcons: [SourceAvatar]
+    /// When the answer was written, shown at the end of the bar as the desktop's is; nil for rows without a time.
+    let generatedAt: Date?
 
     /// `speechText` is the answer as prose; left out, it is taken from `copyText`.
     init(
         turnId: String = "", copyText: String, speechText: String? = nil, showsRegenerate: Bool, sourceCount: Int,
-        sourceIcons: [SourceAvatar] = []
+        sourceIcons: [SourceAvatar] = [], generatedAt: Date? = nil
     ) {
         self.turnId = turnId
         self.copyText = copyText
@@ -27,6 +29,7 @@ struct TurnActionBar: Equatable {
         self.showsRegenerate = showsRegenerate
         self.sourceCount = sourceCount
         self.sourceIcons = sourceIcons
+        self.generatedAt = generatedAt
     }
 
     var showsSources: Bool { sourceCount > 0 }
@@ -50,7 +53,8 @@ enum TurnActions {
         let sources = TurnSources(turn: turn).all
         return TurnActionBar(
             turnId: turn.id, copyText: CopiedAnswer.text(of: turn), speechText: SpeechText.prose(turn.body),
-            showsRegenerate: canRegenerate, sourceCount: sources.count, sourceIcons: sourceIcons(sources))
+            showsRegenerate: canRegenerate, sourceCount: sources.count, sourceIcons: sourceIcons(sources),
+            generatedAt: turn.timestampMs.flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0 / 1000) : nil })
     }
 
     static let sourceIconLimit = 3
