@@ -3,7 +3,7 @@
 import Foundation
 import Models
 
-/// A believable month in memory, for the gallery and previews: sleep with stages each night, steps, heart, water.
+/// A believable year in memory, for the gallery and previews: sleep with stages each night, steps, heart, water.
 public actor HealthPreviewSource: HealthDataSource {
     public nonisolated let isAvailable = true
     let now: Date
@@ -17,7 +17,7 @@ public actor HealthPreviewSource: HealthDataSource {
 
     public func sleepSamples(from start: Date, to end: Date) async throws -> [SleepSample] {
         let today = cal.startOfDay(for: now)
-        return (0..<31).flatMap { offset -> [SleepSample] in
+        return (0..<400).flatMap { offset -> [SleepSample] in
             let day = cal.date(byAdding: .day, value: -offset, to: today)!
             var t = day.addingTimeInterval(-12 * 60 - Double(offset % 5) * 540)
             let plan: [(SleepStage, Double)] = [
@@ -52,7 +52,8 @@ public actor HealthPreviewSource: HealthDataSource {
         days(from: start, to: end).compactMap { day in
             let o = cal.dateComponents([.day], from: day, to: cal.startOfDay(for: now)).day ?? 0
             let v: Double? = switch metric {
-            case .hrv: o == 0 ? 38 : Double(42 + o % 5)
+            // Every ninth day well under the usual, so the calendar has recovering days.
+            case .hrv: o == 0 ? 38 : (o % 9 == 4 ? 34 : Double(42 + o % 5))
             case .restingHr: o == 0 ? 61 : Double(57 + o % 3)
             case .respRate: 14.2
             case .weightKg: o % 3 == 0 ? 70.4 - Double(30 - o) * 0.02 : nil
@@ -128,5 +129,15 @@ public struct PreviewSummaryService: HealthSummaryService {
 public struct PreviewMemoryWriter: MemoryWriter {
     public init() {}
     public func remember(_ suggestion: HealthSummary.MemorySuggestion) async throws {}
+}
+
+extension HealthArchive {
+    /// The gallery's kept note: the sample note, filed under `day`.
+    public func writePreview(day: Date, calendar: Calendar = .current) throws {
+        let snapshot = HealthSnapshot(
+            date: WireDate(timeZone: calendar.timeZone).day(day), localTime: "08:30", locale: "en", sleep: nil,
+            activity: nil, recovery: nil, body: nil, odyState: .tired)
+        try write(ArchivedDay(snapshot: snapshot, summary: PreviewSummaryService.sample, generatedAt: day))
+    }
 }
 #endif
