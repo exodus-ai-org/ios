@@ -156,10 +156,15 @@ struct DayNumbers: View {
         let title: LocalizedStringResource
         let symbol: String
         let value: String
+        /// Whose colour the glyph takes, as on the home's cards.
+        var category: HealthCategory = .sleep
     }
 
     let record: DayRecord
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// One column for every glyph: SF Symbols are not one width (a bed is twice a walker), and labels that start
+    /// where their glyph ends do not line up.
+    @ScaledMetric(relativeTo: .body) private var glyphWidth: CGFloat = 26
 
     var body: some View {
         let rows = Self.rows(record)
@@ -168,7 +173,15 @@ struct DayNumbers: View {
                 if index > 0 { Divider() }
                 let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout())
                 layout {
-                    Label { Text(row.title) } icon: { Image(systemName: row.symbol) }
+                    Label {
+                        Text(row.title)
+                    } icon: {
+                        Image(systemName: row.symbol)
+                            .font(.body.weight(.medium))
+                            .imageScale(.small)
+                            .foregroundStyle(CategoryStyle.of(row.category).accent)
+                            .frame(width: glyphWidth)
+                    }
                     if typeSize.isAccessibilitySize == false { Spacer(minLength: 8) }
                     Text(verbatim: row.value).monospacedDigit().foregroundStyle(.secondary)
                 }
@@ -190,25 +203,25 @@ struct DayNumbers: View {
             rows.append(Row(title: LocalizedStringResource("ios:health.day.bedtime", defaultValue: "Bedtime", comment: "Day sheet row: when the night began."), symbol: "bed.double.fill", value: bedtime))
         }
         if let steps = r.steps {
-            rows.append(Row(title: LocalizedStringResource("ios:health.day.steps", defaultValue: "Steps", comment: "Day sheet row: the day's step count."), symbol: "figure.walk", value: steps.formatted()))
+            rows.append(Row(title: LocalizedStringResource("ios:health.day.steps", defaultValue: "Steps", comment: "Day sheet row: the day's step count."), symbol: "figure.walk", value: steps.formatted(), category: .activity))
         }
         if let m = r.exerciseMin {
             rows.append(
                 Row(
                     title: LocalizedStringResource("ios:health.day.exercise", defaultValue: "Exercise", comment: "Day sheet row: minutes of exercise."), symbol: "flame.fill",
-                    value: Duration.seconds(m * 60).formatted(.units(allowed: [.minutes], width: .abbreviated))))
+                    value: Duration.seconds(m * 60).formatted(.units(allowed: [.minutes], width: .abbreviated)), category: .activity))
         }
         if let hrv = r.hrvMs {
-            rows.append(Row(title: LocalizedStringResource("ios:health.recovery.hrv", defaultValue: "Heart rate variability", comment: "Day sheet row: HRV."), symbol: "waveform.path.ecg", value: TrendText.ms(hrv)))
+            rows.append(Row(title: LocalizedStringResource("ios:health.recovery.hrv", defaultValue: "Heart rate variability", comment: "Day sheet row: HRV."), symbol: "waveform.path.ecg", value: TrendText.ms(hrv), category: .recovery))
         }
         if let hr = r.restingHr, hr.isFinite {
             rows.append(
                 Row(
                     title: LocalizedStringResource("ios:health.recovery.restingHr", defaultValue: "Resting heart rate", comment: "Day sheet row: resting heart rate."), symbol: "heart.fill",
-                    value: CategoryValue.bpm(hr)))
+                    value: CategoryValue.bpm(hr), category: .recovery))
         }
         if let cups = r.waterCups {
-            rows.append(Row(title: LocalizedStringResource("ios:health.body.water", defaultValue: "Water", comment: "Day sheet row: cups of water."), symbol: "drop.fill", value: CategoryValue.cups(cups)))
+            rows.append(Row(title: LocalizedStringResource("ios:health.body.water", defaultValue: "Water", comment: "Day sheet row: cups of water."), symbol: "drop.fill", value: CategoryValue.cups(cups), category: .body))
         }
         return rows
     }
