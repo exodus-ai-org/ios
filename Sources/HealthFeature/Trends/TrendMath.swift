@@ -116,9 +116,9 @@ public struct MetricSummary: Equatable, Sendable, Codable {
 
 /// A period in numbers: what the home card, the calendar's header and (later) the period reports and habits read.
 public struct Aggregates: Equatable, Sendable, Codable {
-    /// Days of the period that have begun: all of a past period, up to today in the current one.
+    /// Days of the period that have begun: all of a past period, up to and including today in the current one.
     public var elapsedDays: Int
-    /// Days with any number at all.
+    /// Days with any number at all, today included. A summary's own `days` says how many days it averaged.
     public var daysWithData: Int
     public var sleepMin: MetricSummary
     public var steps: MetricSummary
@@ -126,7 +126,7 @@ public struct Aggregates: Equatable, Sendable, Codable {
     public var hrvMs: MetricSummary
     public var restingHr: MetricSummary
     public var waterCups: MetricSummary
-    /// Of the days with steps, the share at or over that day's goal.
+    /// Of the finished days with steps, the share at or over that day's goal.
     public var stepGoalRate: Double?
     /// Of the nights recorded, the share at or over the sleep target.
     public var sleepTargetRate: Double?
@@ -159,25 +159,29 @@ public enum TrendMath {
         return c
     }
 
-    /// The records inside `period` up to `today` (later or outside ones are ignored), summed up.
+    /// The records inside `period` up to `today` (later or outside ones are ignored), summed up. Steps, exercise and
+    /// water still add up through today, so their summaries and the step-goal rate stop at yesterday: a Monday
+    /// morning's 1,200 steps is not a day of steps. Last night's sleep, HRV and resting heart rate are done and count.
     public static func aggregate(
         _ records: [DayRecord], in period: Period, today: Date, calendar: Calendar,
         sleepTarget: Int = TrendMath.sleepTargetMin
     ) -> Aggregates {
         let last = calendar.startOfDay(for: today)
         let days = records.filter { period.contains($0.day) && $0.day <= last }
+        let finished = days.filter { $0.day < last }
         func values(_ pick: (DayRecord) -> Double?) -> [Double] { days.compactMap(pick) }
-        let withSteps = days.compactMap { r in r.steps.map { (steps: $0, goal: r.stepGoal) } }
+        func totals(_ pick: (DayRecord) -> Int?) -> [Double] { finished.compactMap { pick($0).map(Double.init) } }
+        let withSteps = finished.compactMap { r in r.steps.map { (steps: $0, goal: r.stepGoal) } }
         let nights = days.compactMap(\.sleepMin)
         return Aggregates(
             elapsedDays: period.days(calendar: calendar).filter { $0 <= last }.count,
             daysWithData: days.filter(\.hasData).count,
             sleepMin: .of(values { $0.sleepMin.map { Double($0) } }),
-            steps: .of(values { $0.steps.map { Double($0) } }),
-            exerciseMin: .of(values { $0.exerciseMin.map { Double($0) } }),
+            steps: .of(totals(\.steps)),
+            exerciseMin: .of(totals(\.exerciseMin)),
             hrvMs: .of(values { $0.hrvMs }),
             restingHr: .of(values { $0.restingHr }),
-            waterCups: .of(values { $0.waterCups.map { Double($0) } }),
+            waterCups: .of(totals(\.waterCups)),
             stepGoalRate: withSteps.isEmpty
                 ? nil : Double(withSteps.filter { $0.steps >= $0.goal }.count) / Double(withSteps.count),
             sleepTargetRate: nights.isEmpty

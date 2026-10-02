@@ -74,7 +74,8 @@ struct TrendsView: View {
             DaySheet(
                 day: p.day, record: trends.records[p.day], archived: trends.archived(p.day), healthTitle: enclosingTitle,
                 calendar: trends.calendar,
-                loadSnapshot: { await trends.snapshot(for: p.day) }, onAsk: onAsk)
+                loadSnapshot: { await trends.snapshot(for: p.day) }, fallback: trends.minimalSnapshot(for: p.day),
+                onAsk: onAsk)
         }
     }
 

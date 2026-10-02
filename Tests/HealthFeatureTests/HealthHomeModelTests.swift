@@ -294,14 +294,23 @@ struct HealthHomeModelTests {
     }
 
     @Test func theWeekCardReadsThisWeekAndLast() async throws {
-        await withData()
+        let monday = TestClock.date(2026, 9, 28)
+        let lastWeek = TestClock.date(2026, 9, 22)
+        await source.set {
+            $0.sums[.steps] = [
+                DayValue(day: lastWeek, value: 6000), DayValue(day: monday, value: 7000),
+                DayValue(day: TestClock.today, value: 1200),
+            ]
+        }
         let m = model()
         await m.load()
         let week = try #require(m.week)
         #expect(week.period == Period.containing(TestClock.now, .week, calendar: TestClock.calendar))
         #expect(week.cells.count == 7)
-        #expect(week.current.steps.average == 9000)
-        #expect(week.previous.steps.days == 0)
+        // Today's 1,200 so far is on its cell but not in the average: the day isn't over.
+        #expect(week.cells.first { $0.isToday }?.record?.steps == 1200)
+        #expect(week.current.steps == MetricSummary(average: 7000, min: 7000, max: 7000, days: 1))
+        #expect(week.previous.steps.average == 6000)
     }
 }
 

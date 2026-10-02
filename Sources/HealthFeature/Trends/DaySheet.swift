@@ -15,6 +15,8 @@ struct DaySheet: View {
     let healthTitle: String
     let calendar: Calendar
     let loadSnapshot: () async -> HealthSnapshot?
+    /// What the question carries until (or unless) Apple Health answers and the day has no note.
+    let fallback: HealthSnapshot
     let onAsk: (String) -> Void
 
     @State private var snapshot: HealthSnapshot?
@@ -55,7 +57,8 @@ struct DaySheet: View {
                         LocalizedStringResource("ios:health.day.ask.compare", defaultValue: "How did this day compare to my usual?", comment: "Day sheet suggestion chip: compare the day to the user's usual."),
                         LocalizedStringResource("ios:health.day.ask.standout", defaultValue: "What stood out on this day?", comment: "Day sheet suggestion chip: what was notable about the day."),
                     ],
-                    attachment: { snapshotJSON ?? archivedJSON }, onSend: send)
+                    attachment: { Self.attachment(snapshot: snapshot, archived: archived?.snapshot, fallback: fallback) },
+                    onSend: send)
             }
             .screenTitle(ScreenTitles.join(healthTitle, dateText))
         }
@@ -112,15 +115,32 @@ struct DaySheet: View {
         }
     }
 
-    private var snapshotJSON: String? {
-        guard let snapshot, let data = try? HealthWire.encoder().encode(snapshot) else { return nil }
+    /// The whole day as Apple Health reads it; before (or without) that read, the note's own numbers; with neither,
+    /// the fallback, so a question about a day never goes out without the day.
+    static func attachment(snapshot: HealthSnapshot?, archived: HealthSnapshot?, fallback: HealthSnapshot) -> String? {
+        guard let data = try? HealthWire.encoder().encode(snapshot ?? archived ?? fallback) else { return nil }
         return String(decoding: data, as: UTF8.self)
     }
 
-    /// The archived note's own numbers, for a question asked before (or without) the HealthKit read.
-    private var archivedJSON: String? {
-        guard let snapshot = archived?.snapshot, let data = try? HealthWire.encoder().encode(snapshot) else { return nil }
-        return String(decoding: data, as: UTF8.self)
+    /// The day's date and the numbers the calendar already has that the wire holds as they are. Sleep and activity
+    /// stay out: their wire shape wants stages, calories and hours stood the calendar never read, and a zero there
+    /// would read as a measured zero. Chat's card shows what is left, or the date.
+    static func minimalSnapshot(
+        day: Date, record: DayRecord?, calendar: Calendar, locale: String, now: Date
+    ) -> HealthSnapshot {
+        let wire = WireDate(timeZone: calendar.timeZone)
+        let next = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: day))!
+        let recovery = record.flatMap { r in
+            r.hrvMs == nil && r.restingHr == nil
+                ? nil
+                : HealthSnapshot.Recovery(
+                    level: nil, hrvMs: r.hrvMs, hrvBaselineMs: nil, restingHr: r.restingHr, restingHrBaseline: nil,
+                    respRate: nil)
+        }
+        let body = record?.waterCups.map { HealthSnapshot.Body(waterCups: $0, weightKg: nil, weightTrend30d: nil, mood: nil) }
+        return HealthSnapshot(
+            date: wire.day(day), localTime: wire.clock(min(now, next.addingTimeInterval(-60))), locale: locale,
+            sleep: nil, activity: nil, recovery: recovery, body: body, odyState: record?.mood ?? .noData)
     }
 
     /// The question goes to a new chat; the sheet steps out of the way first.

@@ -52,12 +52,32 @@ struct TrendsModelTests {
         let m = model(.week)
         await m.load()
         #expect(m.phase == .ready)
-        #expect(m.current?.steps.days == 4)
+        // Monday to Wednesday: today's steps are still adding up.
+        #expect(m.current?.steps.days == 3)
         #expect(m.previous?.steps.days == 7)
         #expect(m.current?.steps.average == 1000)
         #expect(m.cells.count == 7)
         #expect(m.cells.filter(\.isFuture).count == 3)
         #expect(m.cells.first { $0.isToday }?.day == TestClock.today)
+    }
+
+    /// The title changes the moment the period does, so the numbers go with it, before the next load starts.
+    @Test func movingClearsTheOldNumbersAtOnce() async {
+        await steps()
+        let m = model(.month)
+        await m.load()
+        #expect(m.current != nil)
+        m.showPrevious()
+        #expect(m.current == nil && m.previous == nil)
+        await m.load()
+        m.showNext()
+        #expect(m.current == nil && m.previous == nil)
+        await m.load()
+        m.select(.year)
+        #expect(m.current == nil && m.previous == nil)
+        await m.load()
+        m.open(month: m.months[8].month)
+        #expect(m.current == nil && m.previous == nil)
     }
 
     @Test func aMonthGridOpensWithBlanksUpToItsFirstWeekday() {
@@ -93,7 +113,7 @@ struct TrendsModelTests {
         await steps()
         let m = model(.week)
         await m.load()
-        #expect(m.current?.steps.days == 4)
+        #expect(m.current?.steps.days == 3)
         await source.set { $0.gated = true }
         let first = Task { await m.load() }
         // The older load is provably in flight: its read is held in the fake.

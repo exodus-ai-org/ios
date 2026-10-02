@@ -12,7 +12,13 @@ final class TrendsModel {
     enum Phase: Equatable { case loading, ready, failed }
 
     private(set) var scope: TrendScope
-    private(set) var period: Period
+    /// A new period drops the old one's numbers at once: its title shows from this frame on, before `load()` runs.
+    private(set) var period: Period {
+        didSet {
+            current = nil
+            previous = nil
+        }
+    }
     private(set) var phase: Phase = .loading
     /// The shown period's days and the previous period's, by day.
     private(set) var records: [Date: DayRecord] = [:]
@@ -102,6 +108,12 @@ final class TrendsModel {
     /// The note kept for a day, if any.
     func archived(_ day: Date) -> ArchivedDay? {
         archive.read(day: WireDate(timeZone: calendar.timeZone).day(day))
+    }
+
+    /// The day sheet's question when the day has no note and Apple Health hasn't answered: the date and what the
+    /// calendar has.
+    func minimalSnapshot(for day: Date) -> HealthSnapshot {
+        DaySheet.minimalSnapshot(day: day, record: records[day], calendar: calendar, locale: locale, now: now())
     }
 
     /// The whole day as the home builds today, for the day sheet's question; nil when it can't be read.

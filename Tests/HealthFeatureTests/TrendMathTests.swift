@@ -153,14 +153,44 @@ struct TrendMathTests {
     @Test func onlyTheDaysOfThePeriodUpToTodayCount() {
         let week = Period.containing(TestClock.now, .week, calendar: cal)  // 28 Sep – 4 Oct; today is Thursday 1 Oct
         let records = [
-            DayRecord(day: d(2026, 9, 27), steps: 100_000),
-            DayRecord(day: d(2026, 9, 28), steps: 4000),
-            DayRecord(day: d(2026, 10, 1), steps: 6000),
-            DayRecord(day: d(2026, 10, 2), steps: 100_000),
+            DayRecord(day: d(2026, 9, 27), sleepMin: 1000),
+            DayRecord(day: d(2026, 9, 28), sleepMin: 400),
+            DayRecord(day: d(2026, 10, 1), sleepMin: 600),
+            DayRecord(day: d(2026, 10, 2), sleepMin: 1000),
         ]
         let a = TrendMath.aggregate(records, in: week, today: TestClock.now, calendar: cal)
         #expect(a.elapsedDays == 4)
-        #expect(a.steps.average == 5000)
+        #expect(a.sleepMin.average == 500)
+    }
+
+    /// Thursday afternoon: today's steps, exercise and water are still adding up, so their averages and the step-goal
+    /// rate stop at yesterday; last night's sleep, HRV and resting heart rate are done and count.
+    @Test func todaysUnfinishedTotalsStayOutOfAPeriodThatHoldsToday() {
+        let week = Period.containing(TestClock.now, .week, calendar: cal)
+        let records = [
+            DayRecord(
+                day: d(2026, 9, 28), sleepMin: 400, steps: 9000, exerciseMin: 30, hrvMs: 40, restingHr: 60,
+                waterCups: 6),
+            DayRecord(
+                day: d(2026, 10, 1), sleepMin: 480, steps: 1200, exerciseMin: 5, hrvMs: 60, restingHr: 56,
+                waterCups: 1),
+        ]
+        let a = TrendMath.aggregate(records, in: week, today: TestClock.now, calendar: cal)
+        #expect(a.elapsedDays == 4)
+        #expect(a.daysWithData == 2)
+        #expect(a.steps == MetricSummary(average: 9000, min: 9000, max: 9000, days: 1))
+        #expect(a.exerciseMin.average == 30)
+        #expect(a.waterCups.average == 6)
+        #expect(a.stepGoalRate == 1)
+        #expect(a.sleepMin == MetricSummary(average: 440, min: 400, max: 480, days: 2))
+        #expect(a.hrvMs.average == 50)
+        #expect(a.restingHr.average == 58)
+        #expect(a.sleepTargetRate == 0.5)
+        // A Monday morning has no finished day of steps yet: no average, not a tiny one.
+        let monday = TrendMath.aggregate(
+            [DayRecord(day: d(2026, 9, 28), steps: 1200)], in: week, today: d(2026, 9, 28), calendar: cal)
+        #expect(monday.steps.average == nil && monday.stepGoalRate == nil)
+        #expect(monday.daysWithData == 1)
     }
 
     // MARK: Change
