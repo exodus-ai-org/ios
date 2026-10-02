@@ -349,6 +349,10 @@ enum MessageGalleryFixtures {
              {"id":"t2","runId":"u2","role":"toolResult","toolCallId":"k2","toolName":"terminal","content":[{"type":"text","text":"{}"}],"details":{"command":"swift --version","cwd":"/Users/me/.exodus/workspace/c1","exitCode":0,"stdout":"swift-driver version: 1.127\nApple Swift version 6.2 (swiftlang-6.2.0.19.9)\nTarget: arm64-apple-macosx26.0","stderr":""},"isError":false,"timestamp":5000},
              {"id":"a4","runId":"u2","role":"assistant","content":[{"type":"text","text":"Yes — Swift 6.2 is out \#u{3010}1-source\#u{3011} and ships with the current Xcode \#u{3010}2-source\#u{3011}. Your machine already runs it:\n\n```\nApple Swift version 6.2\n```"}],"stopReason":"stop","durationMs":12400,"timestamp":6000}]
             """#),
+        Run(title: "A <thinking> span saved in the answer's text: the timeline shows it", json: #"""
+            [{"id":"ut1","runId":"ut1","role":"user","content":"国庆去北京玩三天，避开热门景点，帮我排个行程。","timestamp":1000},
+             {"id":"at1","runId":"ut1","role":"assistant","content":[{"type":"text","text":"<thinking>国庆假期，北京，避开热门景点。三天，偏小众的胡同、园林和博物馆。用 map_itinerary 展示。</thinking>\n\n好的，下面是一份避开人潮的三天行程。"}],"stopReason":"stop","durationMs":4200,"timestamp":1200}]
+            """#),
         Run(title: "Failed tool + MCP card", json: #"""
             [{"id":"u3","runId":"u3","role":"user","content":"Read notes.md and draw it as a diagram.","timestamp":1000},
              {"id":"a5","runId":"u3","role":"assistant","content":[{"type":"toolCall","id":"k3","name":"read_file","arguments":{"path":"~/notes.md"}},{"type":"toolCall","id":"k4","name":"drawio_create","arguments":{}}],"stopReason":"toolUse","timestamp":2000},

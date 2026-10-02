@@ -64,13 +64,17 @@ public struct ChatMessage: Codable, Equatable, Sendable, Identifiable {
     public var carriesAttemptColumns: Bool { raw["attempt"] != nil || raw["alternateOf"] != nil }
 
     /// `content` as typed blocks: a string is one text block, and a shape the wire never sends is one `.unknown`.
+    /// An assistant's `<thinking>` span written into its text (saved before the desktop split it out) is a
+    /// `.thinking` block (`ThinkingTags`).
     public var contentBlocks: [ContentBlock] {
-        switch raw["content"] {
-        case .string(let text)?: [.text(text)]
-        case .array(let blocks)?: blocks.map(ContentBlock.init)
-        case .null?, nil: []
-        case let other?: [.unknown(other)]
-        }
+        let blocks: [ContentBlock] =
+            switch raw["content"] {
+            case .string(let text)?: [.text(text)]
+            case .array(let blocks)?: blocks.map(ContentBlock.init)
+            case .null?, nil: []
+            case let other?: [.unknown(other)]
+            }
+        return role == "assistant" ? ThinkingTags.split(blocks) : blocks
     }
 
     /// Builds a freshly-composed outgoing user message — the shape the composer
