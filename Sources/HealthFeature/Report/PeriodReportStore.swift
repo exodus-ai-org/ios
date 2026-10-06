@@ -25,6 +25,11 @@ public struct PeriodReportStore: Sendable {
         try Self.excludeFromBackup(url)
     }
 
+    /// There is a file for the id, readable or not.
+    func hasFile(id: String) -> Bool {
+        fileURL(id: id).map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
+    }
+
     public func read(id: String) -> PeriodReport? {
         guard let url = fileURL(id: id), let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(PeriodReport.self, from: data)

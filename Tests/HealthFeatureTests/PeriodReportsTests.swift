@@ -97,6 +97,23 @@ struct PeriodReportsTests {
         #expect(archive.reports.read(id: "2026-09")?.headline == "kept")
     }
 
+    @Test func aKeptReportThatCannotBeReadIsNotWrittenAgain() async throws {
+        await steps()
+        try keep(september, at: day(-1))
+        // As while the phone is locked: the file is there but can't be read.
+        let file = archive.reports.fileURL(id: "2026-09")!
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: file.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path) }
+        let r = reports()
+        #expect(r.state(for: september) == .missing)
+        await r.writeDue()
+        #expect(await service.starts == ["2026-07-01", "2026-09-21"])
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+        // Readable again: the miss was not kept.
+        guard case .ready(let report) = r.state(for: september) else { Issue.record("kept report not read"); return }
+        #expect(report.headline == "kept")
+    }
+
     @Test func aPeriodWithNoDataCostsNoCall() async {
         await steps(days: 70)
         let r = reports()
@@ -186,6 +203,22 @@ struct PeriodReportsTests {
         guard case .ready(let report) = r.state(for: september) else { Issue.record("report lost"); return }
         #expect(report.headline == "kept")
         #expect(r.failure(for: september) == .failed)
+    }
+
+    @Test func writingAgainClearsTheLastFailureWhileItWrites() async {
+        await steps()
+        await service.fail(URLError(.timedOut))
+        let r = reports()
+        #expect(await r.write(september) == .failed)
+        #expect(r.failure(for: september) == .failed)
+        await service.fail(nil)
+        await service.hold()
+        let write = Task { await r.write(september) }
+        while await service.asked.count < 2 { await Task.yield() }
+        #expect(r.state(for: september) == .writing)
+        #expect(r.failure(for: september) == nil)
+        await service.release()
+        #expect(await write.value == .written)
     }
 
     @Test func twoOpensAtOnceStillAskTwice() async {

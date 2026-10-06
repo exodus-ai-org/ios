@@ -32,7 +32,8 @@ final class PeriodReports {
     private(set) var failures: [String: Failure] = [:]
     @ObservationIgnored let calendar: Calendar
 
-    /// What was read from disk, misses too, so a view can ask on every update.
+    /// What was read from disk, so a view can ask on every update. A miss is kept only when there is no file: one
+    /// that can't be read yet (the phone locked) is read again next time.
     @ObservationIgnored private var read: [String: PeriodReport?] = [:]
     @ObservationIgnored private let store: PeriodReportStore
     @ObservationIgnored private let service: (any PeriodReportService)?
@@ -67,9 +68,12 @@ final class PeriodReports {
         if let report = written[id] { return report }
         if let cached = read[id] { return cached }
         let report = store.read(id: id)
-        read[id] = .some(report)
+        if report != nil || !store.hasFile(id: id) { read[id] = .some(report) }
         return report
     }
+
+    /// A report is kept for the id, even one that can't be read right now: never written again by itself.
+    private func isKept(id: String) -> Bool { report(id: id) != nil || store.hasFile(id: id) }
 
     /// A kept report shows even while it is written again.
     func state(for period: Period) -> State {
@@ -106,7 +110,7 @@ final class PeriodReports {
         guard service != nil, hasConsent() else { return }
         let mine = generation
         let today = self.today
-        let due = PeriodReportSchedule.due(today: today, calendar: calendar) { report(id: $0) != nil }
+        let due = PeriodReportSchedule.due(today: today, calendar: calendar) { isKept(id: $0) }
         guard let first = due.map(\.start).min(), let end = due.map(\.end).max(),
             let known = try? await records.records(
                 from: first, through: calendar.date(byAdding: .day, value: -1, to: end)!)
@@ -139,6 +143,8 @@ final class PeriodReports {
         else { return .failed }
         let mine = generation
         writing.insert(id)
+        // The last try's failure no longer stands while this one writes.
+        failures[id] = nil
         // After `stop()` the id may be a newer write's.
         defer { if generation == mine { writing.remove(id) } }
         var hasData = false
@@ -172,7 +178,7 @@ final class PeriodReports {
             guard generation == mine else { return .failed }
             failures[id] = Self.failure(for: error)
             // A kept report stays as it is; a due one never written, with numbers, waits for the next open.
-            if hasData, report(id: id) == nil,
+            if hasData, !isKept(id: id),
                 PeriodReportSchedule.lastFinished(today: today, calendar: calendar).contains(period)
             {
                 pending.insert(id)
