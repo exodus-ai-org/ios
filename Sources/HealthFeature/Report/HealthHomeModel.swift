@@ -34,6 +34,8 @@ public final class HealthHomeModel {
     /// The calendar's day records, kept across visits to it.
     @ObservationIgnored let dayRecords: DayRecordStore
     @ObservationIgnored let calendar: Calendar
+    /// The period reports, on the same day records and archive as the calendar.
+    @ObservationIgnored let reports: PeriodReports
 
     @ObservationIgnored private let source: any HealthDataSource
     @ObservationIgnored private let summaries: any HealthSummaryService
@@ -48,7 +50,8 @@ public final class HealthHomeModel {
 
     public init(
         source: any HealthDataSource, summaries: any HealthSummaryService, memory: any MemoryWriter,
-        cache: ReportCache, preferences: HealthPreferences, calendar: Calendar = .current,
+        cache: ReportCache, preferences: HealthPreferences, periodReports: (any PeriodReportService)? = nil,
+        calendar: Calendar = .current,
         now: @escaping @Sendable () -> Date = { Date() }, locale: String
     ) {
         self.source = source
@@ -61,7 +64,11 @@ public final class HealthHomeModel {
         let builder = SnapshotBuilder(source: source, calendar: calendar)
         self.builder = builder
         self.calendar = calendar
-        self.dayRecords = DayRecordStore(builder: builder, calendar: calendar, now: now)
+        let dayRecords = DayRecordStore(builder: builder, calendar: calendar, now: now)
+        self.dayRecords = dayRecords
+        self.reports = PeriodReports(
+            store: cache.archive.reports, service: periodReports, records: dayRecords, archive: cache.archive,
+            calendar: calendar, locale: locale, now: now, hasConsent: { preferences.summaryConsent })
         self.now = now
         self.locale = locale
     }
@@ -161,6 +168,14 @@ public final class HealthHomeModel {
         preferences.summaryConsent = true
         hasConsent = true
         await load()
+        await writeDueReports()
+    }
+
+    /// The period reports due (spec §5), after the day's note so the computer is asked one thing at a time. Only once
+    /// Apple Health has been asked: before that there are no numbers to write about.
+    func writeDueReports() async {
+        guard day?.snapshot.odyState != .permission else { return }
+        await reports.writeDue()
     }
 
     /// Stops the daily note: forgets today's report on disk and on screen, and drops a note still being written, so
@@ -173,6 +188,7 @@ public final class HealthHomeModel {
         generation += 1
         isLoading = false
         try? cache.clear()
+        reports.stop()
         suggestion = nil
         report = .needsConsent
     }
@@ -242,11 +258,12 @@ public final class HealthHomeModel {
         TrendsModel(route: route, store: dayRecords, archive: archive, calendar: calendar, locale: locale, now: now)
     }
 
-    /// Deletes every kept note on this phone (the menu's Clear archive), then files today's again: today's note stays
-    /// on screen, so it stays in the calendar too. Apple Health is untouched.
+    /// Deletes every kept note and report on this phone (the menu's Clear archive), then files today's note again: it
+    /// stays on screen, so it stays in the calendar too. Apple Health is untouched.
     @discardableResult
     public func clearArchive() -> Bool {
         guard (try? archive.clear()) != nil else { return false }
+        reports.forget()
         if let today = cache.load(date: WireDate(timeZone: calendar.timeZone).day(now())) {
             try? archive.write(ArchivedDay(today))
         }

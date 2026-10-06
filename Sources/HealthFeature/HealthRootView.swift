@@ -27,6 +27,7 @@ public struct HealthRootView: View {
             initialValue: HealthHomeModel(
                 source: source, summaries: LiveHealthSummaryService(apiClient: apiClient),
                 memory: LiveMemoryWriter(apiClient: apiClient), cache: .standard(), preferences: HealthPreferences(),
+                periodReports: LivePeriodReportService(apiClient: apiClient),
                 locale: Bundle.main.preferredLocalizations.first ?? "en"))
         self.onAsk = onAsk
         self.onGlanceChange = onGlanceChange
@@ -57,8 +58,8 @@ public struct HealthRootView: View {
                     .onChange(of: initialAsk, initial: true) { if initialAsk != nil { onInitialAskUsed() } }
             }
         }
-        .task { await model.load() }
-        .onChange(of: scenePhase) { if scenePhase == .active { Task { await model.load() } } }
+        .task { await open() }
+        .onChange(of: scenePhase) { if scenePhase == .active { Task { await open() } } }
         .onChange(of: settledGlance, initial: true) { _, glance in
             if let glance { onGlanceChange(glance) }
         }
@@ -101,6 +102,12 @@ public struct HealthRootView: View {
             Text(Self.clearMessageText)
         }
         .sensoryFeedback(.success, trigger: cleared)
+    }
+
+    /// An open of Health: the day and its note, then the period reports that are due.
+    private func open() async {
+        await model.load()
+        await model.writeDueReports()
     }
 
     /// The glance once the report has settled. Before the first read and while a note is written nothing is known
