@@ -46,7 +46,8 @@ struct HealthHomeView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HealthHero(
                     day: model.day, mood: model.day?.snapshot.odyState ?? .noData, now: now, calendar: .current,
-                    stretch: 1 + min(pull, 140) / 300, bindleBounce: bounce, bindleAnchor: $bindleAnchor
+                    stretch: 1 + min(pull, 140) / 300, bindleBounce: bounce, bindleAnchor: $bindleAnchor,
+                    isReading: model.isReadingFirst
                 )
                 .padding(.horizontal, -16)
                 .id(Self.heroID)
@@ -61,6 +62,18 @@ struct HealthHomeView: View {
                         WeekCard(week: week, calendar: model.calendar)
                     }
                     .buttonStyle(.plain)
+                }
+                // Apple Health has not answered yet and nothing is cached: the cards' shapes, greyed, where they
+                // will be — not a page that says nothing was recorded.
+                if model.isReadingFirst {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(HealthCategory.allCases, id: \.self) { c in
+                            CategoryCard(category: c, snapshot: Self.placeholderSnapshot, line: nil)
+                        }
+                    }
+                    .redacted(reason: .placeholder)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 }
                 if let snapshot = model.day?.snapshot {
                     if snapshot.odyState == .noData { noDataHelp }
@@ -149,6 +162,10 @@ struct HealthHomeView: View {
     }
 
     private static let heroID = "hero"
+
+    /// An empty day, for the cards' placeholder shapes.
+    private static let placeholderSnapshot = HealthSnapshot(
+        date: "", localTime: "", locale: "", sleep: nil, activity: nil, recovery: nil, body: nil, odyState: .noData)
 
     /// One column at accessibility sizes, so the numbers keep their size.
     private var columns: [GridItem] {

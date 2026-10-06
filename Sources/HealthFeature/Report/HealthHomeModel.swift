@@ -97,8 +97,17 @@ public final class HealthHomeModel {
         }
     }
 
+    /// The first read of a visit is still on its way: nothing real to show yet, and nothing to call "nothing".
+    public var isReadingFirst: Bool { day == nil && isLoading }
+
     private func run(force: Bool, generation mine: Int) async {
         func current() -> Bool { generation == mine && !Task.isCancelled }
+        // Today's note, as it was cached, fills the screen while Apple Health answers: a returning reader sees the
+        // page they left, not a blank one that says nothing was recorded.
+        if day == nil, let cached = cache.load(date: WireDate(timeZone: calendar.timeZone).day(now())) {
+            day = HealthDay(snapshot: cached.snapshot, night: nil)
+            show(cached.summary)
+        }
         let built: HealthDay
         do {
             built = try await builder.build(now: now(), locale: locale)

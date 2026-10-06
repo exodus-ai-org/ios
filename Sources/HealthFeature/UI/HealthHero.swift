@@ -39,12 +39,15 @@ struct HealthHero: View {
     private static let spring = Spring(response: 0.3, dampingRatio: 1)
 
     /// `scrubbedTo` starts the hero at an hour of the scrub instead of now (the gallery's frozen states).
+    let isReading: Bool
+
     init(
         day: HealthDay?, mood: OdyMood, now: Date, calendar: Calendar, stretch: CGFloat, bindleBounce: Int,
-        bindleAnchor: Binding<CGRect>, scrubbedTo hour: Double? = nil
+        bindleAnchor: Binding<CGRect>, scrubbedTo hour: Double? = nil, isReading: Bool = false
     ) {
         self.day = day
         self.mood = mood
+        self.isReading = isReading
         self.now = now
         self.calendar = calendar
         self.stretch = stretch
@@ -68,7 +71,7 @@ struct HealthHero: View {
             HeroScene(
                 hour: shown, scrub: scrub, mood: mood, night: day?.night, today: today, timeZone: calendar.timeZone,
                 scale: s, look: look,
-                yawning: yawning, stretch: stretch, bindleBounce: bindleBounce, live: live,
+                yawning: yawning, stretch: stretch, bindleBounce: bindleBounce, live: live, isReading: isReading,
                 bindleAnchor: $bindleAnchor, onPoke: poke
             )
             .contentShape(Rectangle())
@@ -194,6 +197,8 @@ private struct HeroScene: View, Animatable {
     let stretch: CGFloat
     let bindleBounce: Int
     let live: LiveHour
+    /// The first read is still on its way: the headline is a placeholder bar, not a verdict on an unread day.
+    var isReading = false
     @Binding var bindleAnchor: CGRect
     let onPoke: () -> Void
 
@@ -270,6 +275,7 @@ private struct HeroScene: View, Animatable {
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
                     .contentTransition(.opacity)
+                    .redacted(reason: isReading ? .placeholder : [])
             }
             .foregroundStyle(nightFactor > 0.5 ? OdyPalette.hex(0xF4EFFF) : OdyPalette.hex(0x3A2A00))
             // The moon's arc crosses the words in the evening, white on white: at night they carry a halo of the
