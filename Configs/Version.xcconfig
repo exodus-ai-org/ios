@@ -7,5 +7,5 @@
 //
 // Change both through `scripts/release.sh <version>`, which also commits and
 // tags; a hand edit here is a release without its tag.
-MARKETING_VERSION = 0.0.0
-CURRENT_PROJECT_VERSION = 0
+MARKETING_VERSION = 1.0.0
+CURRENT_PROJECT_VERSION = 287
