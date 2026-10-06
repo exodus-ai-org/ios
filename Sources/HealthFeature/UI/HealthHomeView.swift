@@ -154,6 +154,10 @@ struct HealthHomeView: View {
         .navigationDestination(for: TrendsRoute.self) { route in
             TrendsView(route: route, home: model, onAsk: onAsk)
         }
+        // From the calendar's report card and the home's "report ready" line.
+        .navigationDestination(for: PeriodReportRoute.self) { route in
+            PeriodReportView(period: route.period, home: model, onAsk: onAsk)
+        }
         .onChange(of: model.celebrates, initial: true) { _, celebrate in
             guard celebrate else { return }
             confetti += 1

@@ -127,8 +127,8 @@ private struct InsightCard: View {
     }
 }
 
-/// The closing idea, on a mint card.
-private struct NudgeCard: View {
+/// The closing idea, on a mint card; a period report's page shows it after its comparisons.
+struct NudgeCard: View {
     let text: String
 
     var body: some View {
