@@ -11,11 +11,15 @@ struct WeekCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
+            // At accessibility sizes the Calendar link goes under the title, so neither word breaks.
+            let header =
+                typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout())
+            header {
                 Text("ios:health.week.title").font(.headline)
-                Spacer()
+                if !typeSize.isAccessibilitySize { Spacer() }
                 HStack(spacing: 2) {
-                    Text("ios:health.calendar.title")
+                    Text("ios:health.calendar.title").lineLimit(1)
                     Image(systemName: "chevron.right")
                 }
                 .font(.footnote.weight(.semibold))

@@ -88,7 +88,11 @@ struct PeriodReportView: View {
                         LocalizedStringResource("ios:health.periodReport.ask.changed", defaultValue: "What changed most in this period?", comment: "Report page suggestion chip: ask what changed most in the period."),
                         LocalizedStringResource("ios:health.periodReport.ask.next", defaultValue: "What should I focus on next?", comment: "Report page suggestion chip: ask what to focus on next."),
                     ],
-                    attachment: { Self.attachment(report) }, onSend: onAsk)
+                    attachment: { Self.attachment(report) },
+                    placeholder: LocalizedStringResource(
+                        "ios:health.periodReport.ask.placeholder", defaultValue: "Ask about this report…",
+                        comment: "Report page ask box placeholder."),
+                    onSend: onAsk)
             }
         }
         .sensoryFeedback(.success, trigger: rewritten)
@@ -126,7 +130,7 @@ struct PeriodReportView: View {
     @ViewBuilder
     private var writeNow: some View {
         if home.hasConsent {
-            Button(action: write) { Text("ios:health.periodReport.writeNow") }
+            Button(action: write) { Text("ios:health.periodReport.writeNow").foregroundStyle(ReportInk.amber) }
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.capsule)
                 .tint(OdyPalette.marigold)

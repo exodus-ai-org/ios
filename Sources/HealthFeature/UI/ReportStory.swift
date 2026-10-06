@@ -152,6 +152,8 @@ struct NudgeCard: View {
 /// mint behind it.
 enum ReportInk {
     static let green = Color.adaptive(0x1F7A3A, dark: 0x7FE0A0)
+    /// A marigold-tinted button's label: marigold itself is too light to read on the button's pale marigold fill.
+    static let amber = Color.adaptive(0x8A5300, dark: 0xFFC14D)
     static let mint = [Color.adaptive(0xE6F6E9, dark: 0x173322), Color.adaptive(0xF4FBF2, dark: 0x1E2B22)]
 }
 

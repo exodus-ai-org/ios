@@ -34,10 +34,12 @@ struct PeriodReportCard: View {
                     VStack(alignment: .leading, spacing: 10) {
                         PeriodReportRow(scene: .offline, text: Text("ios:health.periodReport.pending"))
                         if canWrite {
-                            Button(action: onWrite) { Text("ios:health.periodReport.writeNow") }
-                                .buttonStyle(.bordered)
-                                .buttonBorderShape(.capsule)
-                                .tint(OdyPalette.marigold)
+                            Button(action: onWrite) {
+                                Text("ios:health.periodReport.writeNow").foregroundStyle(ReportInk.amber)
+                            }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                            .tint(OdyPalette.marigold)
                         }
                     }
                 }

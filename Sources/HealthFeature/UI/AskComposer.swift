@@ -13,6 +13,7 @@ struct AskComposer: View {
     let onSend: (String) -> Void
     /// A question handed over from a widget: in the box, focused, waiting to be read and sent.
     let initialText: String?
+    let placeholder: LocalizedStringResource
 
     @State private var text = ""
     @FocusState private var focused: Bool
@@ -21,12 +22,16 @@ struct AskComposer: View {
 
     init(
         suggestions: [LocalizedStringResource], attachment: @escaping () -> String?, initialText: String? = nil,
+        placeholder: LocalizedStringResource = LocalizedStringResource(
+            "ios:health.ask.placeholder", defaultValue: "Ask about your day…",
+            comment: "Health: placeholder of the ask composer."),
         onSend: @escaping (String) -> Void
     ) {
         self.suggestions = suggestions
         self.attachment = attachment
         self.onSend = onSend
         self.initialText = initialText
+        self.placeholder = placeholder
         _text = State(initialValue: initialText ?? "")
     }
 
@@ -50,7 +55,7 @@ struct AskComposer: View {
                 .transition(.opacity)
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("ios:health.ask.placeholder", text: $text, axis: .vertical)
+                TextField(text: $text, axis: .vertical) { Text(placeholder) }
                     .lineLimit(1...5)
                     .focused($focused)
                     .submitLabel(.send)

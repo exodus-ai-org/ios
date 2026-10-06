@@ -232,10 +232,12 @@ struct TrendsView: View {
     private var failedNote: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(HealthDetailView.failedText).font(.subheadline).foregroundStyle(.secondary)
-            Button { Task { await trends.load() } } label: { Text(HealthDetailView.retryText) }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .tint(OdyPalette.marigold)
+            Button { Task { await trends.load() } } label: {
+                Text(HealthDetailView.retryText).foregroundStyle(ReportInk.amber)
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .tint(OdyPalette.marigold)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)

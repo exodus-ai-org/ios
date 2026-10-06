@@ -39,10 +39,12 @@ struct HealthDetailView: View {
                     }
                 } else if failed {
                     note(Text(Self.failedText)) {
-                        Button { Task { await reload() } } label: { Text(Self.retryText) }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.capsule)
-                            .tint(OdyPalette.marigold)
+                        Button { Task { await reload() } } label: {
+                            Text(Self.retryText).foregroundStyle(ReportInk.amber)
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .tint(OdyPalette.marigold)
                     }
                     if category == .body {
                         // The glass still works from the day the home read; each cup it logs reloads that day.
