@@ -8,13 +8,13 @@ struct ConfirmationBlockView: View {
     let block: InteractiveBlock.Confirm
     let runId: String
     let answered: InteractiveAnswered?
-    let canAnswer: Bool
-    /// False in a compared answer: drawn, held still, never sent.
-    var isAnswerable = true
-    let sendAnswer: @MainActor @Sendable (String) -> Void
+    let mode: InteractiveMode
+    /// The note, kept by the transcript while the block is open.
+    let drafts: InteractiveDrafts
+    let sendAnswer: @MainActor @Sendable (String) -> Bool
 
-    @State private var note = ""
     @State private var sent = 0
+    @Environment(\.accentGlyph) private var accentGlyph
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -26,12 +26,15 @@ struct ConfirmationBlockView: View {
                 .accessibilityAddTraits(.isHeader)
             if let details = block.details, !details.isEmpty {
                 MarkdownView(text: details, isStreaming: false)
+                    // Its own fences are code, whatever the reply around it draws.
+                    .environment(\.markdownFencedBlocks, nil)
             }
             if let answered {
                 decision(answered.head.decision)
-            } else {
-                InteractiveNoteField(label: block.note, text: $note)
-                    .disabled(!isAnswerable)
+            } else if mode.showsActions {
+                InteractiveNoteField(
+                    label: block.note,
+                    text: Binding(get: { drafts[runId].note }, set: { drafts[runId].note = $0 }))
                 buttons
             }
         }
@@ -55,11 +58,13 @@ struct ConfirmationBlockView: View {
             Button {
                 send(approved: true)
             } label: {
-                approveLabel.font(.body.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 44)
+                approveLabel.font(.body.weight(.semibold)).foregroundStyle(accentGlyph)
+                    .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.borderedProminent)
+            .toneFill()
         }
-        .disabled(!canAnswer || !isAnswerable)
+        .disabled(!mode.canSend)
     }
 
     @ViewBuilder
@@ -105,9 +110,11 @@ struct ConfirmationBlockView: View {
     }
 
     private func send(approved: Bool) {
-        guard canAnswer, isAnswerable, answered == nil else { return }
-        sendAnswer(
-            InteractiveAnswer.composeConfirm(block, ref: runId, approved: approved, note: note, labels: .current))
+        guard mode.canSend else { return }
+        let text = InteractiveAnswer.composeConfirm(
+            block, ref: runId, approved: approved, note: drafts[runId].note, labels: .current)
+        // The haptic and the announcement say it was sent, so only when it was.
+        guard sendAnswer(text) else { return }
         sent += 1
         AccessibilityNotification.Announcement(InteractiveText.sent).post()
     }

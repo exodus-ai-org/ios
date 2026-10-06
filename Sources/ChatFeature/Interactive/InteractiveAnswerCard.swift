@@ -11,16 +11,22 @@ struct InteractiveAnswerCard: View {
     let head: InteractiveAnswer.Head
     let text: String
 
-    /// An answer's lines as the card draws them: the bold lead (a question, "Also:") and what follows it.
+    /// An answer's lines as the card draws them: the bold lead (a question, "Also:") and what follows it. A line
+    /// that is a bold lead alone (`**Q**`) is a lead with nothing after it.
     nonisolated static func lines(_ text: String) -> [Line] {
         text.components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             .map { line in
-                let afterLead = line.index(line.startIndex, offsetBy: 2, limitedBy: line.endIndex) ?? line.endIndex
-                guard line.hasPrefix("**"), let close = line.range(of: "** ", range: afterLead..<line.endIndex) else {
-                    return Line(label: nil, value: line)
+                guard line.hasPrefix("**") else { return Line(label: nil, value: line) }
+                let afterLead = line.index(line.startIndex, offsetBy: 2)
+                if let close = line.range(of: "** ", range: afterLead..<line.endIndex) {
+                    return Line(
+                        label: String(line[afterLead..<close.lowerBound]), value: String(line[close.upperBound...]))
                 }
-                return Line(label: String(line[afterLead..<close.lowerBound]), value: String(line[close.upperBound...]))
+                if line.count > 4, line.hasSuffix("**") {
+                    return Line(label: String(line[afterLead..<line.index(line.endIndex, offsetBy: -2)]), value: "")
+                }
+                return Line(label: nil, value: line)
             }
     }
 
@@ -65,6 +71,6 @@ struct InteractiveAnswerCard: View {
         guard let label = line.label else { return Text(verbatim: line.value) }
         var lead = AttributedString(label)
         lead.inlinePresentationIntent = .stronglyEmphasized
-        return Text(lead + AttributedString(" " + line.value))
+        return line.value.isEmpty ? Text(lead) : Text(lead + AttributedString(" " + line.value))
     }
 }

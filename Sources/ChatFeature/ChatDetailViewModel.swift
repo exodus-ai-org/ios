@@ -314,12 +314,15 @@ public final class ChatDetailViewModel {
     public var canAnswer: Bool { hasLoadedHistory && !isTurnInFlight }
 
     /// A questionnaire's or a confirmation's answer (`InteractiveAnswer`), sent as a typed message is but past the
-    /// composer: what is being typed there, its quote and its pictures stay for the next message.
-    public func sendText(_ text: String) async {
+    /// composer: what is being typed there, its quote and its pictures stay for the next message. Returns whether it
+    /// started the turn: false while one is in flight or before the history is known.
+    @discardableResult
+    public func sendText(_ text: String) async -> Bool {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard canAnswer, !text.isEmpty else { return }
+        guard canAnswer, !text.isEmpty else { return false }
         if supportsAttempts { messages = RunAttempts.autoChoose(messages) }
         await startTurn(with: .userMessage(id: Self.newMessageId(), text: text, timestampMs: Self.nowMs))
+        return true
     }
 
     /// Asks the last question again, as the desktop's `regenerate` does: a new user message with a new id (and so a new

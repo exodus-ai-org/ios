@@ -135,7 +135,9 @@ struct OtherVersionSheet: View {
                 AssistantTurnView(
                     turn: version.turn, isStreaming: false,
                     error: TranscriptRules.runError(for: version.turn, live: nil),
-                    showSources: { _, marker in sources = SourcesSheetModel(turn: version.turn, marker: marker) }
+                    showSources: { _, marker in sources = SourcesSheetModel(turn: version.turn, marker: marker) },
+                    // Shown, not the conversation's reply: its block is drawn read-only.
+                    answerable: false
                 )
                 .padding()
             }

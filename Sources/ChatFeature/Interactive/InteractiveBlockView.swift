@@ -34,11 +34,6 @@ enum InteractiveRendering {
         if case .comparing? = turn.attempt { false } else { true }
     }
 
-    /// Whether the turn's block may be sent now: the chat allows an answer and the turn is answerable at all.
-    static func canAnswer(_ turn: AssistantTurn, canAnswer: Bool) -> Bool {
-        canAnswer && isAnswerable(turn)
-    }
-
     /// The language the host gives its block's fence in the text it hands MarkdownKit: the fence's own name and a
     /// private-use character no reply writes, so no other code block — a second copy, a `~~~` fence, one in a list or
     /// a quote — carries it.
@@ -54,7 +49,8 @@ enum InteractiveRendering {
 
     /// The block of an answer whose text blocks are `texts`: the first top-level closed fence of their whole text
     /// (`InteractiveFence.first`, as the desktop finds it in the joined body), placed in the text block it opens in.
-    /// Nil when the answer holds no block.
+    /// Nil when the answer holds no block, or when the fence closes in a later text block (after a tool card, say):
+    /// MarkdownKit draws each text block alone, so there the fence is code that runs to its block's end.
     static func placed(in texts: [String]) -> Placed? {
         guard texts.contains(where: { $0.contains("```exodus-") }) else { return nil }
         let lines = texts.map { JSText.unixLines($0).split(separator: JSText.lf, omittingEmptySubsequences: false) }
@@ -66,6 +62,7 @@ enum InteractiveRendering {
         for (index, text) in lines.enumerated() {
             defer { start += text.count + 1 }
             guard fence.line < start + text.count else { continue }
+            guard fence.closingLine < start + text.count else { return nil }
             var marked = text.map(Array.init)
             let opening = Array(("```" + fence.kind.language).utf16)  // l10n:ignore: markdown syntax
             let local = fence.line - start
@@ -79,20 +76,23 @@ enum InteractiveRendering {
 
     /// What a turn's Markdown draws for its fenced blocks: its own block (`fence`, at the place `placed` marked) as
     /// the control, every other fence as code. Nil when the turn holds no block.
+    /// `isAnswerable` false draws the block read-only (a compared answer, the other-version sheet); `canAnswer`
+    /// false only holds its Submit / Approve / Reject while a turn is in flight.
     static func fencedBlocks(
         fence: InteractiveFence?, runId: String, answered: InteractiveAnswered?, canAnswer: Bool,
-        isAnswerable: Bool = true, sendAnswer: @escaping @MainActor @Sendable (String) -> Void
+        isAnswerable: Bool = true, drafts: InteractiveDrafts? = nil,
+        sendAnswer: @escaping @MainActor @Sendable (String) -> Bool
     ) -> MarkdownFencedBlocks? {
         guard let fence else { return nil }
         let language = drawnLanguage(fence.kind)
-        let send: @MainActor @Sendable (String) -> Void
-        if isAnswerable { send = sendAnswer } else { send = { @MainActor @Sendable _ in } }
+        let mode = InteractiveMode(answered: answered != nil, isAnswerable: isAnswerable, canAnswer: canAnswer)
+        let send: @MainActor @Sendable (String) -> Bool
+        if mode.isOpen { send = sendAnswer } else { send = { @MainActor @Sendable _ in false } }
         return MarkdownFencedBlocks(languages: [language]) { drawn, code in
             guard drawn == language, fence.matches(code: code) else { return nil }
             return AnyView(
                 InteractiveBlockView(
-                    fence: fence, runId: runId, answered: answered, canAnswer: canAnswer && isAnswerable,
-                    isAnswerable: isAnswerable, sendAnswer: send))
+                    fence: fence, runId: runId, answered: answered, mode: mode, drafts: drafts, sendAnswer: send))
         }
     }
 }
@@ -102,22 +102,29 @@ struct InteractiveBlockView: View {
     let fence: InteractiveFence
     let runId: String
     let answered: InteractiveAnswered?
-    /// Whether an answer may be sent now (not while a turn is in flight).
-    let canAnswer: Bool
-    /// Whether the block may be answered at all (not in a compared answer): when not, it is drawn but held still.
-    var isAnswerable = true
-    let sendAnswer: @MainActor @Sendable (String) -> Void
+    let mode: InteractiveMode
+    /// Where the answer being made is kept; the view's own when the host keeps none (a sheet, a prototype).
+    let drafts: InteractiveDrafts?
+    /// Sends the answer; false when it was not sent (a turn started meanwhile).
+    let sendAnswer: @MainActor @Sendable (String) -> Bool
+
+    @State private var ownDrafts = InteractiveDrafts()
 
     var body: some View {
-        switch fence.block {
-        case .ask(let block):
-            QuestionnaireBlockView(
-                block: block, runId: runId, answered: answered, canAnswer: canAnswer, isAnswerable: isAnswerable,
-                sendAnswer: sendAnswer)
-        case .confirm(let block):
-            ConfirmationBlockView(
-                block: block, runId: runId, answered: answered, canAnswer: canAnswer, isAnswerable: isAnswerable,
-                sendAnswer: sendAnswer)
+        let store = drafts ?? ownDrafts
+        Group {
+            switch fence.block {
+            case .ask(let block):
+                QuestionnaireBlockView(
+                    block: block, runId: runId, answered: answered, mode: mode, drafts: store, sendAnswer: sendAnswer)
+            case .confirm(let block):
+                ConfirmationBlockView(
+                    block: block, runId: runId, answered: answered, mode: mode, drafts: store, sendAnswer: sendAnswer)
+            }
+        }
+        // A frozen block's draft is done with.
+        .onChange(of: answered != nil, initial: true) { _, frozen in
+            if frozen { store.clear(runId) }
         }
     }
 }
@@ -151,7 +158,11 @@ struct InteractiveOptionRow: View {
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        .accessibilityAddTraits(isOn ? [.isToggle, .isSelected] : .isToggle)
+        // Read as a switch, so VoiceOver says "on" and "off" in the system's words — off is heard too.
+        .accessibilityRepresentation {
+            Toggle(isOn: Binding(get: { isOn }, set: { _ in toggle() })) { Text(verbatim: title) }
+                .disabled(!isEnabled)
+        }
     }
 
     private var symbol: String {

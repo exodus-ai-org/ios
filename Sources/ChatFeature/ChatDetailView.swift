@@ -361,7 +361,12 @@ public struct ChatDetailView: View {
             choose: { [viewModel] runId in Task { await viewModel.choose(runId: runId) } },
             showOtherVersion: { [viewModel] runId in otherVersion = viewModel.otherVersion(runId: runId) },
             canAnswer: viewModel.canAnswer,
-            sendAnswer: { [viewModel] text in Task { await viewModel.sendText(text) } })
+            sendAnswer: { [viewModel] text in
+                // Whether it is sent is known now (`canAnswer`); the turn it starts runs on.
+                guard viewModel.canAnswer else { return false }
+                Task { await viewModel.sendText(text) }
+                return true
+            })
     }
 
     private var scrollKey: TranscriptRules.ScrollKey {

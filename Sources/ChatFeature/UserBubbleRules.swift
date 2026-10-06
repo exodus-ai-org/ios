@@ -3,6 +3,19 @@ import SwiftUI
 
 /// What the user's bubble draws its message as, and when a long one is cut short.
 enum UserBubbleRules {
+    /// What a message is drawn as. An answer to a block (`InteractiveAnswer`) comes first: a message that opens with
+    /// its fence is the answer's card, whatever follows the fence — a Health card or a quote included.
+    enum Kind: Equatable {
+        case answer(InteractiveAnswer.Head, body: String)
+        case plain
+    }
+
+    static func kind(of text: String) -> Kind {
+        let split = InteractiveAnswer.split(text)
+        guard let head = split.head else { return .plain }
+        return .answer(head, body: split.body)
+    }
+
     /// How many lines of body text a message shows before it is cut short, as on the desktop.
     static let collapsedLines: CGFloat = 10
     /// How far past the cap a message may run and still be shown whole: a tap that shows one more line is not

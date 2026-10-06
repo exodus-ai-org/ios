@@ -9,18 +9,20 @@ struct QuestionnaireBlockView: View {
     let block: InteractiveBlock.Ask
     let runId: String
     let answered: InteractiveAnswered?
-    let canAnswer: Bool
-    /// False in a compared answer: drawn, held still, never sent.
-    var isAnswerable = true
-    let sendAnswer: @MainActor @Sendable (String) -> Void
+    let mode: InteractiveMode
+    /// The picks, the Other texts and the note, kept by the transcript while the block is open.
+    let drafts: InteractiveDrafts
+    let sendAnswer: @MainActor @Sendable (String) -> Bool
 
-    @State private var responses: [String: InteractiveAnswer.Response] = [:]
-    @State private var note = ""
     @State private var selections = 0
     @State private var sent = 0
+    @Environment(\.accentGlyph) private var accentGlyph
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var isOpen: Bool { answered == nil && isAnswerable }
+    private var draft: InteractiveDraft {
+        get { drafts[runId] }
+        nonmutating set { drafts[runId] = newValue }
+    }
 
     var body: some View {
         let frozen = answered.map { InteractiveAnswer.picks(block, body: $0.body) }
@@ -32,18 +34,19 @@ struct QuestionnaireBlockView: View {
             ForEach(Array(block.questions.enumerated()), id: \.element.id) { index, question in
                 questionView(question, number: index + 1, frozen: frozen?[question.id])
             }
-            if answered != nil {
+            if mode == .frozen {
                 InteractiveAnsweredLine()
-            } else {
-                InteractiveNoteField(label: block.note, text: $note)
-                    .disabled(!isAnswerable)
+            } else if mode.showsActions {
+                InteractiveNoteField(label: block.note, text: Binding(get: { draft.note }, set: { draft.note = $0 }))
                 Button(action: submit) {
                     submitLabel
                         .font(.body.weight(.semibold))
+                        .foregroundStyle(accentGlyph)
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!canAnswer || !isAnswerable)
+                .toneFill()
+                .disabled(!mode.canSend)
             }
         }
         .padding(CardStyle.inset)
@@ -58,19 +61,21 @@ struct QuestionnaireBlockView: View {
             Text(verbatim: "\(number). \(question.text)")
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
-            ForEach(question.options, id: \.self) { option in
+            // By place, not by text: two canonically equal options are still two choices.
+            ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
                 InteractiveOptionRow(
                     title: option, isMulti: question.type == .multi,
-                    isOn: frozen.map { $0.options.contains(option) } ?? isPicked(question, option),
-                    isEnabled: isOpen
-                ) { pick(question, option) }
+                    isOn: frozen.map { picks in picks.options.contains { JSText.equal($0, option) } }
+                        ?? draft.isPicked(question, index),
+                    isEnabled: mode.isOpen
+                ) { pick(question, index) }
             }
             if question.other {
                 InteractiveOptionRow(
                     title: InteractiveText.other, isMulti: question.type == .multi,
-                    isOn: frozen?.other ?? (responses[question.id]?.other != nil), isEnabled: isOpen
+                    isOn: frozen?.other ?? draft.isOtherPicked(question), isEnabled: mode.isOpen
                 ) { pickOther(question) }
-                if isOpen, responses[question.id]?.other != nil {
+                if mode.isOpen, draft.isOtherPicked(question) {
                     TextField(text: otherText(question), prompt: Text("ios:chat.block.otherPlaceholder")) {
                         Text("ios:chat.block.otherPlaceholder")
                     }
@@ -91,45 +96,30 @@ struct QuestionnaireBlockView: View {
         }
     }
 
-    private func isPicked(_ question: Question, _ option: String) -> Bool {
-        responses[question.id]?.options.contains(option) ?? false
-    }
-
-    private func pick(_ question: Question, _ option: String) {
-        guard isOpen else { return }
-        var response = responses[question.id] ?? .init()
-        if question.type == .single {
-            response = .init(options: [option], other: nil)
-        } else if let index = response.options.firstIndex(of: option) {
-            response.options.remove(at: index)
-        } else {
-            response.options.append(option)
-        }
-        responses[question.id] = response
+    private func pick(_ question: Question, _ index: Int) {
+        guard mode.isOpen else { return }
+        draft.pick(question, index)
         selections += 1
     }
 
     private func pickOther(_ question: Question) {
-        guard isOpen else { return }
-        var response = responses[question.id] ?? .init()
-        if question.type == .single {
-            response = .init(options: [], other: response.other ?? "")
-        } else {
-            response.other = response.other == nil ? "" : nil
-        }
-        responses[question.id] = response
+        guard mode.isOpen else { return }
+        draft.pickOther(question)
         selections += 1
     }
 
     private func otherText(_ question: Question) -> Binding<String> {
         Binding(
-            get: { responses[question.id]?.other ?? "" },
-            set: { responses[question.id, default: .init(options: [], other: "")].other = $0 })
+            get: { draft.others[question.id] ?? "" },
+            set: { draft.others[question.id] = $0 })
     }
 
     private func submit() {
-        guard canAnswer, isOpen else { return }
-        sendAnswer(InteractiveAnswer.composeAsk(block, ref: runId, responses: responses, note: note, labels: .current))
+        guard mode.canSend else { return }
+        let text = InteractiveAnswer.composeAsk(
+            block, ref: runId, responses: draft.responses(block), note: draft.note, labels: .current)
+        // The haptic and the announcement say it was sent, so only when it was.
+        guard sendAnswer(text) else { return }
         sent += 1
         AccessibilityNotification.Announcement(InteractiveText.sent).post()
     }

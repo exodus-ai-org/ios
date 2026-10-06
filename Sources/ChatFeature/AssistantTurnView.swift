@@ -19,8 +19,9 @@ struct TranscriptActions {
     var showOtherVersion: (_ runId: String) -> Void = { _ in }
     /// Whether a reply's questionnaire or confirmation may be answered now (not while a turn is in flight).
     var canAnswer = false
-    /// Sends a block's answer as the user's next message.
-    var sendAnswer: @MainActor @Sendable (_ text: String) -> Void = { _ in }
+    /// Sends a block's answer as the user's next message; false when it was not sent (a turn is in flight, the
+    /// history is not known yet).
+    var sendAnswer: @MainActor @Sendable (_ text: String) -> Bool = { _ in false }
 
     static var none: TranscriptActions { TranscriptActions(regenerableTurnId: nil, regenerate: {}, showSources: { _, _ in }) }
 }
@@ -42,6 +43,9 @@ struct TranscriptRows: View {
 
     /// The user's long messages opened with Show more: they stay open while the chat is.
     @State private var expandedMessages: Set<String> = []
+    /// The answers being made in the blocks: kept here, as the open messages are, so they outlive a row the lazy
+    /// transcript lets go.
+    @State private var drafts = InteractiveDrafts()
 
     var body: some View {
         let liveErrorTurnId = TranscriptRules.liveErrorTurnId(segments: segments, live: liveError)
@@ -66,9 +70,7 @@ struct TranscriptRows: View {
                         canChoose: actions.canChoose,
                         regenerate: actions.regenerate, showSources: actions.showSources, choose: actions.choose,
                         showOtherVersion: actions.showOtherVersion, answered: answers[turn.runId],
-                        // A compared column is not the conversation's reply yet: its block is never answered.
-                        canAnswer: InteractiveRendering.canAnswer(turn, canAnswer: actions.canAnswer),
-                        sendAnswer: actions.sendAnswer
+                        canAnswer: actions.canAnswer, drafts: drafts, sendAnswer: actions.sendAnswer
                     )
                     .equatable()
                 }
@@ -101,15 +103,21 @@ struct AssistantTurnView: View, Equatable {
     var showOtherVersion: (_ runId: String) -> Void = { _ in }
     /// The answer to this turn's questionnaire or confirmation, once the transcript holds one.
     nonisolated var answered: InteractiveAnswered?
-    /// Whether the turn's block may be answered now.
+    /// Whether the turn's block may be sent now (no turn in flight): only Submit / Approve / Reject read it.
     nonisolated var canAnswer = false
-    var sendAnswer: @MainActor @Sendable (_ text: String) -> Void = { _ in }
+    /// Whether the turn's block may be answered at all: false where it is only shown (the other-version sheet), and
+    /// a compared column is never answerable (`InteractiveRendering.isAnswerable`). When false the block is read-only.
+    nonisolated var answerable = true
+    /// Where the transcript keeps the answers being made; nil keeps them in the block itself.
+    var drafts: InteractiveDrafts?
+    var sendAnswer: @MainActor @Sendable (_ text: String) -> Bool = { _ in false }
     @Environment(\.searchMediaLoader) private var searchMediaLoader
 
     nonisolated static func == (lhs: AssistantTurnView, rhs: AssistantTurnView) -> Bool {
         lhs.turn == rhs.turn && lhs.isStreaming == rhs.isStreaming && lhs.error == rhs.error
             && lhs.actionBar == rhs.actionBar && lhs.offersRetry == rhs.offersRetry
             && lhs.choiceEnabled == rhs.choiceEnabled && lhs.answered == rhs.answered
+            && lhs.answerable == rhs.answerable
             && (lhs.canAnswer == rhs.canAnswer || !lhs.asks)
     }
 
@@ -265,7 +273,8 @@ extension AssistantTurnView {
         let placedId = placed.map { texts[$0.index].id }
         let fenced = InteractiveRendering.fencedBlocks(
             fence: placed?.fence, runId: turn.runId, answered: answered, canAnswer: canAnswer && !isStreaming,
-            isAnswerable: InteractiveRendering.isAnswerable(turn), sendAnswer: sendAnswer)
+            isAnswerable: answerable && InteractiveRendering.isAnswerable(turn), drafts: drafts,
+            sendAnswer: sendAnswer)
         ForEach(blocks) { block in
             switch block {
             case .text(let text):
@@ -327,16 +336,16 @@ struct UserBubble: View {
             // opens with the day's numbers before that (`HealthContext`): a card of chips.
             // One that answers a questionnaire or a confirmation opens with its answer fence (`InteractiveAnswer`):
             // drawn as a card instead, the block's title over the answers.
-            let answer = InteractiveAnswer.split(text)
+            let kind = UserBubbleRules.kind(of: text)
             let health = HealthContext.split(text)
             let parts = QuotedText.split(health.body)
             VStack(alignment: .leading, spacing: 6) {
-                if let head = answer.head {
-                    InteractiveAnswerCard(head: head, text: answer.body)
+                if case .answer(let head, let body) = kind {
+                    InteractiveAnswerCard(head: head, text: body)
                 } else if let json = health.json {
                     HealthContextCard(json: json)
                 }
-                if answer.head == nil, let quote = parts.quote {
+                if kind == .plain, let quote = parts.quote {
                     Text(verbatim: quote)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -348,7 +357,7 @@ struct UserBubble: View {
                         .accessibilityLabel(Text("ios:chat.ask.quoted"))
                         .accessibilityValue(Text(verbatim: quote))
                 }
-                if answer.head == nil, !parts.body.isEmpty {
+                if kind == .plain, !parts.body.isEmpty {
                     message(parts.body)
                 }
             }

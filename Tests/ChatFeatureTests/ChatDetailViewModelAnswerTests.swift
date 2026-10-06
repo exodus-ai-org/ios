@@ -107,7 +107,7 @@ struct ChatDetailViewModelAnswerTests {
         await model.loadHistory()
         model.composerText = "half-typed"
         #expect(model.canAnswer)
-        await model.sendText(answer)
+        #expect(await model.sendText(answer))
         #expect(posts.bodies.count == 1)
         let body = try #require(posts.bodies.first)
         #expect(body.contains("exodus-answer"))
@@ -122,7 +122,7 @@ struct ChatDetailViewModelAnswerTests {
         let failed = makeModel("failed-history")
         await failed.loadHistory()
         #expect(!failed.canAnswer)
-        await failed.sendText(answer)
+        #expect(await failed.sendText(answer) == false)
         #expect(posts.bodies.isEmpty)
 
         serve(holdReplyOpen: true, posts: posts)
@@ -135,7 +135,8 @@ struct ChatDetailViewModelAnswerTests {
             try await Task.sleep(for: .milliseconds(2))
         }
         #expect(!model.canAnswer)
-        await model.sendText(answer)
+        // Not sent, and said so: the block gives no "Sent" haptic or announcement.
+        #expect(await model.sendText(answer) == false)
         #expect(posts.bodies.count == 1)
         await model.stop()
         first.cancel()

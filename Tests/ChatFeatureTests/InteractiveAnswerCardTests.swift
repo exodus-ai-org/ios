@@ -14,6 +14,14 @@ struct InteractiveAnswerCardTests {
             ])
     }
 
+    @Test("a line that is a bold lead alone is a lead with nothing after it, not asterisks")
+    func leadAlone() {
+        #expect(
+            InteractiveAnswerCard.lines("**Where?**\n**Also:** soon")
+                == [.init(label: "Where?", value: ""), .init(label: "Also:", value: "soon")])
+        #expect(InteractiveAnswerCard.lines("****") == [.init(label: nil, value: "****")])
+    }
+
     @Test("the card's symbol says what was answered and how")
     func symbol() {
         #expect(InteractiveAnswerCard.symbol(for: .init(block: .ask, ref: "r", title: "T")) == "checklist")

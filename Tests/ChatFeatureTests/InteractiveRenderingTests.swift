@@ -8,7 +8,7 @@ import Testing
 private let confirmSource = #"{"title":"Send the report?","details":"To **Ann**."}"#
 private let fenceText = "```exodus-confirm\n\(confirmSource)\n```"
 private let reply = "Here is the plan.\n\n\(fenceText)"
-private let noSend: @MainActor @Sendable (String) -> Void = { _ in }
+private let noSend: @MainActor @Sendable (String) -> Bool = { _ in false }
 private let answer =
     #"```exodus-answer\#n{"block":"confirm","decision":"approve","ref":"u1","title":"Send the report?"}\#n```\#n\#n"#
     + "**Send the report?** Approved"
@@ -38,6 +38,11 @@ private func drawnCount(_ texts: [String]) -> Int {
         walk(MarkdownParser.parse(index == placed.index ? placed.text : text))
     }
     return count
+}
+
+@MainActor
+private final class SentAnswers {
+    var texts: [String] = []
 }
 
 @MainActor
@@ -108,10 +113,37 @@ struct InteractiveRenderingTests {
         chosen.attempt = .chosen(otherVersions: ["u0"], canSwap: true)
         let plain = AssistantTurn(runId: "u1", body: reply)
         #expect(!InteractiveRendering.isAnswerable(compared))
-        #expect(!InteractiveRendering.canAnswer(compared, canAnswer: true))
-        #expect(InteractiveRendering.canAnswer(chosen, canAnswer: true))
-        #expect(InteractiveRendering.canAnswer(plain, canAnswer: true))
-        #expect(!InteractiveRendering.canAnswer(plain, canAnswer: false))
+        #expect(InteractiveRendering.isAnswerable(chosen))
+        #expect(InteractiveRendering.isAnswerable(plain))
+    }
+
+    @Test("a block that is not answerable is read-only; one waiting on a turn holds only its buttons")
+    func modes() {
+        let shown = InteractiveMode(answered: false, isAnswerable: false, canAnswer: true)
+        #expect(shown == .readOnly)
+        #expect(!shown.isOpen && !shown.showsActions && !shown.canSend)
+        let waiting = InteractiveMode(answered: false, isAnswerable: true, canAnswer: false)
+        #expect(waiting.isOpen && waiting.showsActions && !waiting.canSend)
+        let open = InteractiveMode(answered: false, isAnswerable: true, canAnswer: true)
+        #expect(open.isOpen && open.showsActions && open.canSend)
+        let frozen = InteractiveMode(answered: true, isAnswerable: true, canAnswer: true)
+        #expect(frozen == .frozen && !frozen.isOpen && !frozen.showsActions && !frozen.canSend)
+    }
+
+    @Test("a block drawn where it is not answerable sends nothing")
+    func readOnlySendsNothing() throws {
+        let fence = try #require(InteractiveFence.first(in: reply))
+        let sent = SentAnswers()
+        let send: @MainActor @Sendable (String) -> Bool = { sent.texts.append($0); return true }
+        let made = InteractiveRendering.fencedBlocks(
+            fence: fence, runId: "u1", answered: nil, canAnswer: true, isAnswerable: false, sendAnswer: send)
+        let blocks = try #require(made)
+        #expect(blocks.view(language: InteractiveRendering.drawnLanguage(.confirm), code: confirmSource) != nil)
+        // The view an AssistantTurnView with `answerable: false` draws is the same read-only one.
+        let turn = AssistantTurn(runId: "u1", body: reply)
+        let shown = AssistantTurnView(turn: turn, isStreaming: false, error: nil, answerable: false)
+        #expect(shown != AssistantTurnView(turn: turn, isStreaming: false, error: nil))
+        #expect(sent.texts.isEmpty)
     }
 
     @Test("only the reply's first top-level closed block is drawn, as the desktop finds it")
@@ -146,6 +178,14 @@ struct InteractiveRenderingTests {
         let fence = try #require(InteractiveFence.first(in: reply))
         #expect(fence.matches(language: "exodus-confirm", code: confirmSource + "\r\n"))
         #expect(fence.matches(code: confirmSource + "\n\n"))
+    }
+
+    @Test("a fence that opens in one text block and closes in a later one (after a tool card) is code: nothing marked")
+    func fenceAcrossTextBlocks() {
+        let texts = ["Here.\n\n```exodus-confirm\n{\"title\":", "\"Send the report?\"}\n```"]
+        #expect(InteractiveFence.first(in: texts.joined(separator: "\n\n")) != nil)
+        #expect(InteractiveRendering.placed(in: texts) == nil)
+        #expect(drawnCount(texts) == 0)
     }
 
     @Test("a block's text is matched by its UTF-16 units, not by canonical equivalence")

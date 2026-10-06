@@ -162,7 +162,7 @@ public struct MessageGalleryView: View {
                 sheet = sourcesSheet(in: prepared, turnId: turnId, marker: marker)
             },
             // A block can be filled in here; Submit sends nothing.
-            canAnswer: true, sendAnswer: { _ in })
+            canAnswer: true, sendAnswer: { _ in false })
     }
 
     /// The sheet of a turn of the run: the one named, else the run's last.
