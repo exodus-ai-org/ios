@@ -418,7 +418,7 @@ enum MessageGalleryFixtures {
              {"id":"u21","runId":"u21","role":"user","content":[{"type":"text","text":"Which of these is warmest?"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemOrange, width: 300, height: 400))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemIndigo, width: 400, height: 400))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemPink, width: 300, height: 300))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemGreen, width: 500, height: 200))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemYellow, width: 200, height: 500))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemRed, width: 300, height: 300))"}],"timestamp":1300},
              {"id":"a21","runId":"u21","role":"assistant","content":[{"type":"text","text":"The orange one."}],"stopReason":"stop","timestamp":1500}]
             """#),
-    ]
+    ] + bubbleRuns
 
     /// A flat picture as the desktop stores one: a PNG data URL.
     static func picture(_ color: UIColor, width: CGFloat, height: CGFloat) -> String {

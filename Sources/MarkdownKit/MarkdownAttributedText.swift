@@ -17,6 +17,8 @@ struct MarkdownTextStyle: Equatable {
     var alignment: NSTextAlignment
     /// The room between two lines; the block's own (`MarkdownLayoutRules.lineGap`) when nil.
     var lineSpacing: CGFloat?
+    /// What the room between two lines is multiplied by: `markdownLineSpacingScale`.
+    var lineSpacingScale: CGFloat = 1
     /// `MarkdownChipMetrics.labelSize` as the text size setting scales it.
     var scaledLabelSize: CGFloat
     var displayScale: CGFloat
@@ -63,7 +65,7 @@ struct MarkdownTextStyle: Equatable {
 
     var paragraph: NSParagraphStyle {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = lineSpacing ?? spec.pointSize * MarkdownLayoutRules.lineGap(for: spec)
+        paragraph.lineSpacing = (lineSpacing ?? spec.pointSize * MarkdownLayoutRules.lineGap(for: spec)) * lineSpacingScale
         paragraph.alignment = alignment
         paragraph.lineBreakMode = .byWordWrapping
         paragraph.lineBreakStrategy = MarkdownAttributedText.lineBreakStrategy

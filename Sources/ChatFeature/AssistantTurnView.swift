@@ -36,13 +36,19 @@ struct TranscriptRows: View {
     /// Between the last row and the composer, once scrolled to the end.
     static let endRoom: CGFloat = 56
 
+    /// The user's long messages opened with Show more: they stay open while the chat is.
+    @State private var expandedMessages: Set<String> = []
+
     var body: some View {
         let liveErrorTurnId = TranscriptRules.liveErrorTurnId(segments: segments, live: liveError)
         ForEach(segments) { segment in
             Group {
                 switch segment {
                 case .user(let message):
-                    UserBubble(text: message.answerText, messageId: message.id, images: UserImages.dataURLs(of: message))
+                    UserBubble(
+                        text: message.answerText, messageId: message.id, images: UserImages.dataURLs(of: message),
+                        isExpanded: expandedMessages.contains(message.id),
+                        expand: { expandedMessages.insert(message.id) })
                 case .assistantTurn(let turn):
                     let isStreaming = turn.id == streamingTurnId
                     let canRegenerate = turn.id == actions.regenerableTurnId
@@ -257,7 +263,19 @@ struct UserBubble: View {
     var messageId = ""
     /// The pictures the question was asked with, drawn above the bubble.
     var images: [String] = []
+    /// Opened with Show more, by the owner that keeps it open (`TranscriptRows`).
+    var isExpanded = false
+    var expand: (() -> Void)?
     @Environment(\.colorTone) private var tone
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Opened here, where no owner keeps it (a prototype).
+    @State private var expandedHere = false
+    /// The message's whole height as drawn, uncut.
+    @State private var fullHeight: CGFloat = 0
+
+    /// The bubble sets its lines closer than an answer does.
+    private static let lineSpacingScale: CGFloat = 0.6
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
@@ -297,13 +315,75 @@ struct UserBubble: View {
                         .accessibilityValue(Text(verbatim: quote))
                 }
                 if !parts.body.isEmpty {
-                    SelectableBodyText(parts.body, lineSpacing: MarkdownTypography.bodyLineSpacing * 0.6)
+                    message(parts.body)
                 }
             }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 // A grey with the tone in it, the desktop's bubble: not the accent thinned to a pastel.
                 .background(tone.surfaceColor, in: CardStyle.shape)
+        }
+    }
+
+    /// The message drawn as Markdown, as an answer is, and cut short past `UserBubbleRules.collapsedLines` with
+    /// its last lines fading into the bubble and Show more under it. Measured as drawn, not by its characters.
+    @ViewBuilder
+    private func message(_ written: String) -> some View {
+        // The read is the point: the line metrics below are the system's at this text size.
+        let _ = dynamicTypeSize
+        let markdown = UserBubbleRules.markdown(written)
+        let lineHeight = MarkdownTypography.bodyLineHeight
+        let cap = UserBubbleRules.cap(
+            lineHeight: lineHeight, lineSpacing: MarkdownTypography.bodyLineSpacing * Self.lineSpacingScale)
+        let clipped = UserBubbleRules.isClipped(
+            height: fullHeight, cap: cap, lineHeight: lineHeight, isExpanded: isExpanded || expandedHere)
+        VStack(alignment: .leading, spacing: 6) {
+            rendered(markdown, written: written)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+                .frame(height: clipped ? cap : nil, alignment: .top)
+                .clipped()
+                .overlay(alignment: .bottom) {
+                    if clipped {
+                        LinearGradient(
+                            colors: [tone.surfaceColor.opacity(0), tone.surfaceColor], startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: lineHeight * 2.5)
+                        .allowsHitTesting(false)
+                    }
+                }
+            if clipped {
+                Button("ios:chat.message.showMore") {
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) {
+                        expandedHere = true
+                        expand?()
+                    }
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.tint)
+                .buttonStyle(.plain)
+                .footRowTarget()
+                .accessibilityValue(Text("ios:chat.message.timeline.collapsed"))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func rendered(_ markdown: String, written: String) -> some View {
+        let view = MarkdownView(text: markdown, isStreaming: false)
+            .environment(\.markdownLineSpacingScale, Self.lineSpacingScale)
+        if UserBubbleRules.isProse(markdown) {
+            HugWidthLayout {
+                // As wide as the plain text was: the bubble hugs its longest line.
+                Text(verbatim: written)
+                    .font(MarkdownTypography.body)
+                    .hidden()
+                    .accessibilityHidden(true)
+                view
+            }
+        } else {
+            view
         }
     }
 }

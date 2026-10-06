@@ -83,6 +83,11 @@ public enum MarkdownTypography {
     public static var bodyLineSpacing: CGFloat {
         MarkdownFontSpec.body.pointSize * MarkdownLayoutRules.lineGap(for: .body)
     }
+    /// One line of `body` without the room under it, in points at the current text size: what a cap of so many
+    /// lines is measured in.
+    public static var bodyLineHeight: CGFloat {
+        UIFont.systemFont(ofSize: MarkdownFontSpec.body.pointSize).lineHeight
+    }
 }
 
 /// One citation chip: a site's icon and name in a capsule, standing for one citation or for several that

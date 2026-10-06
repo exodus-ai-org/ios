@@ -317,6 +317,7 @@ struct MarkdownRunView: View, Equatable {
     @Environment(\.multilineTextAlignment) private var alignment
     @Environment(\.layoutDirection) private var direction
     @Environment(\.fontResolutionContext) private var fonts
+    @Environment(\.markdownLineSpacingScale) private var lineSpacingScale
     @ScaledMetric(relativeTo: .caption2) private var scaledLabelSize = MarkdownChipMetrics.labelSize
     @ScaledMetric(relativeTo: .body) private var em: CGFloat = MarkdownFontSpec.bodySize
 
@@ -371,10 +372,11 @@ struct MarkdownRunView: View, Equatable {
     }
 
     private func run(requests: [MarkdownIconRequest]) -> MarkdownRunText {
-        let style = MarkdownTextStyle(
+        var style = MarkdownTextStyle(
             spec: .body, color: .label, alignment: MarkdownTextStyle.alignment(alignment, in: direction),
             scaledLabelSize: scaledLabelSize, displayScale: displayScale,
             interfaceStyle: colorScheme == .dark ? .dark : .light, fonts: fonts)
+        style.lineSpacingScale = lineSpacingScale
         var shown: [URL: UIImage] = [:]
         for request in requests {
             if case .site(let image) = MarkdownChipIcon.resolve(

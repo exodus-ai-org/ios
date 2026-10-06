@@ -447,13 +447,16 @@ struct MarkdownSelectableText: View {
     @Environment(\.multilineTextAlignment) private var alignment
     @Environment(\.layoutDirection) private var direction
     @Environment(\.fontResolutionContext) private var fonts
+    @Environment(\.markdownLineSpacingScale) private var lineSpacingScale
     @ScaledMetric(relativeTo: .caption2) private var scaledLabelSize = MarkdownChipMetrics.labelSize
 
     private var style: MarkdownTextStyle {
-        MarkdownTextStyle(
+        var style = MarkdownTextStyle(
             spec: spec, color: isSecondary ? .secondaryLabel : .label,
             alignment: MarkdownTextStyle.alignment(alignment, in: direction), scaledLabelSize: scaledLabelSize,
             displayScale: displayScale, interfaceStyle: colorScheme == .dark ? .dark : .light, fonts: fonts)
+        style.lineSpacingScale = lineSpacingScale
+        return style
     }
 
     private var text: NSAttributedString {
