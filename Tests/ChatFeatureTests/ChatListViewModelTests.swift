@@ -47,8 +47,8 @@ private final class RequestRecorder: Sendable {
 }
 
 private let twoChatsJSON = #"""
-    [{"id":"c1","title":"Trip planning","createdAt":"2026-09-18T00:00:00.000Z","favorite":false,"projectId":null},
-     {"id":"c2","title":"New chat","createdAt":"2026-09-17T00:00:00.000Z","favorite":null,"projectId":"p1"}]
+    [{"id":"c1","title":"Trip planning","createdAt":"2026-09-18T00:00:00.000Z","favorite":false},
+     {"id":"c2","title":"New chat","createdAt":"2026-09-17T00:00:00.000Z","favorite":null}]
     """#
 
 private let serverErrorJSON =
