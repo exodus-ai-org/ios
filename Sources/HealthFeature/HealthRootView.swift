@@ -141,6 +141,6 @@ public struct HealthRootView: View {
         comment: "Confirmation title before deleting every kept daily note.")
     private static let clearMessageText = LocalizedStringResource(
         "ios:health.archive.confirmMessage",
-        defaultValue: "This deletes every daily note kept on this iPhone. Today's note and your health data stay.",
-        comment: "Confirmation message before deleting every kept daily note.")
+        defaultValue: "This deletes every daily note and report kept on this iPhone. Today's note and your health data stay.",
+        comment: "Confirmation message before deleting every kept daily note and period report.")
 }
