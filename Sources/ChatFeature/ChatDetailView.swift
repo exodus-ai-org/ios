@@ -305,6 +305,8 @@ public struct ChatDetailView: View {
             if viewModel.isTurnInFlight {
                 Task { await viewModel.stop() }
             } else {
+                // The question is on its way: the keyboard goes, so the reply has the screen.
+                isComposerFocused = false
                 Task { await viewModel.sendMessage() }
             }
         } label: {

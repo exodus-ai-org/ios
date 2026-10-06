@@ -126,7 +126,8 @@ struct GeneratedAtText: View {
             Text(verbatim: Self.short(date, now: context.date))
                 .font(.footnote)
                 .monospacedDigit()
-                .foregroundStyle(.tertiary)
+                // Secondary, not tertiary: on a dark screen the third shade of grey reads as nothing at footnote size.
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .padding(.leading, 8)
                 .accessibilityLabel(Text(date, format: .relative(presentation: .named, unitsStyle: .wide)))
