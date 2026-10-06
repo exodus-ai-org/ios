@@ -1,6 +1,6 @@
 # Interactive blocks — questionnaire and confirmation (phase 1)
 
-Date: 2026-10-06 · Status: approved in chat, awaiting spec review
+Date: 2026-10-06 · Status: implemented (phase 1, both repos, 2026-10-06); amended after the whole-branch reviews — see the notes marked *(amended)*
 Repos: `exodus` (desktop: prompt, block parsing, renderer) and `exodus-ios` (renderer)
 References: ChatGPT's in-chat questionnaire (user's screenshots 2026-10-03), `src/renderer/components/ui/questionnaire.tsx` (the user's shadcn Questionnaire), https://elements.ai-sdk.dev/components/confirmation
 
@@ -43,7 +43,8 @@ A fenced block whose info string is the block's name and whose body is one JSON 
 - `questions`: 1–8; `id` `[a-z0-9_-]{1,32}` unique; `text` ≤ 200 chars; `type` `single` (radio) or `multi` (checkbox); `options` 2–8 strings ≤ 80 chars; `other` (default false) adds an "Other…" option with a text line.
 - `note` (optional, ≤ 120): the closing free-text field's label; when absent the label is the client's default ("Anything else?"). The field is always present.
 - `submit` (optional, ≤ 40): the button's label; default "Submit".
-- Limits are validated by zod (desktop) and by the Swift decoder (iOS); a block over the limits is not a block.
+- Limits are validated by zod (desktop) and by the Swift decoder (iOS); a block over the limits is not a block. Lengths count UTF-16 units on both sides.
+- *(amended)* `title`, every question `text` and every option are one line (no `\n`/`\r`), and question texts are distinct within a block — the answer is read back one line per question, so a newline or a repeated question would misread the picks.
 
 **Confirmation — `exodus-confirm`**
 ```json
@@ -57,7 +58,7 @@ A fenced block whose info string is the block's name and whose body is one JSON 
 ```
 - `title` ≤ 200 (required); `details` ≤ 1000 Markdown (optional); `approve` / `reject` ≤ 40 (optional, defaults "Approve" / "Reject"); `note` ≤ 120 label (optional; the field is always present).
 
-A message may hold at most one interactive block; a second is rendered as code.
+A message may hold at most one interactive block; a second is rendered as code. *(amended)* The block is the message's **first** top-level closed fence with a reserved name, found by position (so a later fence with identical text is code, and a fence that opens in one text block and closes after a tool card is code). Both scanners follow CommonMark here: a backtick fence's info string may not contain a backtick (so ```` ```npm i``` ```` on one line is not an opener), only spaces and tabs count as blank after the info string or the closing run, and CRLF is normalised before scanning.
 
 ### 2.2 The answer (clients → model)
 
@@ -84,7 +85,7 @@ A block is **frozen** once the chat holds a later user message whose `exodus-ans
 
 ## 3. The prompt (desktop)
 
-`src/main/lib/ai/prompts` (wherever the chat's system prompt is built) gains one section, `interactive blocks`, present only for providers that run the chat (not Health or period reports): when the answer depends on facts only the user has, ask with an `exodus-ask` block — at most once per reply, 1–8 questions, short options; before an action that changes something outside the chat (writing files, sending, booking, calendar, money), ask with `exodus-confirm` first; never emit either block inside another fence, a list or a table; write them in the user's language. Include both JSON examples. The section is ~40 lines; it is read by every chat turn, so it stays short.
+`src/main/lib/ai/prompts` (wherever the chat's system prompt is built) gains one section, `interactive blocks`, present only for providers that run the chat (not Health or period reports): when the answer depends on facts only the user has, ask with an `exodus-ask` block — at most once per reply, 1–8 questions, short options; *(amended)* before a hard stop (the prompt's existing `<hard_stops>` list) or an action that reaches outside this machine (sending, booking, a calendar entry, money), ask with `exodus-confirm` first — inside the workspace the model acts freely, as the existing tool rules say, so ordinary file writes need no confirmation (the first draft said "writing files", which contradicted those rules); never emit either block inside another fence, a list or a table; write them in the user's language. Include both JSON examples. The section is ~40 lines; it is read by every chat turn, so it stays short.
 
 ## 4. Desktop renderer
 
@@ -104,7 +105,10 @@ A block is **frozen** once the chat holds a later user message whose `exodus-ans
 - Streaming: a fence still open renders as code (grey) until closed, then swaps to the control.
 - Invalid JSON / over limits / second block in one message: ordinary code block.
 - Submit while a reply is streaming: the button is disabled (same rule as the composer).
-- Offline on submit: the normal send failure path (the answer stays in the block's fields; the user can retry).
+- Offline on submit *(amended)*: the answer is appended to the chat before the send, like a typed message, so the block freezes with its picks and the failure shows on the answer's own turn; the user retries with Regenerate / Retry there. (The first draft said the answer stays in the fields; that is not how either client's send path works, and a retry from the turn is the same gesture as for any failed message.)
+- A confirmation's `details` Markdown draws remote images through the chat's tap-to-load policy on both clients — never loaded on sight — so an injected image URL cannot carry chat text out.
+- The "other version" sheet and the compared columns draw a block read-only: nothing live, no submit.
+- On the phone, a block's in-progress picks are held outside the row view (keyed by the message id), so scrolling the lazy transcript away and back keeps them; they clear when the block freezes.
 - A chat reopened later: frozen state restored from the messages (ref match); nothing else to persist.
 - Unanswered required state: there is none — the user may submit with blanks (listed as `—`).
 
