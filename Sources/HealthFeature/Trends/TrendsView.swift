@@ -12,12 +12,15 @@ struct PresentedDay: Identifiable, Equatable {
 /// The calendar (spec §3.2): Week · Month · Quarter · Year, paged with ‹ ›; average sleep, daily steps and HRV
 /// against the period before; the days as style-C cells, or for a quarter or a year a bar per month. A day opens its
 /// sheet, a month bar opens that month. Each page turn slides in from its side (a cross-fade under Reduce Motion) with
-/// a selection tick.
+/// a selection tick. Under the numbers, the period's report (or when it will be written).
 struct TrendsView: View {
     @State private var trends: TrendsModel
     @State private var presented: PresentedDay?
     /// Which way the last page turned, so the new one comes in from that side.
     @State private var forward = true
+    /// Bumped when Write now brought a report: the success tap.
+    @State private var reportsWritten = 0
+    private let home: HealthHomeModel
     let onAsk: (String) -> Void
     /// The workspace's ("Health"): a screenshot of this page is "Health · October 2026".
     @Environment(\.screenTitle) private var enclosingTitle
@@ -26,6 +29,7 @@ struct TrendsView: View {
 
     init(route: TrendsRoute, home: HealthHomeModel, onAsk: @escaping (String) -> Void) {
         _trends = State(initialValue: home.trends(route))
+        self.home = home
         _presented = State(initialValue: route.presentedDay.map { PresentedDay(day: home.calendar.startOfDay(for: $0)) })
         self.onAsk = onAsk
     }
@@ -42,6 +46,9 @@ struct TrendsView: View {
                 periodRow
                 TrendStatsHeader(scope: trends.scope, current: trends.current, previous: trends.previous)
                     .redacted(reason: trends.current == nil ? .placeholder : [])
+                PeriodReportCard(
+                    state: home.reports.state(for: trends.period), period: trends.period,
+                    hasData: (trends.current?.daysWithData ?? 0) > 0, canWrite: home.hasConsent, onWrite: writeReport)
                 // One slot for the old page and the new, so they cross rather than stack.
                 ZStack(alignment: .top) {
                     Group {
@@ -69,6 +76,7 @@ struct TrendsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .screenTitle(ScreenTitles.join(enclosingTitle, trends.title))
         .sensoryFeedback(.selection, trigger: trends.period)
+        .sensoryFeedback(.success, trigger: reportsWritten)
         .task(id: trends.period) { await trends.load() }
         .sheet(item: $presented) { p in
             DaySheet(
@@ -180,6 +188,12 @@ struct TrendsView: View {
     }
 
     private func open(_ day: Date) { presented = PresentedDay(day: day) }
+
+    /// The card's Write now, for the period on screen when it was tapped.
+    private func writeReport() {
+        let period = trends.period
+        Task { if await home.reports.write(period) == .written { reportsWritten += 1 } }
+    }
 
     // MARK: Around it
 

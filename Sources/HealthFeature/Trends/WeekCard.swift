@@ -2,7 +2,8 @@
 import SwiftUI
 
 /// This week on the home (spec §3.1): seven style-C days, Monday first, and average sleep and daily steps against
-/// last week. The whole card opens the calendar on this week.
+/// last week. It opens the calendar on this week; the home draws the card around it, with a fresh report's line under
+/// it when there is one.
 struct WeekCard: View {
     let week: WeekGlance
     let calendar: Calendar
@@ -34,7 +35,6 @@ struct WeekCard: View {
             }
         }
         .padding(14)
-        .background(HealthSurface.card, in: .rect(cornerRadius: 18))
         .contentShape(.rect(cornerRadius: 18))
         .accessibilityElement(children: .combine)
         .accessibilityHint(Text("ios:health.calendar.title"))

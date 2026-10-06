@@ -58,10 +58,22 @@ struct HealthHomeView: View {
                 ReportCard(report: model.report) { Task { await model.grantConsent() } }
                 // Trends are local: shown without a note or consent, hidden only until Health access is asked.
                 if let week = model.week, model.day?.snapshot.odyState != .permission {
-                    NavigationLink(value: TrendsRoute(scope: .week, anchor: week.period.start)) {
-                        WeekCard(week: week, calendar: model.calendar)
+                    // One card: the week opens the calendar; a report written in the last two days, under it, opens
+                    // that report.
+                    VStack(spacing: 0) {
+                        NavigationLink(value: TrendsRoute(scope: .week, anchor: week.period.start)) {
+                            WeekCard(week: week, calendar: model.calendar)
+                        }
+                        .buttonStyle(.plain)
+                        if let fresh = model.reports.fresh() {
+                            Divider().padding(.horizontal, 14)
+                            NavigationLink(value: PeriodReportRoute(period: fresh.period)) {
+                                ReportReadyLine(period: fresh.period, calendar: model.calendar)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .background(HealthSurface.card, in: .rect(cornerRadius: 18))
                 }
                 // Apple Health has not answered yet and nothing is cached: the cards' shapes, greyed, where they
                 // will be — not a page that says nothing was recorded.
