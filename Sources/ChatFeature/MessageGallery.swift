@@ -15,7 +15,10 @@ import SwiftUI
 public enum MessageGalleryLaunch {
     public static var isEnabled: Bool { ProcessInfo.processInfo.arguments.contains("-MessageGallery") }
     static var expanded: Bool { ProcessInfo.processInfo.arguments.contains("-MessageGalleryExpanded") }
-    static var section: Int? { value(after: "-MessageGallerySection").flatMap { Int($0) } }
+    /// A number, or a name of the interactive blocks' runs (`MessageGalleryFixtures.namedSection`).
+    static var section: Int? {
+        value(after: "-MessageGallerySection").flatMap { Int($0) ?? MessageGalleryFixtures.namedSection($0) }
+    }
     static var scrollsToEnd: Bool { ProcessInfo.processInfo.arguments.contains("-MessageGalleryEnd") }
     static var opensSheet: Bool { ProcessInfo.processInfo.arguments.contains("-MessageGallerySheet") }
     static var opensEmptySheet: Bool { ProcessInfo.processInfo.arguments.contains("-MessageGallerySheetEmpty") }
@@ -157,7 +160,9 @@ public struct MessageGalleryView: View {
             regenerableTurnId: regenerable, regenerate: {},
             showSources: { turnId, marker in
                 sheet = sourcesSheet(in: prepared, turnId: turnId, marker: marker)
-            })
+            },
+            // A block can be filled in here; Submit sends nothing.
+            canAnswer: true, sendAnswer: { _ in })
     }
 
     /// The sheet of a turn of the run: the one named, else the run's last.
@@ -418,7 +423,7 @@ enum MessageGalleryFixtures {
              {"id":"u21","runId":"u21","role":"user","content":[{"type":"text","text":"Which of these is warmest?"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemOrange, width: 300, height: 400))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemIndigo, width: 400, height: 400))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemPink, width: 300, height: 300))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemGreen, width: 500, height: 200))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemYellow, width: 200, height: 500))"},{"type":"image","mimeType":"image/png","data":"\#(picture(.systemRed, width: 300, height: 300))"}],"timestamp":1300},
              {"id":"a21","runId":"u21","role":"assistant","content":[{"type":"text","text":"The orange one."}],"stopReason":"stop","timestamp":1500}]
             """#),
-    ] + bubbleRuns
+    ] + bubbleRuns + interactiveRuns
 
     /// A flat picture as the desktop stores one: a PNG data URL.
     static func picture(_ color: UIColor, width: CGFloat, height: CGFloat) -> String {
