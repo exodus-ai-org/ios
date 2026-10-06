@@ -42,26 +42,33 @@ enum TranscriptRules {
         !turn.steps.isEmpty || timelineIsLive(turn, isStreaming: isStreaming)
     }
 
+    /// The tools whose cards open from their step in the timeline instead of standing in the answer: the model's own
+    /// working — a command, a file read or written — which the timeline already lists, one step each.
+    static let foldedTools: Set<String> = ["terminal", "read_file", "write_file", "edit_file"]
+
     /// What a turn draws, in the order the model produced it. An image still forming is shown only while its run
     /// streams: in a stopped run it never will, so it shows nothing, as on the desktop — and the text it stood
-    /// between is one block again. (A stopped computer_use keeps its card, reading "stopped".) The cards of the tools
-    /// in `hidden` (Settings › Working cards) are left out the same way; their steps stay in the timeline.
-    static func blocks(
-        _ turn: AssistantTurn, isStreaming: Bool, hiding hidden: Set<String> = []
-    ) -> [AssistantTurn.Block] {
+    /// between is one block again. (A stopped computer_use keeps its card, reading "stopped".) The cards of
+    /// `foldedTools` are left out the same way: they are in the timeline, under their steps (`foldedCard`).
+    static func blocks(_ turn: AssistantTurn, isStreaming: Bool) -> [AssistantTurn.Block] {
         func dropped(_ block: AssistantTurn.Block) -> Bool {
             guard case .card(let card) = block else { return false }
-            return hidden.contains(card.toolName) || (!isStreaming && neverComes(card))
+            return foldedTools.contains(card.toolName) || (!isStreaming && neverComes(card))
         }
         guard turn.blocks.contains(where: dropped) else { return turn.blocks }
         return AssistantTurn.Block.numbered(turn.blocks.filter { !dropped($0) })
     }
 
     /// The cards among `blocks`.
-    static func toolCards(_ turn: AssistantTurn, isStreaming: Bool, hiding hidden: Set<String> = []) -> [ToolCard] {
-        blocks(turn, isStreaming: isStreaming, hiding: hidden).compactMap {
-            if case .card(let card) = $0 { card } else { nil }
-        }
+    static func toolCards(_ turn: AssistantTurn, isStreaming: Bool) -> [ToolCard] {
+        blocks(turn, isStreaming: isStreaming).compactMap { if case .card(let card) = $0 { card } else { nil } }
+    }
+
+    /// The card a timeline step opens to: a folded tool's, found by its call. A call still running has none yet, and
+    /// neither has a failed command (its step shows the error).
+    static func foldedCard(for call: AssistantTurn.ToolCallStep, in turn: AssistantTurn) -> ToolCard? {
+        guard foldedTools.contains(call.name), !call.isPending else { return nil }
+        return turn.toolCards.first { $0.toolCallId == call.id }
     }
 
     private static func neverComes(_ card: ToolCard) -> Bool {

@@ -236,7 +236,7 @@ struct SettingsHubTests {
     @Test("the groups run Computer, AI, Behaviour, Data, and only groups with a page have rows")
     func groups() {
         #expect(SettingsGroup.allCases == [.general, .computer, .ai, .behaviour, .data])
-        #expect(SettingsHubRow.rows(in: .general).map(\.page) == [.colorTone, .workingCards])
+        #expect(SettingsHubRow.rows(in: .general).map(\.page) == [.colorTone])
         #expect(SettingsHubRow.rows(in: .computer).map(\.page) == [.connection])
         #expect(SettingsHubRow.rows(in: .ai).map(\.page) == [.providers, .tools, .skills, .mcp])
         #expect(SettingsHubRow.rows(in: .behaviour).map(\.page) == [.personality, .memory])

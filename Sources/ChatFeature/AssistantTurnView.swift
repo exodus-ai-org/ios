@@ -86,8 +86,6 @@ struct AssistantTurnView: View, Equatable {
     var choose: (_ runId: String) -> Void = { _ in }
     var showOtherVersion: (_ runId: String) -> Void = { _ in }
     @Environment(\.searchMediaLoader) private var searchMediaLoader
-    /// Read here, not passed in: a switch flipped in Settings redraws every turn, settled ones included.
-    private var hiddenCards = HiddenWorkingCards()
 
     nonisolated static func == (lhs: AssistantTurnView, rhs: AssistantTurnView) -> Bool {
         lhs.turn == rhs.turn && lhs.isStreaming == rhs.isStreaming && lhs.error == rhs.error
@@ -229,11 +227,11 @@ extension View {
 
 extension AssistantTurnView {
     /// The answer in the run's own order, as on the desktop: text, the card of a tool where the model called it,
-    /// text. Every text block reads the turn's one list of citations, and only the last block can be the one that
-    /// streams.
+    /// text (a command's or a file's card opens from its step in the timeline instead). Every text block reads the
+    /// turn's one list of citations, and only the last block can be the one that streams.
     @ViewBuilder
     fileprivate var answer: some View {
-        let blocks = TranscriptRules.blocks(turn, isStreaming: isStreaming, hiding: hiddenCards.tools)
+        let blocks = TranscriptRules.blocks(turn, isStreaming: isStreaming)
         let citations = TranscriptRules.markdownCitations(turn)
         let streaming = TranscriptRules.streamingBlockId(blocks, isStreaming: isStreaming)
         ForEach(blocks) { block in

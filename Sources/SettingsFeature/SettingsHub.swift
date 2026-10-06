@@ -20,7 +20,7 @@ enum SettingsGroup: CaseIterable, Identifiable {
 /// A page the hub pushes. Its row is one line in `SettingsHubRow.all`; its view is a case in
 /// `SettingsView.destination(for:)`.
 enum SettingsPage: String, Hashable, CaseIterable {
-    case colorTone, workingCards, connection, providers, tools, skills, mcp, personality, memory, profile, backup
+    case colorTone, connection, providers, tools, skills, mcp, personality, memory, profile, backup
 }
 
 struct SettingsHubRow: Identifiable {
@@ -35,12 +35,6 @@ struct SettingsHubRow: Identifiable {
         SettingsHubRow(
             page: .colorTone, group: .general, title: LocalizedStringResource("settings:general.colorTone.label"),
             systemImage: "paintpalette"),
-        SettingsHubRow(
-            page: .workingCards, group: .general,
-            title: LocalizedStringResource(
-                "ios:settings.cards.title", defaultValue: "Working cards",
-                comment: "Settings row and page title: switches that hide the cards a reply draws while the model works."),
-            systemImage: "rectangle.stack"),
         SettingsHubRow(
             page: .connection, group: .computer, title: LocalizedStringResource("ios:settings.hub.connection"),
             systemImage: "desktopcomputer"),

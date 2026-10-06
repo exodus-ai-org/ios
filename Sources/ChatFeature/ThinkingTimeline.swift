@@ -64,8 +64,10 @@ struct ThinkingTimeline: View {
     private var steps: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(turn.steps.enumerated()), id: \.offset) { index, step in
+                let card: ToolCard? =
+                    if case .toolCall(let call) = step { TranscriptRules.foldedCard(for: call, in: turn) } else { nil }
                 TimelineStepRow(
-                    step: step, isActive: isLive && index == turn.steps.count - 1,
+                    step: step, card: card, isActive: isLive && index == turn.steps.count - 1,
                     isLast: index == turn.steps.count - 1 && isLive, showSources: showSources)
             }
             if !isLive {
@@ -112,9 +114,17 @@ private struct TimelineSheet<Steps: View>: View {
 
 private struct TimelineStepRow: View {
     let step: AssistantTurn.Step
+    /// The card a command's or a file's step opens to (`TranscriptRules.foldedCard`): closed at first, so the sheet
+    /// reads as a list of steps; the DEBUG galleries open it to show it.
+    let card: ToolCard?
     let isActive: Bool
     let isLast: Bool
     let showSources: () -> Void
+    @State private var openState: Bool?
+    @Environment(\.timelineStartsExpanded) private var startsExpanded
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var isOpen: Bool { card != nil && (openState ?? startsExpanded) }
 
     var body: some View {
         TimelineNode(isLast: isLast) {
@@ -150,11 +160,32 @@ private struct TimelineStepRow: View {
 
     @ViewBuilder
     private func toolCall(_ call: AssistantTurn.ToolCallStep) -> some View {
-        Text(verbatim: ToolPresentation.callText(call))
-            .font(.subheadline)
-            .foregroundStyle(isActive ? .primary : .secondary)
-            .textSelection(.enabled)
-        if let code = call.codeArgument {
+        if card != nil {
+            // The step is the disclosure's label: the whole line is the button, and VoiceOver reads it with its state.
+            Button {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { openState = !isOpen }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    callText(call)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right")
+                        .imageScale(.small)
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isOpen ? 90 : 0))
+                        .accessibilityHidden(true)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(
+                isOpen ? Text("ios:chat.message.timeline.expanded") : Text("ios:chat.message.timeline.collapsed"))
+        } else {
+            callText(call)
+                .textSelection(.enabled)
+        }
+        // An open card shows the command and the error itself.
+        if let code = call.codeArgument, !isOpen {
             Text(verbatim: code)
                 .font(.caption.monospaced())
                 .foregroundStyle(.primary)
@@ -165,7 +196,7 @@ private struct TimelineStepRow: View {
                 .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(.separator).opacity(0.5), lineWidth: 0.5))
         }
-        if call.isError {
+        if call.isError, !isOpen {
             Text(verbatim: call.errorText ?? ToolPresentation.failedText(call.name))
                 .font(.subheadline)
                 .foregroundStyle(.red)
@@ -186,6 +217,17 @@ private struct TimelineStepRow: View {
                 }
             }
         }
+        if isOpen, let card {
+            ToolCardView(card: card)
+                .padding(.top, 2)
+                .transition(.opacity)
+        }
+    }
+
+    private func callText(_ call: AssistantTurn.ToolCallStep) -> some View {
+        Text(verbatim: ToolPresentation.callText(call))
+            .font(.subheadline)
+            .foregroundStyle(isActive ? .primary : .secondary)
     }
 
     /// Inline emphasis only, every newline kept: a reasoning step is prose, and its `**title**` should read bold.
