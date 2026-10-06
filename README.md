@@ -214,6 +214,21 @@ Rules the audit enforces or relies on:
 Translations other than English are machine-generated unless they were copied from the desktop, and native
 speakers have not reviewed them.
 
+## Versioning and releases
+
+The version lives once, in `Configs/Version.xcconfig`, and both the app and the
+widget extension read it (the App Store wants them to match):
+
+- `MARKETING_VERSION` — what people see, semver (`1.2.0`), set by hand per release.
+- `CURRENT_PROJECT_VERSION` — the build number: the commit count at the release,
+  so it only grows, which is all TestFlight asks.
+
+Cut a release with `scripts/release.sh 1.2.0`: it writes both numbers, commits
+that one file as `chore(release): v1.2.0 (build N)` and tags `v1.2.0`. It
+pushes nothing — `git push origin HEAD --follow-tags` when you mean it. The
+desktop app is versioned on its own (semantic-release on `master`); the two
+need not match.
+
 ## Known limits
 
 The sidebar's search field is hand-built rather than `.searchable`, because `.searchable` was inert inside the

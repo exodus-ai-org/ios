@@ -25,7 +25,15 @@ let project = Project(
         defaultKnownRegions: ["en", "zh-Hant", "zh-HK", "ja", "ko", "fr", "de", "es", "pt-BR", "it"],
         developmentRegion: "en"
     ),
-    settings: .settings(base: ["SWIFT_VERSION": "6.0"]),
+    // The version (marketing + build number) comes from one xcconfig, shared by
+    // the app and the widget extension — see Configs/Version.xcconfig.
+    settings: .settings(
+        base: ["SWIFT_VERSION": "6.0"],
+        configurations: [
+            .debug(name: .debug, xcconfig: "Configs/Version.xcconfig"),
+            .release(name: .release, xcconfig: "Configs/Version.xcconfig")
+        ]
+    ),
     targets: [
         .target(
             name: "App",
