@@ -140,4 +140,63 @@ extension HealthArchive {
         try write(ArchivedDay(snapshot: snapshot, summary: PreviewSummaryService.sample, generatedAt: day))
     }
 }
+/// The computer for period reports in the gallery: a month a little better slept and a little less walked than the
+/// one before (the numbers `writePreview` keeps), or unreachable.
+public struct PreviewPeriodReportService: PeriodReportService {
+    let offline: Bool
+
+    public init(offline: Bool = false) { self.offline = offline }
+
+    public static let sample = PeriodReportReply(
+        headline: "More sleep, fewer steps than the month before.", headlineHighlight: "More sleep",
+        headlineCategory: "sleep",
+        insights: [
+            .init(
+                category: "sleep", title: "You slept 7 h 12 min a night on average, 25 minutes more than the month before.",
+                highlights: ["7 h 12 min", "25 minutes more"], stat: .init(value: "7:12", unit: "hr", caption: "before 6:47")),
+            .init(
+                category: "activity", title: "Daily steps fell 12 % to 7,040; you reached your goal on 9 of 21 days.",
+                highlights: ["fell 12 %", "9 of 21 days"], stat: .init(value: "7,040", unit: "steps", caption: "before 8,000")),
+            .init(
+                category: "recovery", title: "Resting heart rate eased to 59 bpm from 61, and HRV held at 44 ms.",
+                highlights: ["59 bpm"]),
+        ],
+        comparisons: [
+            .init(metric: "sleep", current: "7 h 12 min", previous: "6 h 47 min", direction: .up),
+            .init(metric: "steps", current: "7,040", previous: "8,000", direction: .down),
+            .init(metric: "hrv", current: "44 ms", previous: "43 ms", direction: .flat),
+            .init(metric: "restingHr", current: "59 bpm", previous: "61 bpm", direction: .down),
+        ],
+        nudge: "Take a short walk after lunch on workdays.")
+
+    public func report(for request: PeriodReportRequest) async throws -> PeriodReportReply {
+        if offline { throw URLError(.cannotConnectToHost) }
+        return Self.sample
+    }
+}
+
+extension PeriodReportStore {
+    /// The gallery's kept report for `period`: the sample, written from 21 days with data.
+    public func writePreview(period: Period, generatedAt: Date, calendar: Calendar = .current) throws {
+        guard let span = PeriodReport.Span(period, calendar: calendar), let id = period.reportID(calendar: calendar)
+        else { return }
+        func m(_ a: Double, _ lo: Double, _ hi: Double, _ d: Int) -> MetricSummary {
+            MetricSummary(average: a, min: lo, max: hi, days: d)
+        }
+        let none = MetricSummary(average: nil, min: nil, max: nil, days: 0)
+        let current = Aggregates(
+            elapsedDays: period.days(calendar: calendar).count, daysWithData: 21, sleepMin: m(432, 350, 510, 21),
+            steps: m(7040, 2100, 13200, 21), exerciseMin: m(24, 0, 75, 21), hrvMs: m(44, 31, 58, 21),
+            restingHr: m(59, 55, 64, 21), waterCups: none, stepGoalRate: 0.43, sleepTargetRate: 0.6)
+        let previous = Aggregates(
+            elapsedDays: 31, daysWithData: 31, sleepMin: m(407, 330, 480, 31), steps: m(8000, 3100, 15000, 31),
+            exerciseMin: m(24, 0, 60, 31), hrvMs: m(43, 30, 55, 31), restingHr: m(61, 57, 66, 31), waterCups: none,
+            stepGoalRate: 0.45, sleepTargetRate: 0.42)
+        try write(
+            PeriodReport(
+                PreviewPeriodReportService.sample, period: span, generatedAt: generatedAt, current: current,
+                previous: previous),
+            id: id)
+    }
+}
 #endif

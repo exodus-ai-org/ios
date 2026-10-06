@@ -34,3 +34,17 @@ Things the simulator cannot show. Run on a real iPhone (iOS 27) with an Apple Wa
 - [ ] Health menu → Clear archive → confirm: success tap; past days now say "No note for this day"; today's note is still on the home.
 - [ ] Lock the phone while Health is open, unlock: the calendar and today's note load without errors (the archive's files are protected while locked).
 - [ ] Change the iPhone's region to United States (weeks start Sunday): the calendar still runs Monday–Sunday and the week number is unchanged.
+
+## Period reports (trends phase 2)
+
+- [ ] With "Write daily notes" on and the computer reachable, open Health the day after a week (or month) ends: after the day's note, the calendar on that period shows its report card within a minute, and the home shows "<period> report ready" under This week for two days.
+- [ ] One open writes at most two reports (desktop log: at most two "Period report written" lines per Health open); the rest come on the next open, newest first.
+- [ ] Quit the desktop app and open Health: the calendar on last month says "Will be written when your computer is reachable." with Write now; start the desktop, tap Write now: Ody writes, the card becomes the report, success tap.
+- [ ] Report page: "Monthly report" over the coloured headline, the insight cards, "vs last month" with green/orange arrows (resting heart rate down is green), the idea, "Written …"; when the month had gaps, "N of M days had data".
+- [ ] Write again: the old report stays while the spinner shows, then the new one, success tap. With the computer off: the old report stays and one line says it couldn't be written.
+- [ ] Ask about the report: a new chat opens with the Health card and the question; the answer talks about that period's numbers.
+- [ ] Turn "Write daily notes" off while a report is being written: it never appears; kept reports still open; no "Will be written" card shows.
+- [ ] Health menu → Clear archive: the confirmation mentions reports; afterwards the calendar shows no report cards.
+- [ ] VoiceOver: a comparison row reads "Resting heart rate, 59 bpm, Down, was 61 bpm"; the report card reads its kind and headline with "Opens the report."
+- [ ] Largest accessibility text size: comparison rows stack, the report card and the home line wrap. Reduce Motion: the report page's cards appear without rising.
+- [ ] The desktop's log for these calls carries timings and counts only — no numbers or sentences from the report.

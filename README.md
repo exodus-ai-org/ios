@@ -55,7 +55,10 @@ matches nothing and still prints `** TEST SUCCEEDED **`, so look for a `Test run
   attached. Every note is kept on the phone by day (`HealthArchive`: `Application Support/Health/archive`, complete
   file protection, never backed up), and a calendar shows any past day and the trend by week, month, quarter and
   year (`DayRecord`, `TrendMath`, `TrendsView`); `-HealthGallery calendar-month` (and `-week`, `-quarter`, `-year`,
-  `day-note`, `day-empty`) opens it on preview data. Design: [spec](docs/superpowers/specs/2026-10-01-health-workspace-design.md),
+  `day-note`, `day-empty`) opens it on preview data. Each finished week, month, quarter and year gets a report on the
+  next Health open (`PeriodReports`; `POST /api/v1/health/period-report`, kept in `archive/reports`), shown on the
+  calendar, on the home and on its own page (`-HealthGallery report-page`, `report-card`, `report-pending`,
+  `report-home`). Design: [spec](docs/superpowers/specs/2026-10-01-health-workspace-design.md),
   [trends spec](docs/superpowers/specs/2026-10-02-health-trends-design.md).
 - `WidgetKitShared`: what the app and its widgets share — the snapshot (`WidgetSnapshot`: up to three recent chat
   titles and today's health glance, never a message) kept in the App Group `group.app.yancey.exodus`, the

@@ -7,8 +7,10 @@ import SwiftUI
 /// `<state>` (`ready` default, `writing`, `offline`, `needsModel`, `failed`, `consent`, `onboarding`), or opens the
 /// calendar over it, on last month: `calendar-week`, `calendar-month`, `calendar-quarter`, `calendar-year`, and
 /// `day-note` / `day-empty` (the month with the sheet of its 16th up, which has a kept note, or of its 12th, which has
-/// none). Add `-HealthGalleryAnchor center|bottom` to open the home scrolled down, for a screenshot of the note below
-/// the hero.
+/// none). Period reports: `report-home` (last month's report written just now, so the "report ready" line shows under
+/// This week), `report-page` (that report: stories, comparisons, the idea, 21 days with data), `report-card` (the
+/// calendar on last month with its report card) and `report-pending` (the calendar on last month with the computer
+/// unreachable: "Will be written…"). Add `-HealthGalleryAnchor center|bottom` to open the home scrolled down.
 enum HealthGalleryLaunch {
     static var isEnabled: Bool { ProcessInfo.processInfo.arguments.contains("-HealthGallery") }
 
@@ -34,7 +36,7 @@ enum HealthGalleryLaunch {
 struct HealthGalleryView: View {
     /// Made once: the model mirrors the preferences when it is created, so they are set first.
     @State private var model = Self.makeModel()
-    @State private var path = NavigationPath(Self.routes())
+    @State private var path = Self.path()
 
     var body: some View {
         NavigationStack(path: $path) { HealthRootView.gallery(model: model) }
@@ -49,17 +51,23 @@ struct HealthGalleryView: View {
         return cal.date(byAdding: .day, value: offset, to: mid) ?? mid
     }
 
-    private static func routes() -> [TrendsRoute] {
+    /// Last month: finished, so it has (or waits for) a report.
+    private static var lastMonth: Period { Period.containing(reference(), .month, calendar: .current) }
+
+    private static func path() -> NavigationPath {
         let anchor = reference()
+        var path = NavigationPath()
         switch HealthGalleryLaunch.state {
-        case "calendar-week": return [TrendsRoute(scope: .week, anchor: anchor)]
-        case "calendar-month": return [TrendsRoute(scope: .month, anchor: anchor)]
-        case "calendar-quarter": return [TrendsRoute(scope: .quarter, anchor: anchor)]
-        case "calendar-year": return [TrendsRoute(scope: .year, anchor: anchor)]
-        case "day-note": return [TrendsRoute(scope: .month, anchor: anchor, presentedDay: reference(1))]
-        case "day-empty": return [TrendsRoute(scope: .month, anchor: anchor, presentedDay: reference(-3))]
-        default: return []
+        case "calendar-week": path.append(TrendsRoute(scope: .week, anchor: anchor))
+        case "calendar-month", "report-card", "report-pending": path.append(TrendsRoute(scope: .month, anchor: anchor))
+        case "calendar-quarter": path.append(TrendsRoute(scope: .quarter, anchor: anchor))
+        case "calendar-year": path.append(TrendsRoute(scope: .year, anchor: anchor))
+        case "day-note": path.append(TrendsRoute(scope: .month, anchor: anchor, presentedDay: reference(1)))
+        case "day-empty": path.append(TrendsRoute(scope: .month, anchor: anchor, presentedDay: reference(-3)))
+        case "report-page": path.append(PeriodReportRoute(period: lastMonth))
+        default: break
         }
+        return path
     }
 
     private static func makeModel() -> HealthHomeModel {
@@ -83,9 +91,17 @@ struct HealthGalleryView: View {
             try? cache.archive.writePreview(day: yesterday)
         }
         try? cache.archive.writePreview(day: reference(1))
+        switch HealthGalleryLaunch.state {
+        case "report-home", "report-page", "report-card":
+            try? cache.archive.reports.writePreview(period: lastMonth, generatedAt: Date())
+        default: break
+        }
+        // Only the pending state asks for reports (and finds the computer unreachable); the others show what is kept.
+        let periodReports: (any PeriodReportService)? =
+            HealthGalleryLaunch.state == "report-pending" ? PreviewPeriodReportService(offline: true) : nil
         return HealthHomeModel(
             source: HealthPreviewSource(), summaries: PreviewSummaryService(report: report),
-            memory: PreviewMemoryWriter(), cache: cache, preferences: prefs,
+            memory: PreviewMemoryWriter(), cache: cache, preferences: prefs, periodReports: periodReports,
             locale: Bundle.main.preferredLocalizations.first ?? "en")
     }
 }
