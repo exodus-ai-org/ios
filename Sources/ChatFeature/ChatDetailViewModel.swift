@@ -309,6 +309,19 @@ public final class ChatDetailViewModel {
         await sendMessage()
     }
 
+    /// Whether a block in the transcript may be answered now: as the composer, once the history is known and
+    /// while nothing is in flight.
+    public var canAnswer: Bool { hasLoadedHistory && !isTurnInFlight }
+
+    /// A questionnaire's or a confirmation's answer (`InteractiveAnswer`), sent as a typed message is but past the
+    /// composer: what is being typed there, its quote and its pictures stay for the next message.
+    public func sendText(_ text: String) async {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canAnswer, !text.isEmpty else { return }
+        if supportsAttempts { messages = RunAttempts.autoChoose(messages) }
+        await startTurn(with: .userMessage(id: Self.newMessageId(), text: text, timestampMs: Self.nowMs))
+    }
+
     /// Asks the last question again, as the desktop's `regenerate` does: a new user message with a new id (and so a new
     /// run) carrying the same content is appended, and the transcript so far — the previous answer included — is what is
     /// sent. Nothing is removed: the previous answer stays on screen and in the database, and the new one follows it.

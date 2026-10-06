@@ -22,7 +22,7 @@ struct MarkdownBlockView: View, Equatable {
         case .blockquote(let blocks):
             MarkdownQuoteView(blocks: blocks, citations: citations, context: context)
         case .codeBlock(let language, let code):
-            MarkdownCodeBlockView(language: language, code: code)
+            MarkdownFencedCode(language: language, code: code)
         case .table(let table):
             MarkdownTableView(table: table, citations: citations, isArriving: context.isArriving)
         case .thematicBreak:
