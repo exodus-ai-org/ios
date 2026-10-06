@@ -109,11 +109,19 @@ enum InteractiveBlock: Equatable, Sendable {
 struct InteractiveFence: Equatable, Sendable {
     let block: InteractiveBlock
     let source: String
+    /// The fence's opening line, counted from 0 in the text it was found in (`\n`-separated).
+    var line = 0
 
     var kind: InteractiveBlock.Kind { block.kind }
 
     func matches(language: String?, code: String) -> Bool {
-        language.flatMap(InteractiveBlock.Kind.init(language:)) == kind && Self.trimmed(code) == Self.trimmed(source)
+        language.flatMap(InteractiveBlock.Kind.init(language:)) == kind && matches(code: code)
+    }
+
+    /// A code block's text is the fence's: compared as the desktop compares them — `\r\n` and `\r` read as `\n`,
+    /// trailing line ends dropped, then unit for unit in UTF-16 (canonically equivalent text is not the same text).
+    func matches(code: String) -> Bool {
+        Self.plainCode(code).elementsEqual(Self.plainCode(source))
     }
 
     /// A reply's block: its first `exodus-ask` / `exodus-confirm` fence that opens a line at the left margin — not
@@ -138,7 +146,7 @@ struct InteractiveFence: Equatable, Sendable {
                     if let close = fenceRun(lines[end]), close.unit == tick, JSText.isBlank(close.rest) {
                         let source = JSText.string(Array(lines[(index + 1)..<end].joined(separator: [JSText.lf])))
                         return InteractiveBlock.parse(kind, source: source).map {
-                            InteractiveFence(block: $0, source: source)
+                            InteractiveFence(block: $0, source: source, line: index)
                         }
                     }
                 }
@@ -164,10 +172,11 @@ struct InteractiveFence: Equatable, Sendable {
         return end - start >= 3 ? (unit, end - start, line[end...]) : nil
     }
 
-    private static func trimmed(_ text: String) -> Substring {
-        var end = text.endIndex
-        while end > text.startIndex, text[text.index(before: end)] == "\n" { end = text.index(before: end) }
-        return text[..<end]
+    /// The desktop's `plainCode`: `unixLines(text).replace(/\n+$/u, '')`, in UTF-16 units.
+    private static func plainCode(_ text: String) -> ArraySlice<UInt16> {
+        var units = JSText.unixLines(text)[...]
+        while units.last == JSText.lf { units = units.dropLast() }
+        return units
     }
 }
 
@@ -206,4 +215,21 @@ enum JSText {
     static func distinct(_ values: [String]) -> Bool { Set(values.map { Array($0.utf16) }).count == values.count }
 
     static func equal(_ a: String, _ b: String) -> Bool { a.utf16.elementsEqual(b.utf16) }
+
+    /// `text.replaceAll(/\r\n?/g, '\n')`: every line end a `\n`.
+    static func unixLines(_ text: String) -> [UInt16] {
+        var out: [UInt16] = []
+        out.reserveCapacity(text.utf16.count)
+        var afterCR = false
+        for unit in text.utf16 {
+            if unit == cr {
+                out.append(lf)
+                afterCR = true
+            } else {
+                if !(afterCR && unit == lf) { out.append(unit) }
+                afterCR = false
+            }
+        }
+        return out
+    }
 }

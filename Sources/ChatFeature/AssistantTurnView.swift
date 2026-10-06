@@ -17,6 +17,10 @@ struct TranscriptActions {
     var choose: (_ runId: String) -> Void = { _ in }
     /// Opens a folded answer (its run id) read-only.
     var showOtherVersion: (_ runId: String) -> Void = { _ in }
+    /// Whether a reply's questionnaire or confirmation may be answered now (not while a turn is in flight).
+    var canAnswer = false
+    /// Sends a block's answer as the user's next message.
+    var sendAnswer: @MainActor @Sendable (_ text: String) -> Void = { _ in }
 
     static var none: TranscriptActions { TranscriptActions(regenerableTurnId: nil, regenerate: {}, showSources: { _, _ in }) }
 }
@@ -41,6 +45,7 @@ struct TranscriptRows: View {
 
     var body: some View {
         let liveErrorTurnId = TranscriptRules.liveErrorTurnId(segments: segments, live: liveError)
+        let answers = InteractiveRendering.answers(in: segments)
         ForEach(segments) { segment in
             Group {
                 switch segment {
@@ -60,7 +65,10 @@ struct TranscriptRows: View {
                             hasError: error != nil, bar: bar, canRegenerate: canRegenerate),
                         canChoose: actions.canChoose,
                         regenerate: actions.regenerate, showSources: actions.showSources, choose: actions.choose,
-                        showOtherVersion: actions.showOtherVersion
+                        showOtherVersion: actions.showOtherVersion, answered: answers[turn.runId],
+                        // A compared column is not the conversation's reply yet: its block is never answered.
+                        canAnswer: InteractiveRendering.canAnswer(turn, canAnswer: actions.canAnswer),
+                        sendAnswer: actions.sendAnswer
                     )
                     .equatable()
                 }
@@ -91,13 +99,23 @@ struct AssistantTurnView: View, Equatable {
     var showSources: (_ turnId: String, _ marker: Int?) -> Void = { _, _ in }
     var choose: (_ runId: String) -> Void = { _ in }
     var showOtherVersion: (_ runId: String) -> Void = { _ in }
+    /// The answer to this turn's questionnaire or confirmation, once the transcript holds one.
+    nonisolated var answered: InteractiveAnswered?
+    /// Whether the turn's block may be answered now.
+    nonisolated var canAnswer = false
+    var sendAnswer: @MainActor @Sendable (_ text: String) -> Void = { _ in }
     @Environment(\.searchMediaLoader) private var searchMediaLoader
 
     nonisolated static func == (lhs: AssistantTurnView, rhs: AssistantTurnView) -> Bool {
         lhs.turn == rhs.turn && lhs.isStreaming == rhs.isStreaming && lhs.error == rhs.error
             && lhs.actionBar == rhs.actionBar && lhs.offersRetry == rhs.offersRetry
-            && lhs.choiceEnabled == rhs.choiceEnabled
+            && lhs.choiceEnabled == rhs.choiceEnabled && lhs.answered == rhs.answered
+            && (lhs.canAnswer == rhs.canAnswer || !lhs.asks)
     }
+
+    /// The turn holds a block still waiting for its answer, so whether one may be sent changes how it looks. Read only
+    /// when `canAnswer` changed (a turn starting or ending), never per streamed frame.
+    nonisolated var asks: Bool { answered == nil && turn.body.contains("```exodus-") }  // l10n:ignore: markdown syntax
 
     /// `canChoose` counts only for a compared answer, so an ordinary turn does not redraw when a turn starts or ends.
     nonisolated var choiceEnabled: Bool {
@@ -240,15 +258,26 @@ extension AssistantTurnView {
         let blocks = TranscriptRules.blocks(turn, isStreaming: isStreaming)
         let citations = TranscriptRules.markdownCitations(turn)
         let streaming = TranscriptRules.streamingBlockId(blocks, isStreaming: isStreaming)
+        // The turn's questionnaire or confirmation: the first one of its whole answer, as the desktop finds it, marked
+        // in the one text block that holds it — so a copy of it, later or elsewhere, stays code.
+        let texts = blocks.compactMap { if case .text(let text) = $0 { text } else { nil } }
+        let placed = InteractiveRendering.placed(in: texts.map(\.text))
+        let placedId = placed.map { texts[$0.index].id }
+        let fenced = InteractiveRendering.fencedBlocks(
+            fence: placed?.fence, runId: turn.runId, answered: answered, canAnswer: canAnswer && !isStreaming,
+            isAnswerable: InteractiveRendering.isAnswerable(turn), sendAnswer: sendAnswer)
         ForEach(blocks) { block in
             switch block {
             case .text(let text):
                 // A long press on the answer's text selects a word of it, as in any text; the whole answer is
                 // the action row's Copy.
+                let holdsBlock = text.id == placedId
                 MarkdownView(
-                    text: text.text, citations: citations, isStreaming: text.id == streaming,
+                    text: holdsBlock ? placed?.text ?? text.text : text.text, citations: citations,
+                    isStreaming: text.id == streaming,
                     onCitationTap: Self.citationTap(turnId: turn.id, showSources: showSources)
                 )
+                .environment(\.markdownFencedBlocks, holdsBlock ? fenced : nil)
             case .card(let card):
                 ToolCardView(card: card)
             }
