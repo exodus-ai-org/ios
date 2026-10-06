@@ -325,13 +325,18 @@ struct UserBubble: View {
             // A message asked about a selection opens with it as a quote (`QuotedText`): drawn as one, small and
             // beside a rule, over the question. A word of either can be selected, as in an answer. One asked from Health
             // opens with the day's numbers before that (`HealthContext`): a card of chips.
+            // One that answers a questionnaire or a confirmation opens with its answer fence (`InteractiveAnswer`):
+            // drawn as a card instead, the block's title over the answers.
+            let answer = InteractiveAnswer.split(text)
             let health = HealthContext.split(text)
             let parts = QuotedText.split(health.body)
             VStack(alignment: .leading, spacing: 6) {
-                if let json = health.json {
+                if let head = answer.head {
+                    InteractiveAnswerCard(head: head, text: answer.body)
+                } else if let json = health.json {
                     HealthContextCard(json: json)
                 }
-                if let quote = parts.quote {
+                if answer.head == nil, let quote = parts.quote {
                     Text(verbatim: quote)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -343,7 +348,7 @@ struct UserBubble: View {
                         .accessibilityLabel(Text("ios:chat.ask.quoted"))
                         .accessibilityValue(Text(verbatim: quote))
                 }
-                if !parts.body.isEmpty {
+                if answer.head == nil, !parts.body.isEmpty {
                     message(parts.body)
                 }
             }
