@@ -32,3 +32,19 @@ public struct LiveMemoryWriter: MemoryWriter {
         try await apiClient.post("/api/v1/memory", body: suggestion)
     }
 }
+
+/// Writes a finished period's report. The real one asks the computer (`POST /api/v1/health/period-report`).
+public protocol PeriodReportService: Sendable {
+    func report(for request: PeriodReportRequest) async throws -> PeriodReportReply
+}
+
+public struct LivePeriodReportService: PeriodReportService {
+    let apiClient: APIClient
+
+    public init(apiClient: APIClient) { self.apiClient = apiClient }
+
+    public func report(for request: PeriodReportRequest) async throws -> PeriodReportReply {
+        // A memory read and a longer prompt than the day's note: give it longer still.
+        try await apiClient.post("/api/v1/health/period-report", body: request, timeout: 180)
+    }
+}
