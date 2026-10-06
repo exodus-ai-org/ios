@@ -542,6 +542,8 @@ struct MapItineraryFullView: View {
     @State private var screenHeight: CGFloat = 800
     @State private var showsStops = true
     @State private var closing = false
+    /// The map's bottom inset at the moment Close was tapped, kept until the cover is gone.
+    @State private var frozenBottom: CGFloat = 0
     @State private var copyCount = 0
     @State private var location = ItineraryLocationAccess()
     @Environment(\.dismiss) private var dismiss
@@ -639,7 +641,8 @@ struct MapItineraryFullView: View {
         // The route is framed in what is left between the floating bar and the sheet, up to half the screen: past
         // that the sheet is being read, not the map.
         .safeAreaPadding(.top, topBarHeight)
-        .safeAreaPadding(.bottom, min(sheetHeight, screenHeight * 0.5))
+        // Frozen while closing: the sheet's height drops as it goes, and a map re-framed mid-dismissal jumps.
+        .safeAreaPadding(.bottom, closing ? frozenBottom : min(sheetHeight, screenHeight * 0.5))
         .ignoresSafeArea()
         .background(Color(.secondarySystemFill))
         .accessibilityElement(children: .contain)
@@ -651,8 +654,12 @@ struct MapItineraryFullView: View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
                 Button {
+                    // One dismissal takes the sheet with the cover. Closing the sheet first and the cover after it
+                    // was two half-second animations, and between them the map re-framed to the whole screen and
+                    // zoomed out to the continent as the cover slid away.
                     closing = true
-                    showsStops = false
+                    frozenBottom = min(sheetHeight, screenHeight * 0.5)
+                    dismiss()
                 } label: {
                     Label("common:action.close", systemImage: "xmark")
                         .labelStyle(.iconOnly)
