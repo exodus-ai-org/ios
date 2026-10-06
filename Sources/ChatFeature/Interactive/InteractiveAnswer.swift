@@ -134,9 +134,10 @@ enum InteractiveAnswer {
     /// ends at the first line that is exactly the closing fence, and its JSON must name a block and a run. Anything
     /// else is an ordinary message, returned whole.
     static func split(_ text: String) -> (head: Head?, body: String) {
+        // Checked before the copy, so an ordinary message costs nothing.
+        guard text.utf16.starts(with: opening.utf16) else { return (nil, text) }
         let units = Array(text.utf16)
         let open = Array(opening.utf16)
-        guard units.starts(with: open) else { return (nil, text) }
         let rest = units[open.count...]
         let close = Array(closing.utf16)
         let end: Int
@@ -150,6 +151,8 @@ enum InteractiveAnswer {
         } else {
             return (nil, text)
         }
+        // The decoder's known gap with JSON.parse: a duplicate key keeps its first value here (the last there), and a
+        // lone-surrogate escape is rejected here (accepted there).
         guard let head = try? JSONDecoder().decode(Head.self, from: Data(JSText.string(rest[..<end]).utf8)),
             !head.ref.isEmpty
         else { return (nil, text) }

@@ -70,6 +70,8 @@ enum InteractiveBlock: Equatable, Sendable {
     /// A fence's body as its block, or nil when it is not one JSON object within the limits.
     static func parse(_ kind: Kind, source: String) -> InteractiveBlock? {
         let data = Data(source.utf8)
+        // A known gap with the desktop's JSON.parse: on a duplicate key JSONDecoder keeps the first value (JS the
+        // last), and it rejects a lone-surrogate escape that JS accepts. A model does not write either.
         let decoder = JSONDecoder()
         let block: InteractiveBlock? =
             switch kind {
@@ -83,21 +85,27 @@ enum InteractiveBlock: Equatable, Sendable {
     var isValid: Bool {
         switch self {
         case .ask(let ask):
-            Self.required(ask.title, 200) && (1...8).contains(ask.questions.count)
+            Self.oneLine(ask.title, 200) && (1...8).contains(ask.questions.count)
                 && JSText.distinct(ask.questions.map(\.id))
+                // An answer's line is found by its question's text.
+                && JSText.distinct(ask.questions.map(\.text))
                 && Self.within(ask.note, 120) && Self.within(ask.submit, 40)
                 && ask.questions.allSatisfy { question in
-                    Self.isID(question.id) && Self.required(question.text, 200)
+                    Self.isID(question.id) && Self.oneLine(question.text, 200)
                         && (2...8).contains(question.options.count) && JSText.distinct(question.options)
-                        && question.options.allSatisfy { Self.required($0, 80) }
+                        && question.options.allSatisfy { Self.oneLine($0, 80) }
                 }
         case .confirm(let confirm):
-            Self.required(confirm.title, 200) && Self.within(confirm.details, 1000)
+            Self.oneLine(confirm.title, 200) && Self.within(confirm.details, 1000)
                 && Self.within(confirm.approve, 40) && Self.within(confirm.reject, 40) && Self.within(confirm.note, 120)
         }
     }
 
     private static func required(_ text: String, _ max: Int) -> Bool { !text.isEmpty && text.utf16.count <= max }
+    /// A title, a question or an option: one line, since an answer writes each on a line of its own and reads them back.
+    private static func oneLine(_ text: String, _ max: Int) -> Bool {
+        required(text, max) && !text.utf16.contains { $0 == JSText.lf || $0 == JSText.cr }
+    }
     private static func within(_ text: String?, _ max: Int) -> Bool { (text?.utf16.count ?? 0) <= max }
     private static let idUnits = Set("abcdefghijklmnopqrstuvwxyz0123456789_-".utf16)
     private static func isID(_ id: String) -> Bool {
@@ -111,6 +119,8 @@ struct InteractiveFence: Equatable, Sendable {
     let source: String
     /// The fence's opening line, counted from 0 in the text it was found in (`\n`-separated).
     var line = 0
+    /// Its closing line, counted the same way.
+    var closingLine = 0
 
     var kind: InteractiveBlock.Kind { block.kind }
 
@@ -127,26 +137,28 @@ struct InteractiveFence: Equatable, Sendable {
     /// A reply's block: its first `exodus-ask` / `exodus-confirm` fence that opens a line at the left margin — not
     /// inside another fence, a list or a quote — and is closed. Only that first one counts: when it does not validate
     /// the reply has none, and a second is code either way. A fence still open (a reply being written) is not one yet.
-    /// Read in UTF-16 units, as the desktop's `findInteractiveBlock` reads it, so the two agree on every reply.
+    /// Read in UTF-16 units, as the desktop's `findInteractiveBlock` reads it, so the two agree on every reply; line
+    /// ends are made `\n` first (only spaces and tabs are blank around a fence, so a `\r` left in would be text), as
+    /// the desktop's callers do.
     static func first(in markdown: String) -> InteractiveFence? {
-        let lines = markdown.utf16.split(separator: JSText.lf, omittingEmptySubsequences: false).map(Array.init)
+        let lines = JSText.unixLines(markdown).split(separator: JSText.lf, omittingEmptySubsequences: false).map(Array.init)
         var open: (unit: UInt16, length: Int)?
         for (index, line) in lines.enumerated() {
             let run = fenceRun(line)
             if let current = open {
-                if let run, run.unit == current.unit, run.length >= current.length, JSText.isBlank(run.rest) {
+                if let run, run.unit == current.unit, run.length >= current.length, JSText.isFenceBlank(run.rest) {
                     open = nil
                 }
                 continue
             }
             if line.starts(with: ticks),
-                let kind = InteractiveBlock.Kind(language: JSText.string(JSText.trimmingEnd(line.dropFirst(3))))
+                let kind = InteractiveBlock.Kind(language: JSText.string(JSText.trimmingFenceBlanks(line.dropFirst(3))))
             {
                 for end in lines.indices.dropFirst(index + 1) {
-                    if let close = fenceRun(lines[end]), close.unit == tick, JSText.isBlank(close.rest) {
+                    if let close = fenceRun(lines[end]), close.unit == tick, JSText.isFenceBlank(close.rest) {
                         let source = JSText.string(Array(lines[(index + 1)..<end].joined(separator: [JSText.lf])))
                         return InteractiveBlock.parse(kind, source: source).map {
-                            InteractiveFence(block: $0, source: source, line: index)
+                            InteractiveFence(block: $0, source: source, line: index, closingLine: end)
                         }
                     }
                 }
@@ -161,7 +173,8 @@ struct InteractiveFence: Equatable, Sendable {
     private static let tilde = UInt16(UInt8(ascii: "~"))
     private static let ticks: [UInt16] = [tick, tick, tick]
 
-    /// A line that opens or closes a fence: up to three spaces, then three or more backticks or tildes.
+    /// A line that opens or closes a fence: up to three spaces, then three or more backticks or tildes. After backticks
+    /// no backtick may follow (CommonMark): a line like ```` ```npm i``` ```` is inline code, not a fence.
     private static func fenceRun(_ line: [UInt16]) -> (unit: UInt16, length: Int, rest: ArraySlice<UInt16>)? {
         var start = 0
         while start < 3, start < line.count, line[start] == UInt16(UInt8(ascii: " ")) { start += 1 }
@@ -169,7 +182,8 @@ struct InteractiveFence: Equatable, Sendable {
         let unit = line[start]
         var end = start
         while end < line.count, line[end] == unit { end += 1 }
-        return end - start >= 3 ? (unit, end - start, line[end...]) : nil
+        guard end - start >= 3, unit == tilde || !line[end...].contains(tick) else { return nil }
+        return (unit, end - start, line[end...])
     }
 
     /// The desktop's `plainCode`: `unixLines(text).replace(/\n+$/u, '')`, in UTF-16 units.
@@ -194,7 +208,15 @@ enum JSText {
         }
     }
 
-    static func isBlank<C: Collection<UInt16>>(_ units: C) -> Bool { units.allSatisfy(isWhitespace) }
+    /// Only spaces and tabs are blank around a fence (CommonMark): a no-break or an ideographic space is text.
+    static func isFenceBlank(_ units: ArraySlice<UInt16>) -> Bool { units.allSatisfy { $0 == 0x20 || $0 == 0x09 } }
+
+    /// The desktop's `trimTrailingBlanks`: trailing spaces and tabs dropped.
+    static func trimmingFenceBlanks(_ units: ArraySlice<UInt16>) -> ArraySlice<UInt16> {
+        var end = units.endIndex
+        while end > units.startIndex, units[end - 1] == 0x20 || units[end - 1] == 0x09 { end -= 1 }
+        return units[..<end]
+    }
 
     static func trimmingEnd(_ units: ArraySlice<UInt16>) -> ArraySlice<UInt16> {
         var end = units.endIndex

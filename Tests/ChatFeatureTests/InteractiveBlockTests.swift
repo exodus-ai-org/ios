@@ -10,7 +10,7 @@ private let confirmSource =
     #"{"title":"要我把这份行程写进日历吗？","details":"10 月 21–25 日，五天，17 个地点；日历「旅行」。","approve":"写进去","reject":"先不要","note":"有要改的地方可以写在这里"}"#
 
 private func q(_ id: String, _ extra: [String: Any] = [:]) -> [String: Any] {
-    ["id": id, "text": "Q", "type": "single", "options": ["x", "y"]].merging(extra) { $1 }
+    ["id": id, "text": "Q \(id)", "type": "single", "options": ["x", "y"]].merging(extra) { $1 }
 }
 private func json(_ object: Any) -> String {
     String(decoding: (try? JSONSerialization.data(withJSONObject: object)) ?? Data(), as: UTF8.self)
@@ -37,6 +37,11 @@ private let askCases: [(String, String, Bool)] = [
     ("a type that is neither single nor multi", ask(["questions": [q("a", ["type": "text"])]]), false),
     ("an empty title", ask(["title": ""]), false),
     ("a 201-character question", ask(["questions": [q("a", ["text": repeated("q", 201)])]]), false),
+    ("a title on two lines", ask(["title": "A few\ndetails"]), false),
+    ("a question on two lines", ask(["questions": [q("a", ["text": "Where?\nAnd when?"])]]), false),
+    ("an option with a carriage return", ask(["questions": [q("a", ["options": ["x\ry", "z"]])]]), false),
+    ("two questions with one text", ask(["questions": [q("a"), q("b", ["text": "Q a"])]]), false),
+    ("two questions with different texts", ask(["questions": [q("a"), q("b")]]), true),
     ("a 121-character note", ask(["note": repeated("n", 121)]), false),
     ("a 41-character submit", ask(["submit": repeated("s", 41)]), false),
     ("nulls for what is optional", ask(["note": NSNull(), "submit": NSNull(), "questions": [q("a", ["other": NSNull()])]]), true),
@@ -48,6 +53,7 @@ private let askCases: [(String, String, Bool)] = [
 private let confirmCases: [(String, String, Bool)] = [
     ("the spec's example", confirmSource, true),
     ("a title alone", confirm(), true),
+    ("a title with a carriage return", confirm(["title": "Send\rit?"]), false),
     ("no title", json(["details": "d"]), false),
     ("a 201-character title", confirm(["title": repeated("t", 201)]), false),
     ("1000 characters of details", confirm(["details": repeated("d", 1000)]), true),
@@ -67,6 +73,11 @@ private let findCases: [(String, String, InteractiveBlock.Kind?)] = [
     ("indented under a list item", "- item\n\n  ```exodus-ask\n  \(askSource)\n  ```", nil),
     ("after an ordinary code block", "```js\nlet a = 1\n```\n\n```exodus-confirm\n\(confirmSource)\n```", .confirm),
     ("trailing spaces after the name", "```exodus-confirm  \n\(confirmSource)\n```", .confirm),
+    ("after a line of inline code that looks like a fence", "Install it with\n```npm i```\n\n```exodus-confirm\n\(confirmSource)\n```", .confirm),
+    ("a closing line with a no-break space after it: not a closer", "```exodus-confirm\n\(confirmSource)\n``` \u{00A0}", nil),
+    ("an ideographic space after the name: another name", "```exodus-ask\u{3000}\n\(askSource)\n```", nil),
+    ("a tab after the name and after the closing fence", "```exodus-confirm\t\n\(confirmSource)\n```\t", .confirm),
+    ("CRLF line ends", "Intro\r\n\r\n```exodus-confirm \r\n\(confirmSource)\r\n```\r\n", .confirm),
     ("another name", "```exodus-answer\n{\"block\":\"ask\",\"ref\":\"r\"}\n```", nil),
 ]
 
